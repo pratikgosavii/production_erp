@@ -101,7 +101,6 @@
     cursor: pointer; transition: all .15s ease; display: block;
     position: relative; overflow: hidden;
   }
-  .status-opt:hover { border-color: var(--steel); }
   .status-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
   .status-opt .so-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .status-opt .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); position: relative; flex-shrink: 0; }
@@ -110,6 +109,24 @@
   .status-opt.sel { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
   .status-opt.sel .dot { border-color: var(--blue); }
   .status-opt.sel .dot::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; background: var(--blue); }
+
+  /* Read-only status: current state highlighted, the rest are just reference */
+  .status-grid.locked .status-opt { cursor: default; background: #fafbfc; }
+  .status-grid.locked .status-opt:not(.sel) { opacity: .55; }
+  .status-grid.locked .status-opt.sel { background: var(--blue-bg); }
+  .status-opt .so-by {
+    font-size: 9.5px; color: var(--steel); padding-left: 22px; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: .03em; font-weight: 600;
+  }
+  .status-opt.sel .so-by { color: var(--blue); }
+  .status-now {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--card); border: var(--border); border-left: 3px solid var(--green);
+    border-radius: var(--radius); padding: 11px 14px; margin-bottom: 12px;
+  }
+  .status-now .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); font-weight: 600; }
+  .status-now .val { font-family: 'IBM Plex Mono'; font-size: 14px; font-weight: 600; color: var(--green); }
+  .status-now .since { font-size: 11px; color: var(--ink-soft); margin-left: auto; }
 
   /* History table */
   table.hist { width: 100%; border-collapse: collapse; font-size: 12.5px; border: 1px solid var(--line); }
@@ -333,42 +350,54 @@
 
   <!-- SECTION 2 -->
   <div class="section">
-    <h2><span class="n">2</span> Status</h2>
+    <h2><span class="n">2</span> Status <span class="readonly-tag">Read only</span></h2>
     <div class="s-sub">
-      Pick exactly one state. Changing this writes a line into the sheet's history —
-      no separate confirmation tick-boxes to hunt for.
+      Status is not set here — it changes automatically as the sheet moves through the workflow.
+      The states below are shown for reference only.
     </div>
 
-    <div class="status-grid" id="status-grid">
-      <label class="status-opt sel" data-pill="available">
-        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Available" checked><span class="so-name">Available</span></div>
+    <div class="status-now">
+      <span class="lbl">Current status</span>
+      <span class="val">Available</span>
+      <span class="since">On the rack since 30 Jul 2026 · Rack C-1</span>
+    </div>
+
+    <div class="status-grid locked" id="status-grid">
+      <div class="status-opt sel" data-pill="available">
+        <div class="so-top"><span class="dot"></span><span class="so-name">Available</span></div>
         <div class="so-desc">On the rack, free for Design to nest against any job.</div>
-      </label>
+        <div class="so-by">Set on logging the sheet</div>
+      </div>
 
-      <label class="status-opt" data-pill="reserved">
-        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Reserved"><span class="so-name">Reserved</span></div>
+      <div class="status-opt" data-pill="reserved">
+        <div class="so-top"><span class="dot"></span><span class="so-name">Reserved</span></div>
         <div class="so-desc">Nested for a specific SO but still physically in Stores.</div>
-      </label>
+        <div class="so-by">Set by Design — job detail screen</div>
+      </div>
 
-      <label class="status-opt" data-pill="issued">
-        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Issued"><span class="so-name">Issued</span></div>
+      <div class="status-opt" data-pill="issued">
+        <div class="so-top"><span class="dot"></span><span class="so-name">Issued</span></div>
         <div class="so-desc">Handed over to the shop floor against a job card.</div>
-      </label>
+        <div class="so-by">Set by Stores — Issue button on inventory</div>
+      </div>
 
-      <label class="status-opt" data-pill="consumed">
-        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Consumed"><span class="so-name">Consumed</span></div>
+      <div class="status-opt" data-pill="consumed">
+        <div class="so-top"><span class="dot"></span><span class="so-name">Consumed</span></div>
         <div class="so-desc">Fully used up. Closed — no usable area left.</div>
-      </label>
+        <div class="so-by">Set by Production — cut booked, no remnant</div>
+      </div>
 
-      <label class="status-opt" data-pill="leftover">
-        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Leftover"><span class="so-name">Leftover (offcut)</span></div>
+      <div class="status-opt" data-pill="leftover">
+        <div class="so-top"><span class="dot"></span><span class="so-name">Leftover (offcut)</span></div>
         <div class="so-desc">Usable remnant. Gets its own OFF- label and re-enters stock.</div>
-      </label>
+        <div class="so-by">Set by Production — cut booked with remnant</div>
+      </div>
 
-      <label class="status-opt" data-pill="scrap">
-        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Scrap"><span class="so-name">Scrap</span></div>
+      <div class="status-opt" data-pill="scrap">
+        <div class="so-top"><span class="dot"></span><span class="so-name">Scrap</span></div>
         <div class="so-desc">Damaged or too small to nest. Goes to the scrap register.</div>
-      </label>
+        <div class="so-by">Set by Stores — scrap register</div>
+      </div>
     </div>
   </div>
 
@@ -494,26 +523,15 @@
     if (isOther) { other.focus(); } else { other.value = ''; }
   });
 
-  // ---- Status radio cards drive the header pill ----
-  var pill  = document.getElementById('head-pill');
-  var opts  = document.querySelectorAll('#status-grid .status-opt');
-
-  function syncStatus() {
-    opts.forEach(function (o) {
-      var input = o.querySelector('input');
-      var on = input.checked;
-      o.classList.toggle('sel', on);
-      if (on) {
-        pill.className = 'status-pill ' + o.dataset.pill;
-        pill.textContent = input.value;
-      }
-    });
+  // ---- Status is read-only: the header pill just mirrors the current state ----
+  // The status changes through workflow actions (Design reserves, Stores issues,
+  // Production consumes) — it is never picked on this form.
+  var pill = document.getElementById('head-pill');
+  var current = document.querySelector('#status-grid .status-opt.sel');
+  if (pill && current) {
+    pill.className = 'status-pill ' + current.dataset.pill;
+    pill.textContent = current.querySelector('.so-name').textContent.trim();
   }
-
-  opts.forEach(function (o) {
-    o.querySelector('input').addEventListener('change', syncStatus);
-  });
-  syncStatus();
 
   // ---- Save (static preview: validate then confirm, no POST) ----
   var form  = document.getElementById('sheet-form');
@@ -535,13 +553,12 @@
       saved.innerHTML = '<b>Not saved.</b> Complete: ' + missing.join(', ') + '.';
       saved.hidden = false;
     } else {
-      var st = form.querySelector('input[name="status"]:checked');
       saved.style.cssText = '';
       saved.innerHTML = '<b>Saved.</b> {{ uid }} updated — ' +
         document.getElementById('f-material').value + ' · ' +
         document.getElementById('f-thickness').value + ' · ' +
         document.getElementById('f-rack').value +
-        ' · status <b>' + (st ? st.value : '—') + '</b>. ' +
+        '. Status unchanged (set by workflow). ' +
         '<span class="text-xs">(Static preview — no database write.)</span>';
       saved.hidden = false;
     }

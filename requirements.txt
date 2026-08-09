@@ -1,0 +1,28 @@
+# Chemical Etching Works — ERP
+# Python 3.10.4
+#
+# Install:  pip install -r requirements.txt
+
+# ---- Core ----
+Django==5.1.4
+
+# ---- Media / file handling ----
+# Required by Django's ImageField and FileField. Used for PO files, drawing
+# revisions and QR label images.
+pillow==11.0.0
+
+# ---- PDF generation ----
+# Quotation PDF ("printable PDF" + "Send to Customer" — PROJECT_DESIGN.md §3.2, §3.3).
+reportlab==3.6.12
+
+# ---------------------------------------------------------------------------
+# Needed once the backend is built (not imported yet — add when wiring up):
+#
+#   qrcode==8.0          # Stores sheet QR labels (§ QR flow). Depends on pillow.
+#
+# Transitive dependencies (asgiref, sqlparse, tzdata) are resolved by pip
+# from Django — no need to pin them here.
+#
+# Dev-only, not required to run the app:
+#   python-docx          # only used to read docs/Quotation_ERP_Development.docx
+# ---------------------------------------------------------------------------
