@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stage &amp; Status Simulator — SO-1041</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#132435; --steel:#3f5c74; --paper:#eef1f4; --card:#ffffff; --line:#d7dde3;
+    --ink:#1a2432; --ink-soft:#5b6b7a;
+    --green:#1f7a4d; --green-bg:#e5f4ec;
+    --amber:#a9660b; --amber-bg:#fdf1e0;
+    --red:#b23a2f; --red-bg:#fbe9e7;
+    --blue:#2d5a7a; --blue-bg:#e6eef4;
+    --gray:#6b7684; --gray-bg:#eceef1;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink);}
+  .num{font-family:'IBM Plex Mono',monospace;}
+
+  .topbar{background:var(--navy); color:#fff; padding:16px 28px; display:flex; align-items:center; justify-content:space-between;}
+  .topbar .brand{display:flex; align-items:center; gap:12px;}
+  .brand .mark{width:30px;height:30px;border:1.5px solid #fff; display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono';font-size:12px;font-weight:600; transform:rotate(45deg);}
+  .brand .mark span{transform:rotate(-45deg);}
+  .brand .title{font-weight:600; font-size:15px;}
+  .brand .sub{font-size:11px; color:#9db2c4; letter-spacing:.04em; text-transform:uppercase;}
+
+  main{padding:22px 28px 60px; max-width:1100px; margin:0 auto;}
+
+  .controls{
+    display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line);
+    border-radius:4px; padding:14px 18px; margin-bottom:18px; flex-wrap:wrap;
+  }
+  .controls .title{font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-right:auto;}
+  .btn{font-size:12.5px; font-weight:600; padding:9px 16px; border-radius:3px; border:none; cursor:pointer;}
+  .btn-primary{background:var(--navy); color:#fff;}
+  .btn-outline{background:#fff; color:var(--ink-soft); border:1px solid var(--line);}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .step-counter{font-family:'IBM Plex Mono'; font-size:12px; color:var(--ink-soft); padding:0 6px;}
+
+  /* Order card */
+  .order-card{background:var(--card); border:1px solid var(--line); border-radius:4px; padding:22px; margin-bottom:18px;}
+  .order-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;}
+  .order-head .so-no{font-family:'IBM Plex Mono'; font-size:20px; font-weight:700;}
+  .order-head .cust{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+
+  .status-badge{
+    font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
+    padding:8px 16px; border-radius:20px; display:inline-flex; align-items:center; gap:7px;
+    transition:all .4s ease;
+  }
+  .status-badge::before{content:''; width:8px; height:8px; border-radius:50%;}
+  .status-badge.green{background:var(--green-bg); color:var(--green);} .status-badge.green::before{background:var(--green);}
+  .status-badge.amber{background:var(--amber-bg); color:var(--amber);} .status-badge.amber::before{background:var(--amber); animation:pulse 1.5s infinite;}
+  .status-badge.red{background:var(--red-bg); color:var(--red);} .status-badge.red::before{background:var(--red); animation:pulse 1.5s infinite;}
+  .status-badge.gray{background:var(--gray-bg); color:var(--gray);} .status-badge.gray::before{background:var(--gray);}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
+
+  /* Stage track */
+  .stage-track-wrap{margin-bottom:8px;}
+  .stage-track{display:flex; align-items:center;}
+  .st-step{flex:1; text-align:center; position:relative;}
+  .st-dot{
+    width:30px; height:30px; border-radius:50%; background:var(--gray-bg); color:var(--gray);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; margin:0 auto 8px;
+    border:2.5px solid var(--line); transition:all .5s ease; position:relative; z-index:2;
+  }
+  .st-step.done .st-dot{background:var(--green); color:#fff; border-color:var(--green);}
+  .st-step.current .st-dot{background:var(--blue); color:#fff; border-color:var(--blue); box-shadow:0 0 0 5px var(--blue-bg); transform:scale(1.1);}
+  .st-step.current.stuck .st-dot{background:var(--amber); border-color:var(--amber); box-shadow:0 0 0 5px var(--amber-bg);}
+  .st-step.current.blocked .st-dot{background:var(--red); border-color:var(--red); box-shadow:0 0 0 5px var(--red-bg);}
+  .st-label{font-size:10px; color:var(--ink-soft); line-height:1.3; transition:color .4s ease;}
+  .st-step.done .st-label, .st-step.current .st-label{color:var(--ink); font-weight:600;}
+  .st-line{position:absolute; top:15px; left:-50%; width:100%; height:3px; background:var(--line); z-index:1; transition:background .5s ease;}
+  .st-step.done .st-line{background:var(--green);}
+  .st-step:first-child .st-line{display:none;}
+
+  /* Event narration */
+  .narration{
+    background:#f8f9fb; border:1px solid var(--line); border-left:4px solid var(--blue); border-radius:3px;
+    padding:14px 16px; margin-top:20px; transition:all .3s ease;
+  }
+  .narration.amber-border{border-left-color:var(--amber); background:var(--amber-bg);}
+  .narration.red-border{border-left-color:var(--red); background:var(--red-bg);}
+  .narration.green-border{border-left-color:var(--green); background:var(--green-bg);}
+  .narration .ev-title{font-size:12.5px; font-weight:700; margin-bottom:4px;}
+  .narration .ev-desc{font-size:11.5px; color:var(--ink-soft); line-height:1.5;}
+  .narration .ev-rule{
+    font-size:10.5px; font-family:'IBM Plex Mono'; color:var(--steel); margin-top:8px;
+    background:#fff; border:1px solid var(--line); border-radius:3px; padding:6px 10px;
+  }
+
+  /* Timeline log */
+  .timeline-card{background:var(--card); border:1px solid var(--line); border-radius:4px; padding:20px;}
+  .timeline-card h3{font-size:12.5px; margin:0 0 14px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);}
+  .tl-item{display:grid; grid-template-columns:70px 20px 1fr; gap:4px; align-items:start; margin-bottom:2px;}
+  .tl-item .tl-time{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--ink-soft); padding-top:2px;}
+  .tl-dot-col{display:flex; flex-direction:column; align-items:center;}
+  .tl-dot{width:9px; height:9px; border-radius:50%; margin-top:4px; flex-shrink:0;}
+  .tl-dot.green{background:var(--green);} .tl-dot.amber{background:var(--amber);} .tl-dot.red{background:var(--red);} .tl-dot.blue{background:var(--blue);}
+  .tl-line{width:2px; flex:1; background:var(--line); min-height:14px;}
+  .tl-content{padding-bottom:14px;}
+  .tl-content .tt{font-size:12px; font-weight:600;}
+  .tl-content .td{font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+  .tl-item.future{opacity:.35;}
+  .tl-item.future .tl-content .tt{font-weight:400;}
+
+  .legend{display:flex; gap:16px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); flex-wrap:wrap;}
+  .legend-item{display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-soft);}
+  .legend-dot{width:8px; height:8px; border-radius:50%;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><span>CE</span></div>
+    <div>
+      <div class="title">Chemical Etching Works — ERP</div>
+      <div class="sub">Stage &amp; Status Simulator</div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="controls">
+    <span class="title">Simulating: SO-1041 · Veeransh Fabricators — click Next to step through the order lifecycle</span>
+    <button class="btn btn-outline" id="resetBtn">⟲ Reset</button>
+    <span class="step-counter" id="stepCounter">Step 0 / 10</span>
+    <button class="btn btn-outline" id="prevBtn" disabled>← Back</button>
+    <button class="btn btn-primary" id="nextBtn">Next Step →</button>
+  </div>
+
+  <div class="order-card">
+    <div class="order-head">
+      <div>
+        <div class="so-no">SO-1041</div>
+        <div class="cust">Veeransh Fabricators · SS304 · 2mm · 150x110mm · Qty 7 · Due 09 Aug 2026</div>
+      </div>
+      <div id="statusBadge" class="status-badge gray">Not Started</div>
+    </div>
+
+    <div class="stage-track-wrap">
+      <div class="stage-track" id="stageTrack">
+        <div class="st-step" data-stage="0"><div class="st-line"></div><div class="st-dot">1</div><div class="st-label">PO<br>Intake</div></div>
+        <div class="st-step" data-stage="1"><div class="st-line"></div><div class="st-dot">2</div><div class="st-label">Design</div></div>
+        <div class="st-step" data-stage="2"><div class="st-line"></div><div class="st-dot">3</div><div class="st-label">Material /<br>Nesting</div></div>
+        <div class="st-step" data-stage="3"><div class="st-line"></div><div class="st-dot">4</div><div class="st-label">Production</div></div>
+        <div class="st-step" data-stage="4"><div class="st-line"></div><div class="st-dot">5</div><div class="st-label">QC</div></div>
+        <div class="st-step" data-stage="5"><div class="st-line"></div><div class="st-dot">6</div><div class="st-label">Dispatch</div></div>
+        <div class="st-step" data-stage="6"><div class="st-line"></div><div class="st-dot">7</div><div class="st-label">Delivered</div></div>
+      </div>
+    </div>
+
+    <div class="narration" id="narration">
+      <div class="ev-title">Ready to begin</div>
+      <div class="ev-desc">Click "Next Step" to start the simulation — watch how Stage (position) and Status (health) move independently.</div>
+    </div>
+  </div>
+
+  <div class="timeline-card">
+    <h3>Event Timeline</h3>
+    <div id="timeline"></div>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--blue);"></span> Stage advanced</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--amber);"></span> Status → Held/Waiting</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--red);"></span> Status → Delayed</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--green);"></span> Status → On track / Resolved</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const stages = ["PO Intake","Design","Material / Nesting","Production","QC","Dispatch","Delivered"];
+
+// Each step: { stage: index, statusColor, statusText, title, desc, rule, tlColor }
+const steps = [
+  {
+    stage:0, statusColor:'gray', statusText:'Not Started',
+    title:'Order created from PO Intake', 
+    desc:'PO + drawing received via central inbox, matched to Quotation QTN-0417, converted to Sales Order SO-1041.',
+    rule:'TRIGGER: PO Intake → Sales Order created  →  Stage = "PO Intake"',
+    narColor:'', tlColor:'blue', time:'02 Aug'
+  },
+  {
+    stage:1, statusColor:'green', statusText:'On track',
+    title:'Design Job auto-created', 
+    desc:'Sales Order handed to Design department. No blockers yet — status defaults to On track.',
+    rule:'TRIGGER: Sales Order created → Stage = "Design"',
+    narColor:'green-border', tlColor:'blue', time:'02 Aug'
+  },
+  {
+    stage:1, statusColor:'amber', statusText:'Held — design query',
+    title:'Designer raises a query', 
+    desc:'Text placement near mounting hole is unclear. Stage stays at "Design" (position unchanged) but Status flips to Held — this is the derived health flag reacting to an open query, not a stage move.',
+    rule:'RULE: IF Stage="Design" AND open Query exists → Status = "Held — design query"',
+    narColor:'amber-border', tlColor:'amber', time:'03 Aug'
+  },
+  {
+    stage:1, statusColor:'green', statusText:'On track',
+    title:'Query resolved by Sales/Customer', 
+    desc:'Clarification received, query closed. Status automatically reverts to On track — nobody manually "un-flags" it, the rule just stops matching.',
+    rule:'RULE: Query closed → condition no longer true → Status = "On track"',
+    narColor:'green-border', tlColor:'green', time:'04 Aug'
+  },
+  {
+    stage:1, statusColor:'amber', statusText:'Held — awaiting customer approval',
+    title:'Proof sent for customer approval', 
+    desc:'Artwork proof Rev 01 sent via approval link. Stage still "Design" — the artwork isn\'t locked yet, so nesting can\'t start. Status reflects the real blocker: waiting on the customer, not on your team.',
+    rule:'RULE: Proof sent AND no response → Status = "Held — awaiting customer approval"',
+    narColor:'amber-border', tlColor:'amber', time:'05 Aug'
+  },
+  {
+    stage:2, statusColor:'green', statusText:'On track',
+    title:'Customer approves proof → Design Approved', 
+    desc:'Customer approves Rev 02. Both gates clear (proof + internal). Design Job status flips to Approved, which triggers Stage to advance to Material/Nesting.',
+    rule:'TRIGGER: Design Job = "Approved" → Stage = "Material / Nesting"',
+    narColor:'green-border', tlColor:'blue', time:'06 Aug'
+  },
+  {
+    stage:3, statusColor:'green', statusText:'On track',
+    title:'Material reserved, sent to Production', 
+    desc:'Designer nests job onto Sheet UID, reserves it. Production Manager reviews the Ready Queue and clicks "Send to Production" — Job Card created, Stage moves forward.',
+    rule:'TRIGGER: "Send to Production" clicked → Stage = "Production"',
+    narColor:'green-border', tlColor:'blue', time:'07 Aug'
+  },
+  {
+    stage:3, statusColor:'red', statusText:'Delayed — behind schedule',
+    title:'Etching station running behind', 
+    desc:'Job has been sitting at the Etching station longer than the standard cycle time allows to still hit the due date. Status escalates to red — this is the timing-override rule catching a real risk to the delivery date, independent of any explicit "hold" being raised by staff.',
+    rule:'RULE: (Days to Due Date) < (Days typically needed from current station) → Status = "Delayed"',
+    narColor:'red-border', tlColor:'red', time:'08 Aug'
+  },
+  {
+    stage:4, statusColor:'amber', statusText:'On track — QC in progress',
+    title:'All stations complete, sent to QC', 
+    desc:'Team caught up after the delay flag. Final process station marked complete, job automatically advances to QC stage.',
+    rule:'TRIGGER: Last process station marked complete → Stage = "QC"',
+    narColor:'amber-border', tlColor:'blue', time:'08 Aug'
+  },
+  {
+    stage:5, statusColor:'green', statusText:'On track',
+    title:'QC passed → Ready for Dispatch', 
+    desc:'Inspection passed, no rework needed. Stage advances to Dispatch.',
+    rule:'TRIGGER: QC = "Passed" → Stage = "Dispatch"',
+    narColor:'green-border', tlColor:'green', time:'09 Aug'
+  },
+  {
+    stage:6, statusColor:'green', statusText:'Delivered',
+    title:'Dispatched and delivered', 
+    desc:'Shipment confirmed. Order closes the loop — this is also the trigger point for invoicing (a later module).',
+    rule:'TRIGGER: Dispatch confirmed → Stage = "Delivered", Status = "Delivered"',
+    narColor:'green-border', tlColor:'green', time:'09 Aug'
+  },
+];
+
+let current = 0;
+const stageTrack = document.getElementById('stageTrack');
+const statusBadge = document.getElementById('statusBadge');
+const narration = document.getElementById('narration');
+const timeline = document.getElementById('timeline');
+const stepCounter = document.getElementById('stepCounter');
+const nextBtn = document.getElementById('nextBtn');
+const prevBtn = document.getElementById('prevBtn');
+
+function render(){
+  stepCounter.textContent = `Step ${current} / ${steps.length}`;
+  prevBtn.disabled = current === 0;
+  nextBtn.disabled = current === steps.length;
+  nextBtn.textContent = current === steps.length ? 'Complete ✓' : 'Next Step →';
+
+  if(current === 0){
+    // initial state
+    document.querySelectorAll('.st-step').forEach(el=>{el.classList.remove('done','current','stuck','blocked');});
+    statusBadge.className = 'status-badge gray';
+    statusBadge.textContent = 'Not Started';
+    narration.className = 'narration';
+    narration.innerHTML = `<div class="ev-title">Ready to begin</div><div class="ev-desc">Click "Next Step" to start the simulation.</div>`;
+    timeline.innerHTML = '';
+    return;
+  }
+
+  const s = steps[current-1];
+
+  document.querySelectorAll('.st-step').forEach(el=>{
+    const idx = parseInt(el.dataset.stage);
+    el.classList.remove('done','current','stuck','blocked');
+    if(idx < s.stage) el.classList.add('done');
+    else if(idx === s.stage){
+      el.classList.add('current');
+      if(s.statusColor === 'amber') el.classList.add('stuck');
+      if(s.statusColor === 'red') el.classList.add('blocked');
+    }
+  });
+
+  statusBadge.className = 'status-badge ' + s.statusColor;
+  statusBadge.textContent = s.statusText;
+
+  narration.className = 'narration ' + s.narColor;
+  narration.innerHTML = `
+    <div class="ev-title">${s.title}</div>
+    <div class="ev-desc">${s.desc}</div>
+    <div class="ev-rule">${s.rule}</div>
+  `;
+
+  let tlHtml = '';
+  for(let i=0; i<steps.length; i++){
+    const st = steps[i];
+    const isPast = i <= current-1;
+    tlHtml += `
+      <div class="tl-item ${isPast?'':'future'}">
+        <div class="tl-time">${st.time}</div>
+        <div class="tl-dot-col">
+          <div class="tl-dot ${st.tlColor}"></div>
+          ${i < steps.length-1 ? '<div class="tl-line"></div>' : ''}
+        </div>
+        <div class="tl-content">
+          <div class="tt">${st.title}</div>
+          <div class="td">Stage: ${stages[st.stage]} · Status: ${st.statusText}</div>
+        </div>
+      </div>`;
+  }
+  timeline.innerHTML = tlHtml;
+}
+
+nextBtn.addEventListener('click', ()=>{
+  if(current < steps.length){ current++; render(); }
+});
+prevBtn.addEventListener('click', ()=>{
+  if(current > 0){ current--; render(); }
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  current = 0; render();
+});
+
+render();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Design Job — SO-1044</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#132435; --steel:#3f5c74; --paper:#eef1f4; --card:#ffffff; --line:#d7dde3;
+    --ink:#1a2432; --ink-soft:#5b6b7a;
+    --green:#1f7a4d; --green-bg:#e5f4ec;
+    --amber:#a9660b; --amber-bg:#fdf1e0;
+    --red:#b23a2f; --red-bg:#fbe9e7;
+    --blue:#2d5a7a; --blue-bg:#e6eef4;
+    --gray:#6b7684; --gray-bg:#eceef1;
+    --purple:#5b4b8a; --purple-bg:#efe9f7;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink);}
+  .num{font-family:'IBM Plex Mono',monospace;}
+
+  .topbar{background:var(--navy); color:#fff; padding:16px 28px; display:flex; align-items:center; justify-content:space-between;}
+  .topbar .brand{display:flex; align-items:center; gap:12px;}
+  .brand .mark{width:30px;height:30px;border:1.5px solid #fff; display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono';font-size:12px;font-weight:600; transform:rotate(45deg);}
+  .brand .mark span{transform:rotate(-45deg);}
+  .brand .title{font-weight:600; font-size:15px;}
+  .brand .sub{font-size:11px; color:#9db2c4; letter-spacing:.04em; text-transform:uppercase;}
+  .topbar .who{font-size:12.5px; color:#c7d4de; text-align:right;}
+  .topbar .who b{color:#fff; font-weight:600;}
+  .role-tag{font-size:10px; text-transform:uppercase; letter-spacing:.05em; background:#2a3f52; color:#a9c3d8;
+    padding:2px 8px; border-radius:3px; margin-left:8px; font-weight:700;}
+
+  .breadcrumb{padding:12px 28px 0; font-size:11.5px; color:var(--ink-soft);}
+  .breadcrumb b{color:var(--ink);}
+
+  main{padding:16px 28px 60px; display:grid; grid-template-columns:1.5fr 1fr; gap:18px; align-items:start;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:3px; padding:20px; margin-bottom:18px;}
+
+  .jc-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .jc-head .jc-no{font-family:'IBM Plex Mono'; font-size:19px; font-weight:700;}
+  .jc-head .jc-so{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+  .status-pill{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:6px 14px; border-radius:20px; background:var(--blue-bg); color:var(--blue);}
+  .order-type{font-size:10px; font-weight:700; text-transform:uppercase; padding:3px 9px; border-radius:20px; background:var(--gray-bg); color:var(--gray); margin-left:8px;}
+
+  .spec-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin-bottom:6px;}
+  .spec-grid .s{background:#fff; padding:11px 14px;}
+  .spec-grid .s .l{font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:4px;}
+  .spec-grid .s .v{font-size:13px; font-weight:600; font-family:'IBM Plex Mono';}
+  .spec-grid .s .v.txt{font-family:'IBM Plex Sans'; font-size:12.5px;}
+
+  .section-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink); margin-bottom:2px; display:flex; align-items:center; gap:8px;}
+  .section-sub{font-size:10.5px; color:var(--ink-soft); margin-bottom:14px;}
+
+  .drawing-preview{
+    border:1px dashed var(--line); border-radius:3px; padding:26px; text-align:center; background:#fafbfc; margin-bottom:10px;
+  }
+  .drawing-preview .fname{font-size:12.5px; font-weight:600; color:var(--ink);}
+  .drawing-preview .frev{font-family:'IBM Plex Mono'; font-size:11px; color:var(--ink-soft); margin-top:4px;}
+  .drawing-preview .ficon{font-size:26px; margin-bottom:8px;}
+
+  .rev-history{font-size:11px; color:var(--ink-soft);}
+  .rev-history .r{display:flex; justify-content:space-between; padding:4px 0;}
+  .rev-history .r.current b{color:var(--green);}
+
+  .btn{font-size:12px; font-weight:600; padding:9px 15px; border-radius:3px; border:none; cursor:pointer;}
+  .btn-primary{background:var(--navy); color:#fff;}
+  .btn-outline{background:#fff; color:var(--ink-soft); border:1px solid var(--line);}
+  .btn-sm{font-size:11px; padding:6px 12px;}
+  .btn-row{display:flex; gap:8px; margin-top:6px;}
+  .btn-approve{background:var(--green); color:#fff;}
+  .btn-approve:disabled{background:var(--gray-bg); color:var(--gray); cursor:not-allowed;}
+
+  .nest-filter{display:flex; gap:8px; margin-bottom:12px;}
+  .nest-filter select, .nest-filter input{padding:7px 10px; border:1px solid var(--line); border-radius:3px; font-size:11.5px; background:#fff;}
+
+  .sheet-option{
+    display:grid; grid-template-columns:auto 1fr auto auto; gap:12px; align-items:center;
+    border:1.3px solid var(--line); border-radius:4px; padding:12px 14px; margin-bottom:8px; cursor:pointer;
+  }
+  .sheet-option.selected{border-color:var(--green); background:var(--green-bg);}
+  .sheet-option input[type=radio]{margin:0;}
+  .sheet-option .uid{font-family:'IBM Plex Mono'; font-weight:700; font-size:12.5px;}
+  .sheet-option .kind{font-size:9.5px; font-weight:700; text-transform:uppercase; padding:2px 6px; border-radius:3px; margin-left:6px;}
+  .kind.sheet{background:var(--blue-bg); color:var(--blue);}
+  .kind.offcut{background:var(--purple-bg); color:var(--purple);}
+  .sheet-option .meta{font-size:11px; color:var(--ink-soft); margin-top:3px;}
+  .sheet-option .fit{text-align:right; font-size:11px;}
+  .sheet-option .fit .qty{font-family:'IBM Plex Mono'; font-weight:700; font-size:14px; color:var(--ink);}
+  .sheet-option .fit .lbl{font-size:9.5px; color:var(--ink-soft); text-transform:uppercase;}
+  .sheet-option .util{font-size:10.5px; font-weight:700;}
+  .util.good{color:var(--green);}
+  .util.ok{color:var(--amber);}
+
+  .nest-summary{
+    background:#f8f9fb; border:1px solid var(--line); border-radius:3px; padding:12px 14px; margin-top:12px;
+  }
+  .nest-summary .row{display:flex; justify-content:space-between; font-size:12px; padding:4px 0;}
+  .nest-summary .row span:first-child{color:var(--ink-soft);}
+  .nest-summary .row span:last-child{font-weight:600; font-family:'IBM Plex Mono';}
+
+  .side-block .st{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-bottom:8px; font-weight:700;}
+
+  .query-box{
+    background:var(--amber-bg); border:1px dashed #e0b070; border-radius:4px; padding:12px; margin-bottom:10px; font-size:11.5px; color:#7a5518;
+  }
+  textarea{width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:3px; font-family:'IBM Plex Sans'; font-size:12px; resize:vertical; min-height:60px;}
+
+  .log{font-size:11.5px;}
+  .log-item{display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);}
+  .log-item:last-child{border-bottom:none;}
+  .log-dot{width:7px; height:7px; border-radius:50%; background:var(--steel); margin-top:5px; flex-shrink:0;}
+  .log-item .lt{color:var(--ink-soft); font-size:10.5px;}
+  .log-item .la{font-weight:500;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><span>CE</span></div>
+    <div>
+      <div class="title">Chemical Etching Works — ERP</div>
+      <div class="sub">Design Job Detail</div>
+    </div>
+  </div>
+  <div class="who">Logged in as <b>Meera D.</b><span class="role-tag">Design</span></div>
+</div>
+
+<div class="breadcrumb">Design Queue → <b>SO-1044</b></div>
+
+<main>
+  <div>
+    <div class="card">
+      <div class="jc-head">
+        <div>
+          <div class="jc-no">SO-1044 <span class="order-type">New</span></div>
+          <div class="jc-so">Orion Compressors · Ref QTN-0421 · Due 14 Aug 2026</div>
+        </div>
+        <span class="status-pill">In Progress</span>
+      </div>
+
+      <div class="spec-grid">
+        <div class="s"><div class="l">Material</div><div class="v">Aluminium</div></div>
+        <div class="s"><div class="l">Thickness</div><div class="v">1mm</div></div>
+        <div class="s"><div class="l">Part Size</div><div class="v">80 x 50 mm</div></div>
+        <div class="s"><div class="l">Qty Required</div><div class="v">250 Nos</div></div>
+        <div class="s"><div class="l">Finish</div><div class="v txt">Anodized, Black Fill</div></div>
+        <div class="s"><div class="l">Holes</div><div class="v txt">2 x Ø3mm</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Drawing</div>
+      <div class="section-sub">Latest approved revision — used as source for nesting layout.</div>
+      <div class="drawing-preview">
+        <div class="ficon">📐</div>
+        <div class="fname">Panel_ID_Tag_v1.pdf</div>
+        <div class="frev">Rev 00 — Original, received with PO</div>
+      </div>
+      <div class="rev-history">
+        <div class="r current"><span>Rev 00 (current)</span><b>Active</b></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm">Open Drawing</button>
+        <button class="btn btn-outline btn-sm">Download</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Nesting — Select Raw Material</div>
+      <div class="section-sub">Browsing Stores inventory filtered to Aluminium · 1mm. Choose a sheet/offcut to nest this job's parts onto.</div>
+
+      <div class="nest-filter">
+        <select><option>Material: Aluminium</option></select>
+        <select><option>Thickness: 1mm</option></select>
+        <select><option>Sort: Best Fit First</option></select>
+      </div>
+
+      <div class="sheet-option selected">
+        <input type="radio" name="sheet" checked>
+        <div>
+          <span class="uid">SHT-0805</span><span class="kind sheet">Sheet</span>
+          <div class="meta">8 x 4 ft · Available · Rack C-1 · Received 30 Jul 2026</div>
+        </div>
+        <div class="fit"><span class="qty">312</span><span class="lbl">pcs fit</span></div>
+        <div class="util good">96% yield</div>
+      </div>
+
+      <div class="sheet-option">
+        <input type="radio" name="sheet">
+        <div>
+          <span class="uid">OFF-0176</span><span class="kind offcut">Offcut</span>
+          <div class="meta">24 x 18 in · Available · Rack A-4 · From SHT-0740</div>
+        </div>
+        <div class="fit"><span class="qty">54</span><span class="lbl">pcs fit</span></div>
+        <div class="util ok">71% yield</div>
+      </div>
+
+      <div class="sheet-option">
+        <input type="radio" name="sheet">
+        <div>
+          <span class="uid">OFF-0163</span><span class="kind offcut">Offcut</span>
+          <div class="meta">16 x 12 in · Available · Rack A-3 · From SHT-0722</div>
+        </div>
+        <div class="fit"><span class="qty">18</span><span class="lbl">pcs fit</span></div>
+        <div class="util ok">64% yield</div>
+      </div>
+
+      <div class="nest-summary">
+        <div class="row"><span>Selected Material</span><span>SHT-0805</span></div>
+        <div class="row"><span>Qty Required</span><span>250 Nos</span></div>
+        <div class="row"><span>Qty This Sheet Yields</span><span>312 Nos</span></div>
+        <div class="row"><span>Expected Leftover</span><span>~62 pcs area (new offcut logged)</span></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary">Reserve SHT-0805 &amp; Confirm Nesting</button>
+        <button class="btn btn-outline">Request New Sheet Instead</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card side-block">
+      <div class="st">Design Query</div>
+      <textarea placeholder="Raise a query about this drawing (e.g. unclear dimension, missing tolerance)..."></textarea>
+      <div class="btn-row"><button class="btn btn-outline btn-sm">Raise Query to Sales</button></div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Order Type &amp; History</div>
+      <div class="nest-summary" style="margin-top:0;">
+        <div class="row"><span>Order Type</span><span>New Customer</span></div>
+        <div class="row"><span>Prior Orders</span><span>None</span></div>
+        <div class="row"><span>Sales Person</span><span>Imran S.</span></div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Activity Log</div>
+      <div class="log">
+        <div class="log-item"><div class="log-dot"></div><div><div class="la">Design Job created</div><div class="lt">04 Aug, 10:02 AM</div></div></div>
+        <div class="log-item"><div class="log-dot"></div><div><div class="la">Drawing opened by Meera D.</div><div class="lt">04 Aug, 02:15 PM</div></div></div>
+        <div class="log-item"><div class="log-dot"></div><div><div class="la">Nesting in progress — SHT-0805 selected</div><div class="lt">05 Aug, 09:40 AM</div></div></div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Finalize</div>
+      <div class="section-sub" style="margin-bottom:10px;">Reserve material before marking design approved — this locks the sheet from other jobs.</div>
+      <button class="btn btn-approve" style="width:100%;" disabled>Mark Design Approved → Send to Production Queue</button>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

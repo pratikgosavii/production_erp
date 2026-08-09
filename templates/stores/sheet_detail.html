@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stores — Sheet {{ uid }}{% endblock %}
+{% block topbar_sub %}Stores — Sheet {{ uid }}{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Stores</span>
+  <span class="name">Deepak Salvi</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root { --purple: #5b4b8a; --purple-bg: #efe9f7; }
+
+  .sheet-head {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 18px 22px; margin-bottom: 16px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .sheet-head .sh-uid {
+    font-family: 'IBM Plex Mono'; font-size: 30px; font-weight: 700;
+    color: var(--navy); letter-spacing: .01em; line-height: 1;
+  }
+  .sheet-head .sh-crumb { font-size: 11px; color: var(--ink-soft); margin-top: 8px; }
+  .sheet-head .sh-crumb a { color: var(--ink-soft); }
+  .sheet-head .sh-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .sheet-head .sh-meta { font-size: 11px; color: var(--ink-soft); text-align: right; line-height: 1.6; }
+  .sheet-head .sh-meta b { font-family: 'IBM Plex Mono'; color: var(--ink); font-weight: 600; }
+
+  .status-pill {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 6px 14px; border-radius: 20px; display: inline-flex; align-items: center; gap: 7px;
+  }
+  .status-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; }
+  .status-pill.unassigned { background: var(--gray-bg);  color: var(--gray); }
+  .status-pill.unassigned::before { background: var(--gray); }
+  .status-pill.available  { background: var(--green-bg); color: var(--green); }
+  .status-pill.available::before { background: var(--green); }
+  .status-pill.reserved   { background: var(--blue-bg);  color: var(--blue); }
+  .status-pill.reserved::before { background: var(--blue); }
+  .status-pill.issued     { background: var(--amber-bg); color: var(--amber); }
+  .status-pill.issued::before { background: var(--amber); }
+  .status-pill.consumed   { background: var(--gray-bg);  color: var(--gray); }
+  .status-pill.consumed::before { background: var(--gray); }
+  .status-pill.leftover   { background: var(--purple-bg); color: var(--purple); }
+  .status-pill.leftover::before { background: var(--purple); }
+  .status-pill.scrap      { background: var(--red-bg);   color: var(--red); }
+  .status-pill.scrap::before { background: var(--red); }
+
+  .scan-banner {
+    background: var(--blue-bg); border-left: 3px solid var(--blue); color: var(--blue);
+    padding: 10px 14px; font-size: 11.5px; line-height: 1.55;
+    border-radius: 0 var(--radius) var(--radius) 0; margin-bottom: 16px;
+  }
+  .scan-banner b { font-weight: 700; }
+
+  .section {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 18px 22px 22px; margin-bottom: 16px;
+  }
+  .section > h2 {
+    font-size: 14.5px; margin: 0 0 3px; font-weight: 700;
+    display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  }
+  .section > h2 .n {
+    font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 600;
+    color: var(--steel); background: var(--paper); padding: 2px 7px; border-radius: 3px;
+  }
+  .section > .s-sub { font-size: 11.5px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 18px; }
+
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 16px; }
+  .field { margin-bottom: 0; }
+  .field label .req { color: var(--red); margin-left: 3px; font-weight: 700; }
+  .field label .opt {
+    color: var(--gray); font-weight: 500; text-transform: none; letter-spacing: 0;
+    font-size: 10px; margin-left: 4px;
+  }
+  .field .hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.4; }
+  .field input[type=date] { font-family: 'IBM Plex Mono'; font-size: 12.5px; }
+  .req-legend { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 16px; }
+  .req-legend .req { color: var(--red); font-weight: 700; }
+
+  .upload {
+    border: 1.3px dashed var(--line); border-radius: var(--radius);
+    padding: 14px 16px; background: #fcfdfe;
+  }
+  .upload .u-head { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+  .upload .u-sub  { font-size: 11px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.5; }
+  .upload input[type=file] { font-size: 11.5px; font-family: 'IBM Plex Sans'; }
+  .upload .u-existing { font-size: 11.5px; margin-top: 10px; }
+  .upload .u-existing .mono { color: var(--steel); font-weight: 600; }
+
+  /* Status radio cards */
+  .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .status-opt {
+    border: var(--border); border-radius: var(--radius); padding: 11px 13px;
+    cursor: pointer; transition: all .15s ease; display: block;
+  }
+  .status-opt:hover { border-color: var(--steel); }
+  .status-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .status-opt .so-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .status-opt .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); position: relative; flex-shrink: 0; }
+  .status-opt .so-name { font-size: 12.5px; font-weight: 600; }
+  .status-opt .so-desc { font-size: 10.5px; color: var(--ink-soft); line-height: 1.45; padding-left: 22px; }
+  .status-opt.sel { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .status-opt.sel .dot { border-color: var(--blue); }
+  .status-opt.sel .dot::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; background: var(--blue); }
+
+  /* History table */
+  table.hist { width: 100%; border-collapse: collapse; font-size: 12.5px; border: 1px solid var(--line); }
+  table.hist thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 9px 12px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.hist tbody tr { border-top: 1px solid var(--line); }
+  table.hist td { padding: 10px 12px; vertical-align: middle; }
+  table.hist td.num { font-family: 'IBM Plex Mono'; font-size: 11.5px; }
+  table.hist td.job { font-family: 'IBM Plex Mono'; font-weight: 600; color: var(--steel); font-size: 12px; }
+  table.hist tfoot td {
+    border-top: 1.3px solid var(--line); background: #fafbfc;
+    font-size: 11px; color: var(--ink-soft); padding: 9px 12px;
+  }
+  .readonly-tag {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    background: var(--gray-bg); color: var(--gray); padding: 2px 7px; border-radius: 3px;
+  }
+
+  /* Lineage */
+  .lineage {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--purple-bg); border-left: 3px solid var(--purple);
+    padding: 14px 16px; border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .lineage .ln-lab { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--purple); font-weight: 700; }
+  .lineage .ln-uid { font-family: 'IBM Plex Mono'; font-size: 16px; font-weight: 700; color: var(--purple); }
+  .lineage .ln-uid a { color: var(--purple); }
+  .lineage .ln-note { font-size: 11.5px; color: var(--ink-soft); }
+  .lineage .arrow { color: var(--purple); font-size: 16px; }
+
+  .form-actions {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 16px 22px; position: sticky; bottom: 0;
+  }
+  .form-actions .note { font-size: 11px; color: var(--ink-soft); margin-left: auto; }
+
+  .saved-msg {
+    background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green);
+    padding: 10px 14px; font-size: 11.5px; border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 16px;
+  }
+  .saved-msg[hidden] { display: none; }
+
+  @media (max-width: 1000px) {
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    .status-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Stores</div>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item active">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+  <a href="{% url 'stores:log_sheet' %}" class="nav-item">
+    <span class="icon">➕</span> Log New Sheet
+  </a>
+  <a href="{% url 'stores:scan' %}" class="nav-item">
+    <span class="icon">📷</span> Scan Sheet QR
+  </a>
+  <a href="{% url 'stores:dashboard' %}#dispatch" class="nav-item">
+    <span class="icon">🚚</span> Dispatch / Outward
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="sheet-head">
+  <div>
+    <div class="sh-uid">{{ uid }}</div>
+    <div class="sh-crumb">
+      <a href="{% url 'stores:dashboard' %}">Material Inventory</a> ›
+      <a href="{% url 'stores:scan' %}">Scan</a> › {{ uid }}
+    </div>
+  </div>
+  <div class="sh-right">
+    <div class="sh-meta">
+      Label batch <b>BATCH-2026-0233</b><br>
+      Last scanned <b>09 Aug 2026, 11:04</b> by Deepak S.
+    </div>
+    <span class="status-pill available" id="head-pill">Available</span>
+  </div>
+</div>
+
+<div class="scan-banner">
+  <b>Opened from a scan.</b> Anything already known about this sheet is pre-filled below —
+  correct it, complete what is missing and save. If this label was printed blank, the fields
+  start empty and the sheet is <b>Unassigned</b> until you save it.
+</div>
+
+<div class="saved-msg" id="saved-msg" hidden></div>
+
+<form id="sheet-form" novalidate>
+
+  <!-- SECTION 1 -->
+  <div class="section">
+    <h2><span class="n">1</span> Sheet Details</h2>
+    <div class="s-sub">
+      Master data — every dropdown is maintained in Masters so spellings stay identical
+      across Stores, Design and Production.
+    </div>
+
+    <div class="req-legend"><span class="req">*</span> Required to move this sheet out of “Unassigned”.</div>
+
+    <div class="grid-3">
+      <div class="field">
+        <label for="f-material">Material / Category <span class="req">*</span></label>
+        <select id="f-material" required>
+          <option value="">— Select material —</option>
+          <option selected>SS 304</option>
+          <option>SS 316</option>
+          <option>Brass</option>
+          <option>Aluminium</option>
+          <option>Mild Steel</option>
+          <option>Copper</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-thickness">Thickness <span class="req">*</span></label>
+        <select id="f-thickness" required>
+          <option value="">— Select thickness —</option>
+          <option>0.5 mm</option>
+          <option selected>1.0 mm</option>
+          <option>1.5 mm</option>
+          <option>2.0 mm</option>
+          <option>3.0 mm</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-grade">Grade <span class="req">*</span></label>
+        <select id="f-grade" required>
+          <option value="">— Select grade —</option>
+          <option>Commercial</option>
+          <option selected>Prime</option>
+          <option>Secondary</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-size">Size <span class="req">*</span></label>
+        <select id="f-size" required>
+          <option value="">— Select size —</option>
+          <option data-mm="2438 × 1219 mm" selected>8 × 4 ft</option>
+          <option data-mm="1829 × 914 mm">6 × 3 ft</option>
+          <option data-mm="1219 × 610 mm">4 × 2 ft</option>
+          <option data-mm="3048 × 1219 mm">10 × 4 ft</option>
+        </select>
+        <div class="hint" id="size-mm">≈ 2438 × 1219 mm</div>
+      </div>
+
+      <div class="field">
+        <label for="f-finish">Finish <span class="opt">(optional)</span></label>
+        <select id="f-finish">
+          <option value="">— Select finish —</option>
+          <option>Mill Finish</option>
+          <option selected>Matt</option>
+          <option>Mirror</option>
+          <option>Brushed</option>
+          <option>Anodized</option>
+          <option value="__other">Other (type)…</option>
+        </select>
+        <input type="text" id="f-finish-other" placeholder="Type the finish name" style="margin-top:8px;" hidden>
+      </div>
+
+      <div class="field">
+        <label for="f-supplier">Supplier / Dealer <span class="req">*</span></label>
+        <select id="f-supplier" required>
+          <option value="">— Select supplier —</option>
+          <option selected>Mehta Metals</option>
+          <option>Shree Steel Traders</option>
+          <option>Balaji Metal Co.</option>
+          <option>Konkan Steel</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-rack">Rack / Shelf location <span class="req">*</span></label>
+        <select id="f-rack" required>
+          <option value="">— Select location —</option>
+          <option>Rack A-1</option>
+          <option selected>Rack A-2</option>
+          <option>Rack B-2</option>
+          <option>Rack B-3</option>
+          <option>Rack C-1</option>
+          <option>Shop floor</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="f-date">Date of Purchase <span class="req">*</span></label>
+        <input type="date" id="f-date" value="2026-07-22" required>
+      </div>
+
+      <div class="field">
+        <label for="f-remarks">Remarks <span class="opt">(optional)</span></label>
+        <input type="text" id="f-remarks" value="Minor edge dent — usable area unaffected">
+      </div>
+    </div>
+
+    <div class="upload" style="margin-top:18px;">
+      <div class="u-head">Invoice / document <span class="opt" style="font-size:10px; color:var(--gray); font-weight:500;">(optional)</span></div>
+      <div class="u-sub">
+        Attach the purchase invoice, test certificate or delivery challan. PDF or image,
+        up to 10 MB. Not required to save this sheet.
+      </div>
+      <input type="file" id="f-doc" accept=".pdf,.png,.jpg,.jpeg">
+      <div class="u-existing">
+        📎 Already attached: <span class="mono">MEHTA-INV-4471.pdf</span>
+        <span class="text-xs text-soft">— uploaded 22 Jul 2026</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2 -->
+  <div class="section">
+    <h2><span class="n">2</span> Status</h2>
+    <div class="s-sub">
+      Pick exactly one state. Changing this writes a line into the sheet's history —
+      no separate confirmation tick-boxes to hunt for.
+    </div>
+
+    <div class="status-grid" id="status-grid">
+      <label class="status-opt sel" data-pill="available">
+        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Available" checked><span class="so-name">Available</span></div>
+        <div class="so-desc">On the rack, free for Design to nest against any job.</div>
+      </label>
+
+      <label class="status-opt" data-pill="reserved">
+        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Reserved"><span class="so-name">Reserved</span></div>
+        <div class="so-desc">Nested for a specific SO but still physically in Stores.</div>
+      </label>
+
+      <label class="status-opt" data-pill="issued">
+        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Issued"><span class="so-name">Issued</span></div>
+        <div class="so-desc">Handed over to the shop floor against a job card.</div>
+      </label>
+
+      <label class="status-opt" data-pill="consumed">
+        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Consumed"><span class="so-name">Consumed</span></div>
+        <div class="so-desc">Fully used up. Closed — no usable area left.</div>
+      </label>
+
+      <label class="status-opt" data-pill="leftover">
+        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Leftover"><span class="so-name">Leftover (offcut)</span></div>
+        <div class="so-desc">Usable remnant. Gets its own OFF- label and re-enters stock.</div>
+      </label>
+
+      <label class="status-opt" data-pill="scrap">
+        <div class="so-top"><span class="dot"></span><input type="radio" name="status" value="Scrap"><span class="so-name">Scrap</span></div>
+        <div class="so-desc">Damaged or too small to nest. Goes to the scrap register.</div>
+      </label>
+    </div>
+  </div>
+
+  <!-- SECTION 3 -->
+  <div class="section">
+    <h2><span class="n">3</span> Usage History <span class="readonly-tag">Read only</span></h2>
+    <div class="s-sub">
+      Every cut booked against this sheet, newest first. Written by Production when a job
+      card closes — Stores cannot edit it.
+    </div>
+
+    <div class="table-wrap">
+      <table class="hist">
+        <thead>
+          <tr>
+            <th style="width:13%">Date</th>
+            <th style="width:14%">Job / SO</th>
+            <th style="width:22%">Cutter / Operator</th>
+            <th style="width:17%">Size Before</th>
+            <th style="width:17%">Used</th>
+            <th style="width:17%">Left</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="num">06 Aug 2026</td>
+            <td class="job">SO-1040</td>
+            <td>Ramesh K. — Shear 02</td>
+            <td class="num">48 × 30 in</td>
+            <td class="num">30 × 16 in</td>
+            <td class="num">18 × 14 in</td>
+          </tr>
+          <tr>
+            <td class="num">31 Jul 2026</td>
+            <td class="job">SO-1035</td>
+            <td>Sunil M. — Shear 01</td>
+            <td class="num">96 × 48 in</td>
+            <td class="num">48 × 18 in</td>
+            <td class="num">48 × 30 in</td>
+          </tr>
+          <tr>
+            <td class="num">24 Jul 2026</td>
+            <td class="job">SO-1029</td>
+            <td>Ramesh K. — Shear 02</td>
+            <td class="num">96 × 48 in</td>
+            <td class="num">Trim only</td>
+            <td class="num">96 × 48 in</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">
+              3 cuts booked · 68% of the original sheet consumed ·
+              current usable remnant <span class="mono">18 × 14 in</span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECTION 4 -->
+  <div class="section">
+    <h2><span class="n">4</span> Lineage</h2>
+    <div class="s-sub">
+      Offcuts stay tied to the sheet they were cut from, so cost and yield roll up to the
+      original purchase.
+    </div>
+
+    <div class="lineage">
+      <div>
+        <div class="ln-lab">Parent sheet</div>
+        <div class="ln-uid"><a href="{% url 'stores:sheet_detail' 'SHT-0771' %}">SHT-0771</a></div>
+      </div>
+      <span class="arrow">→</span>
+      <div>
+        <div class="ln-lab">This item</div>
+        <div class="ln-uid">{{ uid }}</div>
+      </div>
+      <div class="ln-note">
+        Cut from <b>SHT-0771</b> on 31 Jul 2026 against SO-1035.<br>
+        If this item is a full new sheet rather than an offcut, leave the parent blank.
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:16px; max-width:340px;">
+      <label for="f-parent">Cut from (parent sheet) <span class="opt">(blank if new sheet)</span></label>
+        <input type="text" id="f-parent" class="mono" value="SHT-0771" placeholder="e.g. SHT-0771">
+      <div class="hint">Type a sheet UID to re-parent this offcut.</div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">Save Details</button>
+    <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Cancel</a>
+    <a href="{% url 'stores:qr_labels' %}" class="btn btn-outline">🖨 Print This Label</a>
+    <span class="note">Static preview — nothing is written to a database.</span>
+  </div>
+
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  // ---- Size → mm equivalent ----
+  var size   = document.getElementById('f-size');
+  var sizeMM = document.getElementById('size-mm');
+  size.addEventListener('change', function () {
+    var opt = size.options[size.selectedIndex];
+    var mm  = opt ? opt.getAttribute('data-mm') : null;
+    sizeMM.textContent = mm ? ('≈ ' + mm) : '';
+  });
+
+  // ---- Finish "Other (type)" escape ----
+  var finish = document.getElementById('f-finish');
+  var other  = document.getElementById('f-finish-other');
+  finish.addEventListener('change', function () {
+    var isOther = finish.value === '__other';
+    other.hidden = !isOther;
+    if (isOther) { other.focus(); } else { other.value = ''; }
+  });
+
+  // ---- Status radio cards drive the header pill ----
+  var pill  = document.getElementById('head-pill');
+  var opts  = document.querySelectorAll('#status-grid .status-opt');
+
+  function syncStatus() {
+    opts.forEach(function (o) {
+      var input = o.querySelector('input');
+      var on = input.checked;
+      o.classList.toggle('sel', on);
+      if (on) {
+        pill.className = 'status-pill ' + o.dataset.pill;
+        pill.textContent = input.value;
+      }
+    });
+  }
+
+  opts.forEach(function (o) {
+    o.querySelector('input').addEventListener('change', syncStatus);
+  });
+  syncStatus();
+
+  // ---- Save (static preview: validate then confirm, no POST) ----
+  var form  = document.getElementById('sheet-form');
+  var saved = document.getElementById('saved-msg');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    var missing = [];
+    form.querySelectorAll('[required]').forEach(function (el) {
+      if (!el.value) {
+        var lbl = el.closest('.field').querySelector('label');
+        missing.push(lbl ? lbl.textContent.replace('*', '').trim() : el.id);
+      }
+    });
+
+    if (missing.length) {
+      saved.style.cssText = 'background:var(--red-bg);border-left-color:var(--red);color:var(--red);';
+      saved.innerHTML = '<b>Not saved.</b> Complete: ' + missing.join(', ') + '.';
+      saved.hidden = false;
+    } else {
+      var st = form.querySelector('input[name="status"]:checked');
+      saved.style.cssText = '';
+      saved.innerHTML = '<b>Saved.</b> {{ uid }} updated — ' +
+        document.getElementById('f-material').value + ' · ' +
+        document.getElementById('f-thickness').value + ' · ' +
+        document.getElementById('f-rack').value +
+        ' · status <b>' + (st ? st.value : '—') + '</b>. ' +
+        '<span class="text-xs">(Static preview — no database write.)</span>';
+      saved.hidden = false;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+})();
+</script>
+{% endblock %}

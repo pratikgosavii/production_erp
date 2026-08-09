@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Card JC-0512 — Station Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#132435; --steel:#3f5c74; --paper:#eef1f4; --card:#ffffff; --line:#d7dde3;
+    --ink:#1a2432; --ink-soft:#5b6b7a;
+    --green:#1f7a4d; --green-bg:#e5f4ec;
+    --amber:#a9660b; --amber-bg:#fdf1e0;
+    --red:#b23a2f; --red-bg:#fbe9e7;
+    --blue:#2d5a7a; --blue-bg:#e6eef4;
+    --gray:#6b7684; --gray-bg:#eceef1;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink);}
+  .num{font-family:'IBM Plex Mono',monospace;}
+
+  .topbar{background:var(--navy); color:#fff; padding:16px 28px; display:flex; align-items:center; justify-content:space-between;}
+  .topbar .brand{display:flex; align-items:center; gap:12px;}
+  .brand .mark{width:30px;height:30px;border:1.5px solid #fff; display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono';font-size:12px;font-weight:600; transform:rotate(45deg);}
+  .brand .mark span{transform:rotate(-45deg);}
+  .brand .title{font-weight:600; font-size:15px;}
+  .brand .sub{font-size:11px; color:#9db2c4; letter-spacing:.04em; text-transform:uppercase;}
+  .topbar .who{font-size:12.5px; color:#c7d4de; text-align:right;}
+  .topbar .who b{color:#fff; font-weight:600;}
+
+  .breadcrumb{padding:12px 28px 0; font-size:11.5px; color:var(--ink-soft);}
+  .breadcrumb b{color:var(--ink);}
+
+  main{padding:16px 28px 60px; display:grid; grid-template-columns:2.1fr 1fr; gap:18px; align-items:start;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:3px; padding:20px;}
+
+  .jc-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .jc-head .jc-no{font-family:'IBM Plex Mono'; font-size:20px; font-weight:700;}
+  .jc-head .jc-so{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+  .status-pill{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:6px 14px; border-radius:20px; background:var(--blue-bg); color:var(--blue);}
+
+  .spec-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin-bottom:16px;}
+  .spec-grid .s{background:#fff; padding:11px 14px;}
+  .spec-grid .s .l{font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:4px;}
+  .spec-grid .s .v{font-size:13px; font-weight:600; font-family:'IBM Plex Mono';}
+
+  .section-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:2px;}
+  .section-sub{font-size:10.5px; color:var(--ink-soft); margin-bottom:12px;}
+
+  /* Station list */
+  .station{
+    display:grid; grid-template-columns:26px 1fr auto; gap:12px; align-items:center;
+    padding:11px 4px; border-bottom:1px solid var(--line); position:relative;
+  }
+  .station:last-child{border-bottom:none;}
+  .station-num{
+    width:26px; height:26px; border-radius:50%; background:var(--gray-bg); color:var(--gray);
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; border:2px solid var(--line);
+  }
+  .station.done .station-num{background:var(--green); color:#fff; border-color:var(--green);}
+  .station.current .station-num{background:var(--blue); color:#fff; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-bg);}
+  .station.skipped .station-num{background:transparent; border:2px dashed var(--line); color:var(--line);}
+
+  .station-name{font-size:13px; font-weight:600;}
+  .station.skipped .station-name{color:var(--ink-soft); text-decoration:line-through; font-weight:400;}
+  .station-meta{font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+  .station-meta .op{font-weight:600; color:var(--steel);}
+
+  .station-time{font-size:10.5px; color:var(--ink-soft); text-align:right; white-space:nowrap;}
+  .station-time .dur{font-family:'IBM Plex Mono'; font-weight:600; color:var(--ink); display:block; font-size:11.5px;}
+
+  .not-applicable{
+    font-size:9.5px; font-weight:700; text-transform:uppercase; color:var(--ink-soft);
+    background:var(--gray-bg); padding:3px 8px; border-radius:20px;
+  }
+
+  .btn{font-size:12px; font-weight:600; padding:8px 14px; border-radius:3px; border:none; cursor:pointer;}
+  .btn-primary{background:var(--navy); color:#fff;}
+  .btn-outline{background:#fff; color:var(--ink-soft); border:1px solid var(--line);}
+  .btn-sm{font-size:11px; padding:6px 12px;}
+  .btn-row{display:flex; gap:8px; margin-top:16px;}
+
+  /* Sidebar */
+  .side-block{margin-bottom:16px;}
+  .side-block .st{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-bottom:8px; font-weight:700;}
+  .material-box{background:#f8f9fb; border:1px solid var(--line); border-radius:3px; padding:12px;}
+  .material-box .row{display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:1px solid var(--line);}
+  .material-box .row:last-child{border-bottom:none;}
+  .material-box .row span:first-child{color:var(--ink-soft);}
+  .material-box .row span:last-child{font-weight:600; font-family:'IBM Plex Mono'; font-size:11.5px;}
+
+  .progress-bar-wrap{margin-bottom:6px;}
+  .progress-bar{height:8px; background:var(--gray-bg); border-radius:20px; overflow:hidden;}
+  .progress-bar .fill{height:100%; background:var(--blue); width:38%;}
+  .progress-label{font-size:11px; color:var(--ink-soft); margin-top:6px; display:flex; justify-content:space-between;}
+
+  .drawing-mini{
+    border:1px dashed var(--line); border-radius:3px; padding:16px; text-align:center; background:#fafbfc;
+  }
+  .drawing-mini .fname{font-size:12px; font-weight:600;}
+  .drawing-mini .frev{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--ink-soft); margin-top:3px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><span>CE</span></div>
+    <div>
+      <div class="title">Chemical Etching Works — ERP</div>
+      <div class="sub">Job Card — Station Flow</div>
+    </div>
+  </div>
+  <div class="who">Logged in as <b>Sunil Rao</b><br>Production Manager</div>
+</div>
+
+<div class="breadcrumb">Production Dashboard → Ready Queue → <b>JC-0512</b></div>
+
+<main>
+  <!-- LEFT: Station Flow -->
+  <div class="card">
+    <div class="jc-head">
+      <div>
+        <div class="jc-no">JC-0512</div>
+        <div class="jc-so">Linked to SO-1035 · Konkan Marine Pvt Ltd · Material: SHT-0812</div>
+      </div>
+      <span class="status-pill">Station 4 of 12 — Etching</span>
+    </div>
+
+    <div class="spec-grid">
+      <div class="s"><div class="l">Material</div><div class="v">Brass · 1.5mm</div></div>
+      <div class="s"><div class="l">Size (mm)</div><div class="v">200 x 80</div></div>
+      <div class="s"><div class="l">Qty</div><div class="v">120 Nos</div></div>
+      <div class="s"><div class="l">Finish Spec</div><div class="v" style="font-size:12px;">Black Fill, No Lamination</div></div>
+      <div class="s"><div class="l">Drilling</div><div class="v" style="font-size:12px;">2 Holes, Ø3mm</div></div>
+      <div class="s"><div class="l">Due Date</div><div class="v">06 Aug 2026</div></div>
+    </div>
+
+    <div class="section-title">Process Stations</div>
+    <div class="section-sub">Auto-selected based on job specification — skipped stations shown greyed, not applicable to this order.</div>
+
+    <div class="station done">
+      <div class="station-num">✓</div>
+      <div><div class="station-name">1. Material Cutting / Shearing</div><div class="station-meta">Op: <span class="op">Ganesh P.</span></div></div>
+      <div class="station-time">04 Aug<span class="dur">28 min</span></div>
+    </div>
+    <div class="station done">
+      <div class="station-num">✓</div>
+      <div><div class="station-name">2. Surface Cleaning / Degreasing</div><div class="station-meta">Op: <span class="op">Ganesh P.</span></div></div>
+      <div class="station-time">04 Aug<span class="dur">15 min</span></div>
+    </div>
+    <div class="station done">
+      <div class="station-num">✓</div>
+      <div><div class="station-name">3. Photoresist Coating + Exposure + Developing</div><div class="station-meta">Op: <span class="op">Farida S.</span></div></div>
+      <div class="station-time">05 Aug<span class="dur">52 min</span></div>
+    </div>
+    <div class="station current">
+      <div class="station-num">4</div>
+      <div><div class="station-name">4. Chemical Etching</div><div class="station-meta">Op: <span class="op">Ravi Kumbhar</span> · Started 09:05 AM</div></div>
+      <div class="station-time"><button class="btn btn-primary btn-sm">Mark Complete</button></div>
+    </div>
+    <div class="station">
+      <div class="station-num">5</div>
+      <div><div class="station-name">5. Resist Stripping</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station">
+      <div class="station-num">6</div>
+      <div><div class="station-name">6. Color Fill (Black Epoxy)</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station">
+      <div class="station-num">7</div>
+      <div><div class="station-name">7. Curing / Baking</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station">
+      <div class="station-num">8</div>
+      <div><div class="station-name">8. Surface Cleaning / Polishing</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station skipped">
+      <div class="station-num">—</div>
+      <div><div class="station-name">9. Lamination / Protective Coating</div><div class="station-meta">Not specified for this order</div></div>
+      <div class="station-time"><span class="not-applicable">Skipped</span></div>
+    </div>
+    <div class="station">
+      <div class="station-num">9</div>
+      <div><div class="station-name">10. Trimming / Final Shape Cutting</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station">
+      <div class="station-num">10</div>
+      <div><div class="station-name">11. Hole Drilling (2 x Ø3mm)</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station">
+      <div class="station-num">11</div>
+      <div><div class="station-name">12. QC Inspection</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+    <div class="station">
+      <div class="station-num">12</div>
+      <div><div class="station-name">13. Packing</div><div class="station-meta">Op: —</div></div>
+      <div class="station-time"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline">Flag Issue at This Station</button>
+      <button class="btn btn-outline">Print Traveler Sheet</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Sidebar -->
+  <div>
+    <div class="card side-block">
+      <div class="st">Overall Progress</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar"><div class="fill"></div></div>
+        <div class="progress-label"><span>3 of 8 active stations done</span><span>38%</span></div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Drawing Reference</div>
+      <div class="drawing-mini">
+        <div class="fname">📐 Deck_Tag_Brass.pdf</div>
+        <div class="frev">Rev 02 — Approved</div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Material Source</div>
+      <div class="material-box">
+        <div class="row"><span>UID</span><span>SHT-0812</span></div>
+        <div class="row"><span>Type</span><span>New Sheet</span></div>
+        <div class="row"><span>Size</span><span>8x4 ft</span></div>
+        <div class="row"><span>Status</span><span>Consumed</span></div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Station Operators (Today)</div>
+      <div class="material-box">
+        <div class="row"><span>Cutting</span><span>Ganesh P.</span></div>
+        <div class="row"><span>Coating/Expose</span><span>Farida S.</span></div>
+        <div class="row"><span>Etching</span><span>Ravi Kumbhar</span></div>
+        <div class="row"><span>Fill/Cure</span><span>Unassigned</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

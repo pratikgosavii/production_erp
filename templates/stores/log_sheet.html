@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stores — Log New Sheet{% endblock %}
+{% block topbar_sub %}Stores — Log New Sheet{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Stores</span>
+  <span class="name">Deepak Salvi</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+  .page-head h1 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
+  .page-head .crumb { font-size: 11px; color: var(--ink-soft); }
+
+  /* Flow strip */
+  .flow-strip {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 12px 16px; margin-bottom: 20px;
+  }
+  .flow-strip .fs {
+    font-size: 11.5px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 6px;
+  }
+  .flow-strip .fs b { color: var(--ink); font-weight: 600; }
+  .flow-strip .arrow { color: var(--line); margin: 0 10px; font-size: 13px; }
+
+  /* Mode cards */
+  .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .mode-card {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 16px 18px; cursor: pointer; transition: all .15s ease; position: relative;
+  }
+  .mode-card:hover { border-color: var(--steel); }
+  .mode-card.active { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .mode-card .mc-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+  .mode-card .radio {
+    width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--line);
+    flex-shrink: 0; display: inline-block; position: relative;
+  }
+  .mode-card.active .radio { border-color: var(--blue); }
+  .mode-card.active .radio::after {
+    content: ''; position: absolute; inset: 2.5px; border-radius: 50%; background: var(--blue);
+  }
+  .mode-card .mc-title { font-size: 13.5px; font-weight: 700; }
+  .mode-card .mc-tag {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 3px; background: var(--gray-bg); color: var(--gray);
+  }
+  .mode-card.active .mc-tag { background: var(--blue-bg); color: var(--blue); }
+  .mode-card .mc-desc { font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; padding-left: 24px; }
+
+  /* Panels */
+  .panel {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 20px 22px 22px; margin-bottom: 16px;
+  }
+  .panel[hidden] { display: none; }
+  .panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .panel-head h2 { font-size: 14.5px; margin: 0; font-weight: 700; }
+  .panel-sub { font-size: 11.5px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 18px; }
+
+  .helper-note {
+    background: var(--blue-bg); border-left: 3px solid var(--blue); color: var(--blue);
+    padding: 10px 13px; font-size: 11.5px; line-height: 1.55; border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 18px;
+  }
+  .helper-note b { font-weight: 700; }
+
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 16px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 16px; }
+  .field { margin-bottom: 0; }
+  .field label .req { color: var(--red); margin-left: 3px; font-weight: 700; }
+  .field label .opt {
+    color: var(--gray); font-weight: 500; text-transform: none; letter-spacing: 0;
+    font-size: 10px; margin-left: 4px;
+  }
+  .field .hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.4; }
+  .field input[type=number] { font-family: 'IBM Plex Mono'; }
+  .field input[type=date]   { font-family: 'IBM Plex Mono'; font-size: 12.5px; }
+
+  .req-legend { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 16px; }
+  .req-legend .req { color: var(--red); font-weight: 700; }
+
+  .qty-row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+  .qty-row .field { width: 140px; }
+
+  .form-actions {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line);
+  }
+  .form-actions .spacer-note { font-size: 11px; color: var(--ink-soft); }
+
+  .err-box {
+    background: var(--red-bg); border-left: 3px solid var(--red); color: var(--red);
+    padding: 9px 13px; font-size: 11.5px; border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 14px;
+  }
+  .err-box[hidden] { display: none; }
+  .field.invalid input, .field.invalid select { border-color: var(--red); background: #fffafa; }
+
+  @media (max-width: 1000px) {
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    .mode-tabs { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Stores</div>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+  <a href="{% url 'stores:log_sheet' %}" class="nav-item active">
+    <span class="icon">➕</span> Log New Sheet
+  </a>
+  <a href="{% url 'stores:scan' %}" class="nav-item">
+    <span class="icon">📷</span> Scan Sheet QR
+  </a>
+  <a href="{% url 'stores:dashboard' %}#dispatch" class="nav-item">
+    <span class="icon">🚚</span> Dispatch / Outward
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Log New Sheet</h1>
+    <div class="crumb">Stores › Material Inventory › Log New Sheet</div>
+  </div>
+  <a href="{% url 'stores:dashboard' %}" class="btn btn-outline btn-sm">← Back to Inventory</a>
+</div>
+
+<div class="flow-strip">
+  <span class="fs"><b>1.</b> Generate QR</span>
+  <span class="arrow">→</span>
+  <span class="fs"><b>2.</b> Print labels</span>
+  <span class="arrow">→</span>
+  <span class="fs"><b>3.</b> Paste on physical sheet</span>
+  <span class="arrow">→</span>
+  <span class="fs"><b>4.</b> Scan with phone</span>
+  <span class="arrow">→</span>
+  <span class="fs"><b>5.</b> Fill details</span>
+  <span class="arrow">→</span>
+  <span class="fs"><b>6.</b> Becomes stock</span>
+</div>
+
+<!-- Mode selector -->
+<div class="mode-tabs">
+  <div class="mode-card active" id="mode-a" data-mode="a" role="button" tabindex="0">
+    <div class="mc-head">
+      <span class="radio"></span>
+      <span class="mc-title">Generate blank QR labels</span>
+      <span class="mc-tag">Fastest</span>
+    </div>
+    <div class="mc-desc">
+      Reserve a batch of blank sheet IDs now, print the stickers, and stick them on the
+      sheets as the truck is unloaded. Details get filled in later by scanning each label.
+    </div>
+  </div>
+
+  <div class="mode-card" id="mode-b" data-mode="b" role="button" tabindex="0">
+    <div class="mc-head">
+      <span class="radio"></span>
+      <span class="mc-title">Log sheet with details now</span>
+      <span class="mc-tag">Full entry</span>
+    </div>
+    <div class="mc-desc">
+      Enter the material, size, supplier and rack up front. The generated labels carry the
+      material printed on them and the sheets enter stock as <b>Available</b> immediately.
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODE A ============ -->
+<form class="panel" id="panel-a" novalidate>
+  <div class="panel-head"><h2>Blank QR label batch</h2></div>
+  <div class="panel-sub">
+    No master data needed. Each label gets a fresh sheet UID in the
+    <span class="mono">SHT-####</span> series and enters the register as
+    <b>Unassigned</b> until somebody scans it.
+  </div>
+
+  <div class="helper-note">
+    <b>Why blank labels?</b> When a lot arrives, the storekeeper does not have time to type
+    material, grade and supplier for every sheet. Print blanks, paste them, then scan each
+    sheet at the rack and complete the details on the phone. Nothing sits untracked.
+  </div>
+
+  <div class="err-box" id="err-a" hidden></div>
+
+  <div class="req-legend"><span class="req">*</span> Required</div>
+
+  <div class="qty-row">
+    <div class="field" id="fa-qty">
+      <label for="a-qty">Quantity <span class="req">*</span></label>
+      <input type="number" id="a-qty" name="quantity" min="1" max="16" value="8" required>
+      <div class="hint">1 – 16 labels per sheet of stickers</div>
+    </div>
+    <div class="field" style="flex:1; min-width:220px;">
+      <label>Next available UID <span class="opt">(auto)</span></label>
+      <input type="text" class="mono" value="SHT-0813" readonly
+             style="background:var(--gray-bg); color:var(--ink-soft);">
+      <div class="hint">Reserved on generate — the series never reuses a number.</div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">Generate QR Labels</button>
+    <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Cancel</a>
+    <span class="spacer-note">Opens the print sheet with <span class="mono" id="a-echo">8</span> labels.</span>
+  </div>
+</form>
+
+<!-- ============ MODE B ============ -->
+<form class="panel" id="panel-b" novalidate hidden>
+  <div class="panel-head"><h2>Sheet details</h2></div>
+  <div class="panel-sub">
+    All dropdowns are pulled from Masters. Anything missing from a list has to be added in
+    Masters first, so spellings stay consistent across the plant.
+  </div>
+
+  <div class="err-box" id="err-b" hidden></div>
+
+  <div class="req-legend"><span class="req">*</span> Required — the rest can be completed later by scanning the label.</div>
+
+  <div class="grid-3">
+    <div class="field">
+      <label for="b-material">Material / Category <span class="req">*</span></label>
+      <select id="b-material" name="material" required>
+        <option value="">— Select material —</option>
+        <option>SS 304</option>
+        <option>SS 316</option>
+        <option>Brass</option>
+        <option>Aluminium</option>
+        <option>Mild Steel</option>
+        <option>Copper</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="b-thickness">Thickness <span class="req">*</span></label>
+      <select id="b-thickness" name="thickness" required>
+        <option value="">— Select thickness —</option>
+        <option>0.5 mm</option>
+        <option>1.0 mm</option>
+        <option>1.5 mm</option>
+        <option>2.0 mm</option>
+        <option>3.0 mm</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="b-grade">Grade <span class="req">*</span></label>
+      <select id="b-grade" name="grade" required>
+        <option value="">— Select grade —</option>
+        <option>Commercial</option>
+        <option>Prime</option>
+        <option>Secondary</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="b-size">Size <span class="req">*</span></label>
+      <select id="b-size" name="size" required>
+        <option value="">— Select size —</option>
+        <option data-mm="2438 × 1219 mm">8 × 4 ft</option>
+        <option data-mm="1829 × 914 mm">6 × 3 ft</option>
+        <option data-mm="1219 × 610 mm">4 × 2 ft</option>
+        <option data-mm="3048 × 1219 mm">10 × 4 ft</option>
+      </select>
+      <div class="hint" id="size-mm">Metric equivalent shown once a size is picked.</div>
+    </div>
+
+    <div class="field">
+      <label for="b-finish">Finish <span class="opt">(optional)</span></label>
+      <select id="b-finish" name="finish">
+        <option value="">— Select finish —</option>
+        <option>Mill Finish</option>
+        <option>Matt</option>
+        <option>Mirror</option>
+        <option>Brushed</option>
+        <option>Anodized</option>
+        <option value="__other">Other (type)…</option>
+      </select>
+      <input type="text" id="b-finish-other" placeholder="Type the finish name"
+             style="margin-top:8px;" hidden>
+    </div>
+
+    <div class="field">
+      <label for="b-supplier">Supplier / Dealer <span class="req">*</span></label>
+      <select id="b-supplier" name="supplier" required>
+        <option value="">— Select supplier —</option>
+        <option>Mehta Metals</option>
+        <option>Shree Steel Traders</option>
+        <option>Balaji Metal Co.</option>
+        <option>Konkan Steel</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="b-rack">Rack / Shelf location <span class="req">*</span></label>
+      <select id="b-rack" name="rack" required>
+        <option value="">— Select location —</option>
+        <option>Rack A-1</option>
+        <option>Rack A-2</option>
+        <option>Rack B-2</option>
+        <option>Rack B-3</option>
+        <option>Rack C-1</option>
+        <option>Shop floor</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="b-date">Date of Purchase <span class="req">*</span></label>
+      <input type="date" id="b-date" name="purchase_date" value="2026-08-09" required>
+    </div>
+
+    <div class="field">
+      <label for="b-qty">Quantity <span class="req">*</span></label>
+      <input type="number" id="b-qty" name="quantity" min="1" max="16" value="4" required>
+      <div class="hint">1 – 16 sheets. One QR label is printed per sheet.</div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">Generate QR &amp; Add to Stock</button>
+    <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Cancel</a>
+    <span class="spacer-note">Sheets enter inventory as <b>Available</b> and the label sheet opens for printing.</span>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  var LABELS_URL = "{% url 'stores:qr_labels' %}";
+
+  var cards   = document.querySelectorAll('.mode-card');
+  var panelA  = document.getElementById('panel-a');
+  var panelB  = document.getElementById('panel-b');
+
+  function setMode(mode) {
+    cards.forEach(function (c) { c.classList.toggle('active', c.dataset.mode === mode); });
+    panelA.hidden = (mode !== 'a');
+    panelB.hidden = (mode !== 'b');
+  }
+
+  cards.forEach(function (c) {
+    c.addEventListener('click', function () { setMode(c.dataset.mode); });
+    c.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMode(c.dataset.mode); }
+    });
+  });
+
+  // Mode A — live echo of the quantity
+  var aQty  = document.getElementById('a-qty');
+  var aEcho = document.getElementById('a-echo');
+  aQty.addEventListener('input', function () {
+    aEcho.textContent = aQty.value || '0';
+  });
+
+  // Mode B — size shows its mm equivalent
+  var size   = document.getElementById('b-size');
+  var sizeMM = document.getElementById('size-mm');
+  size.addEventListener('change', function () {
+    var opt = size.options[size.selectedIndex];
+    var mm  = opt ? opt.getAttribute('data-mm') : null;
+    sizeMM.textContent = mm ? ('≈ ' + mm) : 'Metric equivalent shown once a size is picked.';
+  });
+
+  // Mode B — "Other (type)" escape hatch on Finish
+  var finish = document.getElementById('b-finish');
+  var other  = document.getElementById('b-finish-other');
+  finish.addEventListener('change', function () {
+    var isOther = finish.value === '__other';
+    other.hidden = !isOther;
+    if (isOther) { other.focus(); } else { other.value = ''; }
+  });
+
+  // --- Validation (static preview: no POST, just a client-side gate) ---
+  function validate(form, errBox) {
+    var bad = [];
+    form.querySelectorAll('.field').forEach(function (f) { f.classList.remove('invalid'); });
+
+    form.querySelectorAll('[required]').forEach(function (el) {
+      var ok = el.value !== '' && el.value !== null;
+      if (ok && el.type === 'number') {
+        var n = parseInt(el.value, 10);
+        ok = !isNaN(n) && n >= 1 && n <= 16;
+      }
+      if (!ok) {
+        var field = el.closest('.field');
+        if (field) { field.classList.add('invalid'); }
+        var lbl = field ? field.querySelector('label') : null;
+        var name = lbl ? lbl.textContent.replace('*', '').trim() : el.name;
+        if (bad.indexOf(name) === -1) { bad.push(name); }
+      }
+    });
+
+    if (bad.length) {
+      errBox.textContent = 'Please complete: ' + bad.join(', ') + '.';
+      errBox.hidden = false;
+      return false;
+    }
+    errBox.hidden = true;
+    return true;
+  }
+
+  panelA.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (validate(panelA, document.getElementById('err-a'))) {
+      window.location.href = LABELS_URL + '?mode=blank&qty=' + encodeURIComponent(aQty.value);
+    }
+  });
+
+  panelB.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (validate(panelB, document.getElementById('err-b'))) {
+      var mat = document.getElementById('b-material').value;
+      var thk = document.getElementById('b-thickness').value;
+      var qty = document.getElementById('b-qty').value;
+      window.location.href = LABELS_URL + '?mode=full&qty=' + encodeURIComponent(qty) +
+                             '&material=' + encodeURIComponent(mat) +
+                             '&thickness=' + encodeURIComponent(thk);
+    }
+  });
+})();
+</script>
+{% endblock %}

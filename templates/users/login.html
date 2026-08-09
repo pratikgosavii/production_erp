@@ -1,0 +1,197 @@
+{% extends "base_auth.html" %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+  body {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    min-height: 100vh;
+    background: var(--paper);
+  }
+
+  /* ---- LEFT: brand panel ---- */
+  .left {
+    background: linear-gradient(160deg, var(--navy) 0%, var(--navy-2) 55%, #23405a 100%);
+    color: #fff;
+    padding: 56px 60px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    position: relative; overflow: hidden;
+  }
+  .left::before {
+    content: ''; position: absolute; inset: 0; opacity: .06;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 38px, #fff 39px),
+      repeating-linear-gradient(90deg, transparent, transparent 38px, #fff 39px);
+  }
+  .brand-top { position: relative; z-index: 1; }
+  .brand-top .mark {
+    width: 46px; height: 46px; border: 2px solid #fff;
+    display: flex; align-items: center; justify-content: center;
+    transform: rotate(45deg); margin-bottom: 26px;
+  }
+  .brand-top .mark span {
+    transform: rotate(-45deg);
+    font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 16px;
+  }
+  .brand-top h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; line-height: 1.25; }
+  .brand-top .tagline { font-size: 13.5px; color: #a9bfd0; max-width: 340px; line-height: 1.6; }
+
+  .left-features { position: relative; z-index: 1; margin-top: 40px; }
+  .feat { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
+  .feat .dot { width: 8px; height: 8px; border-radius: 50%; background: #5fa8d3; margin-top: 6px; flex-shrink: 0; }
+  .feat .txt b { display: block; font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .feat .txt span { font-size: 11.5px; color: #8fa8bc; }
+
+  .left-footer { position: relative; z-index: 1; font-size: 11px; color: #7691a6; letter-spacing: .02em; }
+
+  /* ---- RIGHT: form ---- */
+  .right {
+    background: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px;
+  }
+  .form-box { width: 100%; max-width: 400px; }
+  .form-box .welcome {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--ink-soft); font-weight: 600; margin-bottom: 8px;
+  }
+  .form-box h2 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+  .form-box .sub { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 28px; }
+
+  /* Role chips — 8 roles, 2 rows */
+  .role-select {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .role-chip {
+    text-align: center; padding: 9px 4px;
+    border: 1.3px solid var(--line); border-radius: 4px;
+    font-size: 10.5px; font-weight: 600; color: var(--ink-soft);
+    cursor: pointer; background: #fff;
+    transition: all .15s ease;
+  }
+  .role-chip:hover { border-color: var(--steel); color: var(--ink); }
+  .role-chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  .row-between {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 22px; font-size: 12px;
+  }
+  .remember { display: flex; align-items: center; gap: 6px; color: var(--ink-soft); }
+  .forgot { color: var(--blue); text-decoration: none; font-weight: 500; }
+
+  .btn-login {
+    width: 100%; padding: 13px;
+    background: var(--navy); color: #fff; border: none; border-radius: 4px;
+    font-size: 13.5px; font-weight: 600; letter-spacing: .02em;
+    cursor: pointer; font-family: 'IBM Plex Sans';
+  }
+  .btn-login:hover { background: var(--navy-2); }
+
+  .footer-note { font-size: 11px; color: var(--ink-soft); text-align: center; margin-top: 20px; }
+  .footer-note a { color: var(--blue); text-decoration: none; }
+
+  /* Error message */
+  .error-msg {
+    background: var(--red-bg); color: var(--red); border: 1px solid var(--red);
+    border-radius: 4px; padding: 10px 14px; font-size: 12px; font-weight: 500;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 860px) {
+    body { grid-template-columns: 1fr; }
+    .left { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="left">
+  <div class="brand-top">
+    <div class="mark"><span>CE</span></div>
+    <h1>Chemical Etching Works<br>ERP</h1>
+    <div class="tagline">Centralized platform for quotations, orders, design, production and dispatch.</div>
+  </div>
+
+  <div class="left-features">
+    <div class="feat">
+      <div class="dot"></div>
+      <div class="txt"><b>Role-based access</b><span>Sales, Design, Production, Stores &amp; Accounts each see what's relevant to them.</span></div>
+    </div>
+    <div class="feat">
+      <div class="dot"></div>
+      <div class="txt"><b>End-to-end traceability</b><span>Every quotation, order, drawing and job card logged with a full audit trail.</span></div>
+    </div>
+    <div class="feat">
+      <div class="dot"></div>
+      <div class="txt"><b>One source of truth</b><span>No more scattered Excel sheets or emails — everything lives in one place.</span></div>
+    </div>
+  </div>
+
+  <div class="left-footer">© 2026 Chemical Etching Works Pvt. Ltd. — Internal System</div>
+</div>
+
+<div class="right">
+  <div class="form-box">
+    <div class="welcome">Welcome back</div>
+    <h2>Sign in to your account</h2>
+    <div class="sub">Enter your credentials to access the quotation and order system.</div>
+
+    {% if error %}
+    <div class="error-msg">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{% url 'users:login' %}">
+      {% csrf_token %}
+
+      <!-- 8 role tabs (§2) — value posted as hidden field -->
+      <div class="role-select" id="roleSelect">
+        <div class="role-chip active" data-role="sales">Sales</div>
+        <div class="role-chip" data-role="sales_manager">Sales Mgr</div>
+        <div class="role-chip" data-role="accounts">Accounts</div>
+        <div class="role-chip" data-role="design">Design</div>
+        <div class="role-chip" data-role="production_manager">Prod Mgr</div>
+        <div class="role-chip" data-role="floor_manager">Floor Mgr</div>
+        <div class="role-chip" data-role="stores">Stores</div>
+        <div class="role-chip" data-role="qa">QA</div>
+      </div>
+      <input type="hidden" name="role" id="roleInput" value="sales">
+
+      <div class="field">
+        <label>Employee ID / Email</label>
+        <input type="text" name="username" placeholder="e.g. arjun.p@yourcompany.com" required>
+      </div>
+
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="••••••••••" required>
+      </div>
+
+      <div class="row-between">
+        <label class="remember"><input type="checkbox" name="remember" style="margin:0;"> Keep me signed in</label>
+        <a class="forgot" href="#">Forgot password?</a>
+      </div>
+
+      <button type="submit" class="btn-login">Sign In</button>
+    </form>
+
+    <div class="footer-note">Access issues? Contact your <a href="#">System Administrator</a></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Role chip toggle
+  document.querySelectorAll('#roleSelect .role-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#roleSelect .role-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      document.getElementById('roleInput').value = chip.dataset.role;
+    });
+  });
+</script>
+{% endblock %}

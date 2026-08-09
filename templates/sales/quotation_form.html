@@ -1,0 +1,864 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}New Quotation — Sales{% endblock %}
+{% block topbar_sub %}Sales — New Quotation{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ---- Form layout ---- */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .form-grid .full { grid-column: 1 / -1; }
+
+  .section-title {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--navy); margin: 0 0 14px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--navy);
+  }
+
+  /* ---- Item card ---- */
+  .item-card {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 20px; margin-bottom: 16px; position: relative;
+  }
+  .item-card .item-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .item-card .item-header h3 {
+    font-size: 14px; font-weight: 700; margin: 0;
+    color: var(--navy);
+  }
+  .item-card .item-header .artwork-ref {
+    font-size: 11px; color: var(--ink-soft); margin-top: 2px;
+  }
+  .btn-remove-item {
+    background: none; border: 1px solid var(--red); color: var(--red);
+    padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: 600;
+    cursor: pointer; font-family: 'IBM Plex Sans';
+  }
+  .btn-remove-item:hover { background: var(--red-bg); }
+
+  .spec-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-bottom: 16px;
+  }
+
+  /* ---- Pricing tiers table ---- */
+  .tier-section { margin-top: 8px; }
+  .tier-section .tier-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 8px;
+  }
+  table.tiers {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+    background: #f8f9fb; border: 1px solid var(--line);
+  }
+  table.tiers th {
+    background: var(--navy); color: #fff; text-align: left; padding: 8px 12px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.tiers td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.tiers input {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--line);
+    border-radius: 3px; font-size: 12.5px; font-family: 'IBM Plex Mono';
+    background: #fff;
+  }
+  table.tiers input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); }
+  table.tiers .est-amount {
+    font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 12px;
+    color: var(--ink); padding: 7px 10px;
+  }
+  .btn-add-tier {
+    margin-top: 8px; background: none; border: 1px dashed var(--line);
+    color: var(--ink-soft); padding: 6px 14px; border-radius: 3px;
+    font-size: 11px; font-weight: 600; cursor: pointer; font-family: 'IBM Plex Sans';
+  }
+  .btn-add-tier:hover { border-color: var(--blue); color: var(--blue); }
+  .btn-remove-tier {
+    background: none; border: none; color: var(--red); cursor: pointer;
+    font-size: 14px; padding: 2px 6px; line-height: 1;
+  }
+
+  .tooling-row {
+    display: flex; align-items: center; gap: 12px; margin-top: 12px;
+    padding-top: 12px; border-top: 1px solid var(--line);
+  }
+  .tooling-row label { font-size: 11px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; margin-bottom: 0; }
+  .tooling-row input { width: 160px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; font-family: 'IBM Plex Mono'; font-size: 12.5px; }
+
+  /* ---- Additional charges ---- */
+  .charges-grid {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 8px 16px; align-items: center;
+    font-size: 12.5px;
+  }
+  .charges-grid .charge-label { color: var(--ink-soft); font-weight: 500; }
+  .charges-grid input {
+    width: 160px; padding: 7px 10px; border: 1px solid var(--line);
+    border-radius: 3px; font-family: 'IBM Plex Mono'; font-size: 12.5px;
+    text-align: right;
+  }
+  .charges-grid .charge-note {
+    font-size: 11px; color: var(--ink-soft); font-style: italic;
+    text-align: right;
+  }
+  .charges-grid .charge-note-full {
+    grid-column: 1 / -1;
+    font-size: 11px; color: var(--ink-soft); font-style: italic;
+    margin: -2px 0 6px;
+  }
+  .charges-grid .pct-wrap { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .charges-grid .pct-wrap input { width: 110px; }
+  .charges-grid .pct-wrap .pct-sign {
+    font-family: 'IBM Plex Mono'; font-size: 12.5px; color: var(--ink-soft);
+  }
+
+  /* ---- Totals / summary ---- */
+  .totals-wrap { display: flex; justify-content: flex-end; }
+  .totals-box { width: 100%; max-width: 430px; }
+  .totals-row {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 10px; align-items: center;
+    padding: 7px 0; font-size: 12.5px;
+    border-bottom: 1px solid var(--line);
+  }
+  .totals-row .t-label { color: var(--ink-soft); font-weight: 500; }
+  .totals-row .t-value {
+    font-family: 'IBM Plex Mono'; font-size: 12.5px; font-weight: 600;
+    color: var(--ink); text-align: right; min-width: 120px;
+  }
+  .totals-row.subtotal .t-label,
+  .totals-row.subtotal .t-value { font-weight: 700; color: var(--ink); }
+  .totals-row .t-hint {
+    display: block; font-size: 10.5px; font-weight: 400;
+    color: var(--ink-soft); font-style: italic; margin-top: 2px;
+  }
+  .totals-row.gst-row .t-label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .totals-row.gst-row input {
+    width: 78px; padding: 5px 8px; border: 1px solid var(--line);
+    border-radius: 3px; font-family: 'IBM Plex Mono'; font-size: 12.5px;
+    text-align: right; background: #fff;
+  }
+  .totals-row.gst-row input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); }
+  .totals-row.grand {
+    border-bottom: none; border-top: 2px solid var(--navy);
+    margin-top: 6px; padding-top: 12px;
+  }
+  .totals-row.grand .t-label {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--navy);
+  }
+  .totals-row.grand .t-value {
+    font-family: 'IBM Plex Mono'; font-size: 21px; font-weight: 700;
+    color: var(--navy); letter-spacing: -.01em;
+  }
+  .totals-foot {
+    font-size: 11px; color: var(--ink-soft); font-style: italic;
+    text-align: right; margin-top: 10px;
+  }
+
+  /* ---- Terms ---- */
+  .terms-list {
+    font-size: 12px; color: var(--ink-soft); line-height: 1.8;
+    padding-left: 16px;
+  }
+  .terms-list li { margin-bottom: 4px; }
+  .terms-list b { color: var(--ink); }
+
+  /* ---- Actions bar ---- */
+  .form-actions {
+    display: flex; gap: 10px; justify-content: flex-end;
+    padding-top: 20px; border-top: 2px solid var(--line);
+    margin-top: 24px;
+  }
+
+  /* ---- Add item button ---- */
+  .btn-add-item {
+    width: 100%; padding: 14px; background: none;
+    border: 2px dashed var(--line); border-radius: var(--radius);
+    color: var(--ink-soft); font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: 'IBM Plex Sans';
+    margin-bottom: 20px;
+  }
+  .btn-add-item:hover { border-color: var(--blue); color: var(--blue); }
+
+  @media (max-width: 900px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .spec-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Sales</div>
+  <a href="{% url 'sales:dashboard' %}" class="nav-item">
+    <span class="icon">📋</span> My Quotations
+  </a>
+  <a href="{% url 'sales:quotation_create' %}" class="nav-item active">
+    <span class="icon">✏️</span> New Quotation
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>New Quotation</h1>
+    <div class="breadcrumb">Sales → My Quotations → New Quotation</div>
+  </div>
+</div>
+
+<form method="post" id="quotationForm">
+  {% csrf_token %}
+
+  <!-- ======== HEADER ======== -->
+  <div class="card">
+    <div class="section-title">Quotation Details</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Quotation No.</label>
+        <input type="text" value="QTN-0418" readonly style="background:#f4f5f7; color:var(--ink-soft);">
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" value="2026-08-09">
+      </div>
+      <div class="field">
+        <label>Valid Until</label>
+        <input type="date" value="2026-09-08">
+      </div>
+      <div class="field">
+        <label>Ref. / Enquiry No.</label>
+        <input type="text" placeholder="e.g. REF-001">
+      </div>
+      <div class="field">
+        <label>Currency</label>
+        <select>
+          <option>INR (₹)</option>
+          <option>USD ($)</option>
+          <option>EUR (€)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Sales Person</label>
+        <input type="text" value="Arjun Patil" readonly style="background:#f4f5f7; color:var(--ink-soft);">
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== CUSTOMER (BILL TO) ======== -->
+  <div class="card">
+    <div class="section-title">Bill To (Customer)</div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Customer</label>
+        <select id="customerSelect">
+          <option value="">— Select customer —</option>
+          <option value="1" selected>Veeransh Fabricators</option>
+          <option value="2">Bharat Switchgear Co.</option>
+          <option value="3">Marigold Textiles</option>
+          <option value="4">Trident Pumps Ltd</option>
+          <option value="5">Orion Compressors</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Address</label>
+        <input type="text" value="Plot 42, MIDC Satpur, Nashik 422007, India" placeholder="Address">
+      </div>
+      <div class="field">
+        <label>GSTIN / Tax ID</label>
+        <input type="text" value="27AABCV1234F1Z5" placeholder="GSTIN">
+      </div>
+      <div class="field">
+        <label>Contact Person</label>
+        <input type="text" value="Mr. Rajesh Kulkarni" placeholder="Kind Attn.">
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="text" value="+91 98765 43210" placeholder="Phone">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" value="rajesh@veeransh.com" placeholder="Email">
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== PROJECT / ENQUIRY DETAILS ======== -->
+  <div class="card">
+    <div class="section-title">Project / Enquiry Details</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Payment Terms</label>
+        <input type="text" placeholder="e.g. 30% Advance, Balance against Docs" value="30% Advance, Balance against Docs">
+      </div>
+      <div class="field">
+        <label>Delivery Terms</label>
+        <select>
+          <option>Ex-Works</option>
+          <option>FOB</option>
+          <option>CIF</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>Lead Time</label>
+        <input type="text" placeholder="e.g. 3-4 Weeks from PO + Artwork Approval" value="3-4 Weeks from PO + Artwork Approval">
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== LINE ITEMS ======== -->
+  <div class="section-title" style="margin-top:24px;">Line Items</div>
+
+  <div id="itemsContainer">
+
+    <!-- ---- ITEM 1 ---- -->
+    <div class="item-card" data-item="1">
+      <div class="item-header">
+        <div>
+          <h3>Item 1 | Chemical Etched Nameplate</h3>
+          <div class="artwork-ref">Artwork Ref: DWG-001</div>
+        </div>
+        <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕ Remove</button>
+      </div>
+
+      <div class="spec-grid">
+        <div class="field">
+          <label>Material</label>
+          <select>
+            <option>SS 304</option>
+            <option>Brass</option>
+            <option>Aluminium</option>
+            <option>SS 316</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Size (mm) — L × W</label>
+          <input type="text" placeholder="e.g. 150 × 110" value="150 × 110">
+        </div>
+        <div class="field">
+          <label>Thickness (mm)</label>
+          <select>
+            <option>0.5</option>
+            <option>1.0</option>
+            <option>1.5</option>
+            <option>2.0</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Finish / Fill</label>
+          <select>
+            <option>Black Epoxy Filled</option>
+            <option>Anodized</option>
+            <option>Laminated, Clear Coat</option>
+            <option>Natural Finish</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Artwork Ref / Description</label>
+        <input type="text" placeholder="e.g. DWG-001 or Description" value="DWG-001 — Rating Plate">
+      </div>
+
+      <!-- Batch-wise pricing tiers -->
+      <div class="tier-section">
+        <div class="tier-label">Batch-wise Pricing (Slab)</div>
+        <table class="tiers">
+          <thead>
+            <tr>
+              <th style="width:28%">Batch Quantity (Nos.)</th>
+              <th style="width:22%">Rate / Unit</th>
+              <th style="width:28%">Est. Amount</th>
+              <th style="width:5%"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="0" value="0" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="100" value="100" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" value="2.40" class="tier-rate"></td>
+              <td><div class="est-amount">240.00</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="101" value="101" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="200" value="200" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" value="2.00" class="tier-rate"></td>
+              <td><div class="est-amount">400.00</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="201" value="201" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="500" value="500" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" value="1.80" class="tier-rate"></td>
+              <td><div class="est-amount">900.00</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
+      </div>
+
+      <div class="tooling-row">
+        <label>Tooling / Screen Charges (one-time)</label>
+        <input type="number" step="0.01" placeholder="0.00" value="">
+      </div>
+    </div>
+
+    <!-- ---- ITEM 2 ---- -->
+    <div class="item-card" data-item="2">
+      <div class="item-header">
+        <div>
+          <h3>Item 2 | Chemical Etched Nameplate</h3>
+          <div class="artwork-ref">Artwork Ref: DWG-002</div>
+        </div>
+        <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕ Remove</button>
+      </div>
+
+      <div class="spec-grid">
+        <div class="field">
+          <label>Material</label>
+          <select>
+            <option selected>SS 304</option>
+            <option>Brass</option>
+            <option>Aluminium</option>
+            <option>SS 316</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Size (mm) — L × W</label>
+          <input type="text" placeholder="e.g. 100 × 60" value="">
+        </div>
+        <div class="field">
+          <label>Thickness (mm)</label>
+          <select>
+            <option>0.5</option>
+            <option selected>1.0</option>
+            <option>1.5</option>
+            <option>2.0</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Finish / Fill</label>
+          <select>
+            <option>Black Epoxy Filled</option>
+            <option>Anodized</option>
+            <option selected>Laminated, Clear Coat</option>
+            <option>Natural Finish</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Artwork Ref / Description</label>
+        <input type="text" placeholder="e.g. DWG-002 or Description" value="DWG-002 — Data Plate">
+      </div>
+
+      <div class="tier-section">
+        <div class="tier-label">Batch-wise Pricing (Slab)</div>
+        <table class="tiers">
+          <thead>
+            <tr>
+              <th style="width:28%">Batch Quantity (Nos.)</th>
+              <th style="width:22%">Rate / Unit</th>
+              <th style="width:28%">Est. Amount</th>
+              <th style="width:5%"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="0" value="0" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="100" value="100" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" value="3.10" class="tier-rate"></td>
+              <td><div class="est-amount">310.00</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="101" value="101" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="250" value="250" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" value="2.65" class="tier-rate"></td>
+              <td><div class="est-amount">662.50</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="251" value="251" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="500" value="500" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" value="2.30" class="tier-rate"></td>
+              <td><div class="est-amount">1,150.00</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
+      </div>
+
+      <div class="tooling-row">
+        <label>Tooling / Screen Charges (one-time)</label>
+        <input type="number" step="0.01" placeholder="0.00" value="">
+      </div>
+    </div>
+  </div>
+
+  <button type="button" class="btn-add-item" onclick="addItem()">+ Add Another Item</button>
+
+  <!-- ======== ADDITIONAL CHARGES ======== -->
+  <div class="card">
+    <div class="section-title">Additional Charges</div>
+    <div class="charges-grid">
+      <div class="charge-label">Tooling / Screen Charges (one-time, per artwork)</div>
+      <input type="number" step="0.01" placeholder="0.00" id="chargeTooling" class="calc-charge">
+
+      <div class="charge-label">Packing &amp; Forwarding</div>
+      <input type="number" step="0.01" placeholder="0.00" id="chargePF" class="calc-charge">
+
+      <div class="charge-label">Freight / Shipping Charges</div>
+      <input type="number" step="0.01" placeholder="0.00" id="chargeFreight" class="calc-charge">
+      <div class="charge-note-full">Estimate only — freight may be billed at actuals / as per agreed Incoterm.</div>
+
+      <div class="charge-label">GST %</div>
+      <div class="pct-wrap">
+        <input type="number" step="0.01" min="0" placeholder="0" value="18" id="gstPctCharges" class="calc-charge">
+        <span class="pct-sign">%</span>
+      </div>
+      <div class="charge-note-full">Any further taxes / duties applicable at destination are extra, at actuals.</div>
+    </div>
+  </div>
+
+  <!-- ======== TOTALS ======== -->
+  <div class="card">
+    <div class="section-title">Totals</div>
+    <div class="totals-wrap">
+      <div class="totals-box">
+
+        <div class="totals-row subtotal">
+          <div class="t-label">
+            Sub Total
+            <span class="t-hint">Sum of highest batch slab per line item</span>
+          </div>
+          <div class="t-value" id="sumSubTotal">₹0.00</div>
+        </div>
+
+        <div class="totals-row">
+          <div class="t-label">
+            Tooling / Screen Charges
+            <span class="t-hint">Includes per-item tooling entered above</span>
+          </div>
+          <div class="t-value" id="sumTooling">₹0.00</div>
+        </div>
+
+        <div class="totals-row">
+          <div class="t-label">Packing &amp; Forwarding</div>
+          <div class="t-value" id="sumPF">₹0.00</div>
+        </div>
+
+        <div class="totals-row">
+          <div class="t-label">Freight</div>
+          <div class="t-value" id="sumFreight">₹0.00</div>
+        </div>
+
+        <div class="totals-row gst-row">
+          <div class="t-label">
+            <span>GST</span>
+            <input type="number" step="0.01" min="0" value="18" id="gstPctTotals" class="calc-charge">
+            <span style="font-family:'IBM Plex Mono'; color:var(--ink-soft);">%</span>
+          </div>
+          <div class="t-value" id="sumGst">₹0.00</div>
+        </div>
+
+        <div class="totals-row grand">
+          <div class="t-label">Grand Total</div>
+          <div class="t-value" id="sumGrandTotal">₹0.00</div>
+        </div>
+
+        <div class="totals-foot">
+          Indicative only — final invoiced value follows the slab rate for the actual quantity ordered.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== TERMS & CONDITIONS ======== -->
+  <div class="card">
+    <div class="section-title">Terms &amp; Conditions</div>
+    <ol class="terms-list">
+      <li><b>Batch Pricing:</b> Unit rates are slab-based on total order quantity per item as shown; final invoiced rate corresponds to the actual quantity ordered.</li>
+      <li><b>Artwork:</b> Print-ready artwork (CDR/AI/PDF) to be provided by customer, or design charges apply.</li>
+      <li><b>Sample Approval:</b> Bulk production commences only after sample approval by customer.</li>
+      <li><b>Minimum Order Quantity (MOQ):</b> As specified per item, if any.</li>
+      <li><b>Price Validity:</b> Prices subject to change based on raw material market fluctuation and currency exchange rate.</li>
+      <li><b>Delivery:</b> Lead time counted from date of PO and artwork/sample approval, whichever is later.</li>
+      <li><b>Payment:</b> As per payment terms mentioned above; delayed payment may attract interest.</li>
+      <li><b>Warranty:</b> Covers manufacturing defects only; not applicable to damage from misuse or improper handling.</li>
+      <li><b>Rejection/Return:</b> To be intimated within 7 days of receipt with supporting evidence.</li>
+      <li><b>Force Majeure:</b> Company not liable for delays due to conditions beyond reasonable control.</li>
+    </ol>
+  </div>
+
+  <!-- ======== ACTIONS ======== -->
+  <div class="form-actions">
+    <a href="{% url 'sales:dashboard' %}" class="btn btn-outline">Cancel</a>
+    <button type="button" class="btn btn-outline" onclick="alert('Draft saved (UI preview only)')">Save as Draft</button>
+    <button type="button" class="btn btn-primary" onclick="alert('Submitted for approval (UI preview only)')">Submit for Approval →</button>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  let itemCount = 2;
+
+  // ---- Number helpers (Indian formatting) ----
+  function fmt(n) {
+    return (n || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  function money(n) { return '₹' + fmt(n); }
+  function val(el) { return el ? (parseFloat(el.value) || 0) : 0; }
+
+  // ---- Recalculate estimated amount when qty/rate changes ----
+  document.addEventListener('input', function(e) {
+    if (e.target.closest('table.tiers')) {
+      const row = e.target.closest('tr');
+      if (!row) return;
+      const inputs = row.querySelectorAll('input[type=number]');
+      if (inputs.length >= 3) {
+        const maxQty = parseFloat(inputs[1].value) || 0;
+        const rate = parseFloat(inputs[2].value) || 0;
+        const est = row.querySelector('.est-amount');
+        if (est) {
+          est.textContent = fmt(maxQty * rate);
+        }
+      }
+    }
+
+    // Keep the two GST % inputs in sync (charges card <-> totals card)
+    if (e.target.id === 'gstPctCharges' || e.target.id === 'gstPctTotals') {
+      const other = document.getElementById(
+        e.target.id === 'gstPctCharges' ? 'gstPctTotals' : 'gstPctCharges'
+      );
+      if (other) other.value = e.target.value;
+    }
+
+    // Any tier / charge / GST edit re-drives the totals block
+    recalcTotals();
+  });
+
+  // ---- Totals block ----
+  // Sub Total = for each item, the HIGHEST estimated tier amount (max qty x rate),
+  // i.e. the slab the order is expected to land in.
+  function recalcTotals() {
+    let subTotal = 0;
+
+    document.querySelectorAll('#itemsContainer .item-card').forEach(card => {
+      let best = 0;
+      card.querySelectorAll('table.tiers tbody tr').forEach(row => {
+        const inputs = row.querySelectorAll('input[type=number]');
+        if (inputs.length >= 3) {
+          const est = (parseFloat(inputs[1].value) || 0) * (parseFloat(inputs[2].value) || 0);
+          if (est > best) best = est;
+        }
+      });
+      subTotal += best;
+    });
+
+    // Tooling = additional-charges tooling + per-item tooling rows
+    let tooling = val(document.getElementById('chargeTooling'));
+    document.querySelectorAll('#itemsContainer .tooling-row input').forEach(inp => {
+      tooling += parseFloat(inp.value) || 0;
+    });
+
+    const pf      = val(document.getElementById('chargePF'));
+    const freight = val(document.getElementById('chargeFreight'));
+    const gstPct  = val(document.getElementById('gstPctTotals'));
+
+    const taxable = subTotal + tooling + pf + freight;
+    const gstAmt  = taxable * gstPct / 100;
+    const grand   = taxable + gstAmt;
+
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = money(v); };
+    set('sumSubTotal', subTotal);
+    set('sumTooling', tooling);
+    set('sumPF', pf);
+    set('sumFreight', freight);
+    set('sumGst', gstAmt);
+    set('sumGrandTotal', grand);
+  }
+
+  // ---- Add pricing tier row ----
+  function addTier(btn) {
+    const tbody = btn.previousElementSibling.querySelector('tbody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" placeholder="0" style="width:48%;" min="0">
+          <span style="color:var(--ink-soft);">–</span>
+          <input type="number" placeholder="0" style="width:48%;" min="0">
+        </div>
+      </td>
+      <td><input type="number" step="0.01" placeholder="0.00" class="tier-rate"></td>
+      <td><div class="est-amount">0.00</div></td>
+      <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+    recalcTotals();
+  }
+
+  // ---- Remove pricing tier row ----
+  function removeTier(btn) {
+    const row = btn.closest('tr');
+    const tbody = row.closest('tbody');
+    if (tbody.rows.length > 1) {
+      row.remove();
+      recalcTotals();
+    }
+  }
+
+  // ---- Remove item card ----
+  function removeItem(btn) {
+    const card = btn.closest('.item-card');
+    const container = document.getElementById('itemsContainer');
+    if (container.children.length > 1) {
+      card.remove();
+      renumberItems();
+      recalcTotals();
+    }
+  }
+
+  // ---- Add new item card ----
+  function addItem() {
+    itemCount++;
+    const container = document.getElementById('itemsContainer');
+    const div = document.createElement('div');
+    div.className = 'item-card';
+    div.dataset.item = itemCount;
+    div.innerHTML = `
+      <div class="item-header">
+        <div>
+          <h3>Item ${itemCount} | Chemical Etched Nameplate</h3>
+          <div class="artwork-ref">Artwork Ref: DWG-${String(itemCount).padStart(3,'0')}</div>
+        </div>
+        <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕ Remove</button>
+      </div>
+
+      <div class="spec-grid">
+        <div class="field">
+          <label>Material</label>
+          <select>
+            <option>SS 304</option><option>Brass</option><option>Aluminium</option><option>SS 316</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Size (mm) — L × W</label>
+          <input type="text" placeholder="e.g. 100 × 60">
+        </div>
+        <div class="field">
+          <label>Thickness (mm)</label>
+          <select>
+            <option>0.5</option><option>1.0</option><option>1.5</option><option>2.0</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Finish / Fill</label>
+          <select>
+            <option>Black Epoxy Filled</option><option>Anodized</option><option>Laminated, Clear Coat</option><option>Natural Finish</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Artwork Ref / Description</label>
+        <input type="text" placeholder="e.g. DWG-${String(itemCount).padStart(3,'0')} or Description">
+      </div>
+
+      <div class="tier-section">
+        <div class="tier-label">Batch-wise Pricing (Slab)</div>
+        <table class="tiers">
+          <thead>
+            <tr>
+              <th style="width:28%">Batch Quantity (Nos.)</th>
+              <th style="width:22%">Rate / Unit</th>
+              <th style="width:28%">Est. Amount</th>
+              <th style="width:5%"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="number" placeholder="0" value="0" style="width:48%;" min="0">
+                  <span style="color:var(--ink-soft);">–</span>
+                  <input type="number" placeholder="100" style="width:48%;" min="0">
+                </div>
+              </td>
+              <td><input type="number" step="0.01" placeholder="0.00" class="tier-rate"></td>
+              <td><div class="est-amount">0.00</div></td>
+              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
+      </div>
+
+      <div class="tooling-row">
+        <label>Tooling / Screen Charges (one-time)</label>
+        <input type="number" step="0.01" placeholder="0.00">
+      </div>
+    `;
+    container.appendChild(div);
+    recalcTotals();
+  }
+
+  // ---- Renumber items after removal ----
+  function renumberItems() {
+    document.querySelectorAll('.item-card').forEach((card, i) => {
+      const num = i + 1;
+      card.dataset.item = num;
+      const h3 = card.querySelector('.item-header h3');
+      if (h3) h3.textContent = `Item ${num} | Chemical Etched Nameplate`;
+      const ref = card.querySelector('.artwork-ref');
+      if (ref) ref.textContent = `Artwork Ref: DWG-${String(num).padStart(3,'0')}`;
+    });
+  }
+
+  // ---- Initial paint of the totals block ----
+  document.addEventListener('DOMContentLoaded', recalcTotals);
+</script>
+{% endblock %}

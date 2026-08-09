@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stores — QR Labels{% endblock %}
+{% block topbar_sub %}Stores — QR Labels{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Stores</span>
+  <span class="name">Deepak Salvi</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+  .page-head h1 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
+  .page-head .crumb { font-size: 11px; color: var(--ink-soft); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .batch-bar {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 12px 16px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  }
+  .batch-bar .bb { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .batch-bar .bb span { display: block; font-family: 'IBM Plex Mono'; font-size: 14px; font-weight: 600; color: var(--ink); text-transform: none; letter-spacing: 0; margin-top: 3px; }
+
+  .improve-note {
+    background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green);
+    padding: 10px 14px; font-size: 11.5px; line-height: 1.6; border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 18px;
+  }
+  .improve-note b { font-weight: 700; }
+  .improve-note .mono { background: rgba(31,122,77,.09); padding: 1px 5px; border-radius: 3px; }
+
+  .toast {
+    background: var(--amber-bg); border-left: 3px solid var(--amber); color: var(--amber);
+    padding: 10px 14px; font-size: 11.5px; line-height: 1.55; border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 18px;
+  }
+  .toast[hidden] { display: none; }
+
+  /* --- Label sheet --- */
+  .label-sheet {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 18px;
+  }
+  .label-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .label {
+    border: 1.3px dashed var(--line); border-radius: var(--radius);
+    padding: 12px 10px 10px; text-align: center; background: #fff;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+  }
+  .label .qr { width: 118px; height: 118px; display: block; }
+  .label .l-uid {
+    font-family: 'IBM Plex Mono'; font-size: 15px; font-weight: 700;
+    color: var(--navy); letter-spacing: .02em;
+  }
+  .label .l-mat { font-size: 11px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+  .label .l-mat.unassigned { color: var(--gray); font-style: italic; font-weight: 500; }
+  .label .l-date { font-family: 'IBM Plex Mono'; font-size: 10px; color: var(--ink-soft); }
+  .label .l-url {
+    font-family: 'IBM Plex Mono'; font-size: 8.5px; color: var(--ink-soft);
+    word-break: break-all; line-height: 1.3; border-top: 1px solid var(--line);
+    padding-top: 6px; width: 100%;
+  }
+  .label .l-brand {
+    font-size: 8px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--gray); font-weight: 600;
+  }
+
+  .sheet-foot { font-size: 10.5px; color: var(--ink-soft); margin-top: 14px; line-height: 1.6; }
+
+  @media (max-width: 1100px) { .label-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 820px)  { .label-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* --- Print: only the label grid --- */
+  @media print {
+    @page { margin: 10mm; }
+    body { background: #fff; }
+    .topbar, .sidebar, .actions, .batch-bar, .improve-note, .toast,
+    .page-head, .sheet-foot, .no-print { display: none !important; }
+    .layout { display: block; min-height: 0; }
+    .main-content { padding: 0; }
+    .label-sheet { border: none; padding: 0; border-radius: 0; }
+    .label-grid { grid-template-columns: repeat(4, 1fr); gap: 6mm; }
+    .label { border: 1px dashed #999; break-inside: avoid; page-break-inside: avoid; }
+    .label .l-uid { color: #000; }
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Stores</div>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+  <a href="{% url 'stores:log_sheet' %}" class="nav-item active">
+    <span class="icon">➕</span> Log New Sheet
+  </a>
+  <a href="{% url 'stores:scan' %}" class="nav-item">
+    <span class="icon">📷</span> Scan Sheet QR
+  </a>
+  <a href="{% url 'stores:dashboard' %}#dispatch" class="nav-item">
+    <span class="icon">🚚</span> Dispatch / Outward
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>QR Labels — Print / Download</h1>
+    <div class="crumb">Stores › Log New Sheet › QR Labels</div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" id="btn-print">🖨 Print Labels</button>
+    <button class="btn btn-outline" id="btn-pdf">⬇ Download as PDF</button>
+    <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Back to Inventory</a>
+  </div>
+</div>
+
+<div class="batch-bar">
+  <div class="bb">Batch<span id="bb-batch">BATCH-2026-0233</span></div>
+  <div class="bb">Labels<span id="bb-count">8</span></div>
+  <div class="bb">Mode<span id="bb-mode">Blank — fill on scan</span></div>
+  <div class="bb">Generated<span>09 Aug 2026</span></div>
+  <div class="bb">By<span>Deepak Salvi</span></div>
+</div>
+
+<div class="improve-note">
+  <b>These QRs encode a full scan URL, not a bare sheet number.</b>
+  The old register printed just the integer, so pointing a phone camera at a label did
+  nothing. Each label below encodes <span class="mono">https://erp.local/stores/sheet/SHT-0813/</span> —
+  any stock phone camera opens the sheet form straight away, no app needed. The short path
+  is printed under every label so it can also be typed in by hand.
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<div class="label-sheet">
+  <div class="label-grid" id="label-grid">
+
+    <div class="label" data-uid="SHT-0813" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0814" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0815" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0816" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0817" data-mat="" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0818" data-mat="" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0819" data-mat="" data-date="09 Aug 2026"></div>
+    <div class="label" data-uid="SHT-0820" data-mat="" data-date="09 Aug 2026"></div>
+
+  </div>
+
+  <div class="sheet-foot">
+    Print on 16-up 50 × 50 mm polyester sticker stock. Paste one label on the top-left corner
+    of each sheet, on the side that stays visible on the rack.
+    Labels are re-printable at any time from the sheet's own screen.
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  // ------------------------------------------------------------------
+  // Self-contained QR-style matrix renderer.
+  // No CDN, no library — this is a UI preview. The matrix is generated
+  // deterministically from the encoded string so each sheet UID always
+  // renders the same recognisable pattern, complete with the three
+  // finder squares, separators, timing tracks and an alignment block.
+  // ------------------------------------------------------------------
+  var N = 25;          // modules per side
+  var QUIET = 2;       // quiet zone in modules
+
+  function hash32(str) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  function rng(seed) {
+    var s = seed >>> 0 || 1;
+    return function () {
+      s ^= s << 13; s >>>= 0;
+      s ^= s >> 17;
+      s ^= s << 5;  s >>>= 0;
+      return s / 4294967296;
+    };
+  }
+
+  function inBox(r, c, r0, c0, size) {
+    return r >= r0 && r < r0 + size && c >= c0 && c < c0 + size;
+  }
+
+  function buildMatrix(text) {
+    var m = [], r, c;
+    for (r = 0; r < N; r++) { m.push(new Array(N).fill(0)); }
+
+    var finders = [[0, 0], [0, N - 7], [N - 7, 0]];
+
+    function isReserved(r, c) {
+      for (var i = 0; i < finders.length; i++) {
+        // finder + 1-module separator
+        if (r >= finders[i][0] - 1 && r <= finders[i][0] + 7 &&
+            c >= finders[i][1] - 1 && c <= finders[i][1] + 7) { return true; }
+      }
+      if (r === 6 || c === 6) { return true; }                 // timing tracks
+      if (inBox(r, c, N - 9, N - 9, 5)) { return true; }       // alignment block
+      return false;
+    }
+
+    // data modules — deterministic pseudo-random fill
+    var rand = rng(hash32(text));
+    for (r = 0; r < N; r++) {
+      for (c = 0; c < N; c++) {
+        if (!isReserved(r, c)) { m[r][c] = rand() > 0.5 ? 1 : 0; }
+      }
+    }
+
+    // finder patterns: 7x7 ring + 3x3 solid core
+    finders.forEach(function (f) {
+      for (r = 0; r < 7; r++) {
+        for (c = 0; c < 7; c++) {
+          var ring = (r === 0 || r === 6 || c === 0 || c === 6);
+          var core = (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+          m[f[0] + r][f[1] + c] = (ring || core) ? 1 : 0;
+        }
+      }
+    });
+
+    // timing tracks
+    for (var i = 0; i < N; i++) {
+      var on = (i % 2 === 0) ? 1 : 0;
+      if (!isFinderArea(i, 6, finders)) { m[i][6] = on; }
+      if (!isFinderArea(6, i, finders)) { m[6][i] = on; }
+    }
+
+    // alignment block: 5x5 ring + centre dot
+    var a0 = N - 9;
+    for (r = 0; r < 5; r++) {
+      for (c = 0; c < 5; c++) {
+        var ring2 = (r === 0 || r === 4 || c === 0 || c === 4);
+        var dot   = (r === 2 && c === 2);
+        m[a0 + r][a0 + c] = (ring2 || dot) ? 1 : 0;
+      }
+    }
+
+    // dark module (a real QR always has one next to the bottom-left finder)
+    m[N - 8][8] = 1;
+
+    return m;
+  }
+
+  function isFinderArea(r, c, finders) {
+    for (var i = 0; i < finders.length; i++) {
+      if (r >= finders[i][0] - 1 && r <= finders[i][0] + 7 &&
+          c >= finders[i][1] - 1 && c <= finders[i][1] + 7) { return true; }
+    }
+    return false;
+  }
+
+  function qrSvg(text) {
+    var m = buildMatrix(text);
+    var span = N + QUIET * 2;
+    var parts = [];
+    parts.push('<svg class="qr" viewBox="0 0 ' + span + ' ' + span +
+               '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" ' +
+               'role="img" aria-label="QR code for ' + text + '">');
+    parts.push('<rect width="' + span + '" height="' + span + '" fill="#ffffff"/>');
+    for (var r = 0; r < N; r++) {
+      for (var c = 0; c < N; c++) {
+        if (m[r][c]) {
+          parts.push('<rect x="' + (c + QUIET) + '" y="' + (r + QUIET) +
+                     '" width="1" height="1" fill="#132435"/>');
+        }
+      }
+    }
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  // ------------------------------------------------------------------
+  // Render the labels
+  // ------------------------------------------------------------------
+  var params   = new URLSearchParams(window.location.search);
+  var mode     = params.get('mode') || '';
+  var qty      = parseInt(params.get('qty') || '0', 10);
+  var material = params.get('material') || '';
+  var thick    = params.get('thickness') || '';
+
+  var labels = Array.prototype.slice.call(document.querySelectorAll('#label-grid .label'));
+
+  // Batch bar reflects how we arrived here
+  var bbMode = document.getElementById('bb-mode');
+  if (mode === 'blank') {
+    bbMode.textContent = 'Blank — fill on scan';
+  } else if (mode === 'full') {
+    bbMode.textContent = 'Details logged';
+  } else {
+    bbMode.textContent = 'Mixed batch';
+  }
+
+  // Trim to the requested quantity (1-16); default keeps all 8 dummies
+  if (qty >= 1 && qty <= 16 && qty < labels.length) {
+    labels.slice(qty).forEach(function (el) { el.remove(); });
+    labels = labels.slice(0, qty);
+  }
+  document.getElementById('bb-count').textContent = labels.length;
+
+  labels.forEach(function (el) {
+    var uid = el.dataset.uid;
+    var mat = el.dataset.mat || '';
+
+    if (mode === 'blank') {
+      mat = '';
+    } else if (mode === 'full' && material) {
+      mat = material + (thick ? ' · ' + thick : '');
+    }
+
+    var path = '/stores/sheet/' + uid + '/';
+    var encoded = 'https://erp.local' + path;
+
+    el.innerHTML =
+      qrSvg(encoded) +
+      '<div class="l-uid">' + uid + '</div>' +
+      (mat
+        ? '<div class="l-mat">' + mat + '</div>'
+        : '<div class="l-mat unassigned">— unassigned —</div>') +
+      '<div class="l-date">' + (el.dataset.date || '') + '</div>' +
+      '<div class="l-brand">Chemical Etching Works</div>' +
+      '<div class="l-url">' + path + '</div>';
+  });
+
+  // ------------------------------------------------------------------
+  // Actions
+  // ------------------------------------------------------------------
+  var toast = document.getElementById('toast');
+  function say(html) { toast.innerHTML = html; toast.hidden = false; }
+
+  document.getElementById('btn-print').addEventListener('click', function () {
+    window.print();
+  });
+
+  document.getElementById('btn-pdf').addEventListener('click', function () {
+    say('<b>UI preview — no server-side PDF yet.</b> ' +
+        'In the live build this posts the batch to the label renderer and streams back a ' +
+        '<span class="mono">A4-16up.pdf</span>. For now the print dialog is opening — pick ' +
+        '<b>“Save as PDF”</b> as the destination to get the same file.');
+    window.setTimeout(function () { window.print(); }, 600);
+  });
+})();
+</script>
+{% endblock %}

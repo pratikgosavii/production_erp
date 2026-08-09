@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Design Queue{% endblock %}
+{% block topbar_sub %}Order Booking — Design Queue{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Design</span>
+  <span class="name">Meera D.</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Notice bar */
+  .notice-bar {
+    background: var(--blue-bg); color: var(--blue); font-size: 12px;
+    padding: 9px 0; margin: -24px -28px 20px; padding-left: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .notice-bar b { font-weight: 700; }
+
+  /* Summary strip */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    background: var(--line); border-bottom: 1px solid var(--line); margin: 0 -28px 24px;
+  }
+  .summary-strip .cell { background: var(--card); padding: 14px 20px; }
+  .summary-strip .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary-strip .cell .l { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+  .summary-strip .cell.query .n { color: var(--amber); }
+  .summary-strip .cell.progress .n { color: var(--blue); }
+  .summary-strip .cell.new .n { color: var(--green); }
+
+  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] { padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 12.5px; width: 200px; font-family: 'IBM Plex Sans'; }
+  .chip { padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px; font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer; }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  /* Card grid */
+  .job-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 1100px) { .job-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 700px) { .job-grid { grid-template-columns: 1fr; } }
+
+  .job-card {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+    border-radius: 2px; padding: 16px;
+  }
+  .job-card.query { border-left-color: var(--amber); }
+  .job-card.newjob { border-left-color: var(--green); }
+
+  .job-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .so-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 13px; }
+  .job-date { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+  .order-type {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 3px 8px; border-radius: 20px;
+  }
+  .order-type.new { background: var(--green-bg); color: var(--green); }
+  .order-type.repeat { background: var(--gray-bg); color: var(--gray); }
+
+  .cust-name { font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+
+  .drawing-box {
+    background: #f8f9fb; border: 1px solid var(--line); border-radius: 3px;
+    padding: 10px 12px; margin-bottom: 10px;
+  }
+  .drawing-box .dname { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .drawing-box .dname .ic {
+    width: 16px; height: 16px; border-radius: 2px; background: var(--steel); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; flex-shrink: 0;
+  }
+  .drawing-box .rev { font-family: 'IBM Plex Mono'; font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; }
+  .drawing-box .rev b { color: var(--ink); }
+  .drawing-box .old-versions { font-size: 10px; color: var(--ink-soft); margin-top: 6px; font-style: italic; }
+
+  .meta-row { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-soft); margin-bottom: 10px; }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  .query-note {
+    background: var(--amber-bg); border: 1px dashed #e0b070; border-radius: 3px;
+    padding: 8px 10px; font-size: 11.5px; color: #7a5518; margin-bottom: 10px;
+  }
+  .query-note b { color: #7a5518; }
+
+  .stage-pill {
+    display: inline-block; font-size: 10.5px; font-weight: 600;
+    padding: 4px 10px; border-radius: 20px; margin-bottom: 12px;
+  }
+  .stage-pill.pending { background: var(--gray-bg); color: var(--gray); }
+  .stage-pill.progress { background: var(--blue-bg); color: var(--blue); }
+  .stage-pill.query-status { background: var(--amber-bg); color: var(--amber); }
+
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions .btn {
+    flex: 1 1 auto; min-width: 92px; text-align: center; justify-content: center;
+    padding: 8px 10px; font-size: 12px;
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Design</div>
+  <a href="{% url 'design:queue' %}" class="nav-item active">
+    <span class="icon">📋</span> Design Queue
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Notice -->
+<div class="notice-bar">
+  Showing orders at <b>Design stage</b> only. Order value and commercial details are not visible in this view.
+</div>
+
+<!-- Summary -->
+<div class="summary-strip">
+  <div class="cell"><div class="n">9</div><div class="l">In design queue</div></div>
+  <div class="cell progress"><div class="n">4</div><div class="l">In progress</div></div>
+  <div class="cell query"><div class="n">2</div><div class="l">Query pending</div></div>
+  <div class="cell new"><div class="n">3</div><div class="l">New — not started</div></div>
+  <div class="cell"><div class="n">6</div><div class="l">Repeat / reference match</div></div>
+</div>
+
+<div class="page-head">
+  <h1>My Design Queue</h1>
+  <div class="toolbar">
+    <input type="text" placeholder="Search customer / SO no...">
+    <span class="chip active">All (9)</span>
+    <span class="chip">Not Started (3)</span>
+    <span class="chip">In Progress (4)</span>
+    <span class="chip">Query Pending (2)</span>
+  </div>
+</div>
+
+<div class="job-grid">
+
+  <!-- Card 1: Query raised -->
+  <div class="job-card query">
+    <div class="job-top">
+      <div><div class="so-no">SO-1041</div><div class="job-date">Received 02 Aug 2026</div></div>
+      <span class="order-type new">New</span>
+    </div>
+    <div class="cust-name">Veeransh Fabricators</div>
+    <span class="stage-pill query-status">Query Raised</span>
+    <div class="drawing-box">
+      <div class="dname"><span class="ic">DW</span>Nameplate_150x110.pdf</div>
+      <div class="rev">Latest: <b>Rev 00</b> (original)</div>
+    </div>
+    <div class="query-note"><b>Query:</b> Text placement unclear near mounting hole — awaiting customer clarification via sales.</div>
+    <div class="meta-row"><span>Expected Delivery</span><b>09 Aug 2026</b></div>
+    <div class="actions">
+      <a href="{% url 'design:job_detail' 'SO-1041' %}" class="btn btn-primary">Continue</a>
+      <button class="btn btn-outline">View Drawing</button>
+      <a href="{% url 'design:job_detail' 'SO-1041' %}#qThread" class="btn btn-outline">Query Thread</a>
+    </div>
+  </div>
+
+  <!-- Card 2: In progress, repeat -->
+  <div class="job-card">
+    <div class="job-top">
+      <div><div class="so-no">SO-1039</div><div class="job-date">Received 29 Jul 2026</div></div>
+      <span class="order-type repeat">Repeat</span>
+    </div>
+    <div class="cust-name">Anvi Engineering</div>
+    <span class="stage-pill progress">In Progress</span>
+    <div class="drawing-box">
+      <div class="dname"><span class="ic">DW</span>Rating_Plate_SS.pdf</div>
+      <div class="rev">Latest: <b>Rev 00</b> — matches prior order SO-0987</div>
+      <div class="old-versions">Same spec as last 3 orders — verify only</div>
+    </div>
+    <div class="meta-row"><span>Expected Delivery</span><b>06 Aug 2026</b></div>
+    <div class="actions">
+      <a href="{% url 'design:job_detail' 'SO-1039' %}" class="btn btn-primary">Continue</a>
+      <a href="{% url 'design:job_detail' 'SO-1039' %}#qThread" class="btn btn-outline">Raise Query</a>
+    </div>
+  </div>
+
+  <!-- Card 3: New, not started -->
+  <div class="job-card newjob">
+    <div class="job-top">
+      <div><div class="so-no">SO-1044</div><div class="job-date">Received 04 Aug 2026</div></div>
+      <span class="order-type new">New</span>
+    </div>
+    <div class="cust-name">Orion Compressors</div>
+    <span class="stage-pill pending">Not Started</span>
+    <div class="drawing-box">
+      <div class="dname"><span class="ic">DW</span>Panel_ID_Tag_v1.pdf</div>
+      <div class="rev">Latest: <b>Rev 00</b> (original)</div>
+    </div>
+    <div class="meta-row"><span>Expected Delivery</span><b>14 Aug 2026</b></div>
+    <div class="actions">
+      <a href="{% url 'design:job_detail' 'SO-1044' %}" class="btn btn-primary">Start</a>
+      <a href="{% url 'design:job_detail' 'SO-1044' %}#qThread" class="btn btn-outline">Raise Query</a>
+    </div>
+  </div>
+
+  <!-- Card 4: In progress, revision -->
+  <div class="job-card">
+    <div class="job-top">
+      <div><div class="so-no">SO-1037</div><div class="job-date">Received 27 Jul 2026</div></div>
+      <span class="order-type new">New</span>
+    </div>
+    <div class="cust-name">Zenith Controls</div>
+    <span class="stage-pill progress">In Progress</span>
+    <div class="drawing-box">
+      <div class="dname"><span class="ic">DW</span>Control_Box_Label.pdf</div>
+      <div class="rev">Latest: <b>Rev 01</b> (customer revision, 01 Aug)</div>
+      <div class="old-versions">Superseded: Rev 00 — still viewable</div>
+    </div>
+    <div class="meta-row"><span>Expected Delivery</span><b>08 Aug 2026</b></div>
+    <div class="actions">
+      <a href="{% url 'design:job_detail' 'SO-1037' %}" class="btn btn-primary">Continue</a>
+      <a href="{% url 'design:job_detail' 'SO-1037' %}#qThread" class="btn btn-outline">Raise Query</a>
+      <button class="btn btn-outline">View Drawing</button>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.toolbar .chip').forEach(chip => {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+</script>
+{% endblock %}

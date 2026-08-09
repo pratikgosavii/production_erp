@@ -1,0 +1,511 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Job Card {{ jc_no }} — Station Flow{% endblock %}
+{% block topbar_sub %}Job Card — Station Flow{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Floor Manager</span>
+  <span class="name">Ramesh T.</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .breadcrumb-bar { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 16px; }
+  .breadcrumb-bar a { color: var(--ink-soft); }
+  .breadcrumb-bar b { color: var(--ink); }
+
+  .jc-layout { display: grid; grid-template-columns: 2.1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .jc-layout { grid-template-columns: 1fr; } }
+
+  .jc-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line);
+  }
+  .jc-no { font-family: 'IBM Plex Mono'; font-size: 20px; font-weight: 700; }
+  .jc-so { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+  .jc-started {
+    font-size: 11px; font-family: 'IBM Plex Mono'; color: var(--ink-soft); margin-top: 6px;
+  }
+  .jc-started.live { color: var(--green); font-weight: 600; }
+  .jc-head-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+
+  .status-pill {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 6px 14px; border-radius: 20px; background: var(--blue-bg); color: var(--blue);
+    white-space: nowrap;
+  }
+  .status-pill.is-idle { background: var(--gray-bg); color: var(--gray); }
+  .status-pill.is-selecting { background: var(--amber-bg); color: var(--amber); }
+  .status-pill.is-complete { background: var(--green-bg); color: var(--green); }
+
+  .spec-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); margin-bottom: 16px;
+  }
+  .spec-grid .s { background: #fff; padding: 11px 14px; }
+  .spec-grid .s .l { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 4px; }
+  .spec-grid .s .v { font-size: 13px; font-weight: 600; font-family: 'IBM Plex Mono'; }
+
+  .section-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 2px; }
+  .section-sub { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 10px; }
+
+  /* Selection toolbar */
+  .select-bar {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    background: #f8f9fb; border: var(--border); border-radius: var(--radius);
+    padding: 9px 12px; margin-bottom: 10px;
+  }
+  .select-bar .hint { font-size: 11px; color: var(--ink-soft); }
+  .select-bar .hint b { color: var(--ink); font-family: 'IBM Plex Mono'; }
+  .select-bar .acts { display: flex; gap: 8px; flex-shrink: 0; }
+
+  .count-strip {
+    display: flex; gap: 14px; font-size: 10.5px; color: var(--ink-soft);
+    margin-bottom: 10px; font-family: 'IBM Plex Mono';
+  }
+  .count-strip b { color: var(--ink); font-weight: 700; }
+
+  /* Station list */
+  .station {
+    display: grid; grid-template-columns: 20px 26px 1fr auto; gap: 12px; align-items: center;
+    padding: 11px 4px; border-bottom: 1px solid var(--line); position: relative;
+  }
+  .station:last-child { border-bottom: none; }
+  .station-pick { display: flex; align-items: center; justify-content: center; }
+  .station-check { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; margin: 0; }
+  .station-check:disabled { cursor: default; opacity: .55; }
+  .station-num {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--gray-bg); color: var(--gray);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; border: 2px solid var(--line);
+  }
+  .station.done .station-num { background: var(--green); color: #fff; border-color: var(--green); }
+  .station.current .station-num { background: var(--blue); color: #fff; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .station.skipped .station-num { background: transparent; border: 2px dashed var(--line); color: var(--line); }
+
+  .station-name { font-size: 13px; font-weight: 600; }
+  .station.skipped .station-name { color: var(--ink-soft); text-decoration: line-through; font-weight: 400; }
+  .station-meta { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+  .station-meta .op { font-weight: 600; color: var(--steel); }
+
+  .station-time { font-size: 10.5px; color: var(--ink-soft); text-align: right; white-space: nowrap; }
+  .station-time .dur { font-family: 'IBM Plex Mono'; font-weight: 600; color: var(--ink); display: block; font-size: 11.5px; }
+
+  .not-applicable {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: var(--ink-soft);
+    background: var(--gray-bg); padding: 3px 8px; border-radius: 20px;
+  }
+
+  .btn-mark-complete {
+    font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 3px;
+    border: none; background: var(--navy); color: #fff; cursor: pointer;
+  }
+  .btn-mark-complete:hover { background: var(--navy-2); }
+  .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+
+  .done-banner {
+    display: none; margin-top: 16px; padding: 11px 14px; border-radius: var(--radius);
+    background: var(--green-bg); border: 1px solid var(--green); color: var(--green);
+    font-size: 12px; font-weight: 600;
+  }
+  .done-banner.show { display: block; }
+
+  /* Sidebar */
+  .side-block { margin-bottom: 16px; }
+  .side-block .st { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; font-weight: 700; }
+  .material-box { background: #f8f9fb; border: 1px solid var(--line); border-radius: 3px; padding: 12px; }
+  .material-box .row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .material-box .row:last-child { border-bottom: none; }
+  .material-box .row span:first-child { color: var(--ink-soft); }
+  .material-box .row span:last-child { font-weight: 600; font-family: 'IBM Plex Mono'; font-size: 11.5px; }
+
+  .progress-bar { height: 8px; background: var(--gray-bg); border-radius: 20px; overflow: hidden; }
+  .progress-bar .fill { height: 100%; background: var(--blue); width: 0%; transition: width .5s ease; }
+  .progress-bar .fill.complete { background: var(--green); }
+  .progress-label { font-size: 11px; color: var(--ink-soft); margin-top: 6px; display: flex; justify-content: space-between; gap: 8px; }
+  .progress-label span:last-child { font-family: 'IBM Plex Mono'; font-weight: 700; color: var(--ink); }
+
+  .drawing-mini {
+    border: 1px dashed var(--line); border-radius: 3px; padding: 16px; text-align: center; background: #fafbfc;
+  }
+  .drawing-mini .fname { font-size: 12px; font-weight: 600; }
+  .drawing-mini .frev { font-family: 'IBM Plex Mono'; font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Production Floor</div>
+  <a href="{% url 'production:job_card' jc_no %}" class="nav-item">
+    <span class="icon">📋</span> My Job Cards
+  </a>
+  <a class="nav-item active">
+    <span class="icon">🔧</span> {{ jc_no }}
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb-bar">
+  <a href="{% url 'production:job_card' jc_no %}">My Job Cards</a> → <b>{{ jc_no }}</b>
+</div>
+
+<div class="jc-layout">
+  <!-- LEFT: Station Flow -->
+  <div class="card">
+    <div class="jc-head">
+      <div>
+        <div class="jc-no">{{ jc_no }}</div>
+        <div class="jc-so">Linked to SO-1035 · Konkan Marine Pvt Ltd · Material: SHT-0812</div>
+        <div class="jc-started" id="startedAt">Start time not captured yet</div>
+      </div>
+      <div class="jc-head-right">
+        <span class="status-pill is-idle" id="statusPill">Not started</span>
+        <button class="btn btn-primary btn-sm" id="btnStartWork" onclick="startWork()">▶ Start Work</button>
+      </div>
+    </div>
+
+    <div class="spec-grid">
+      <div class="s"><div class="l">Material</div><div class="v">Brass · 1.5mm</div></div>
+      <div class="s"><div class="l">Size (mm)</div><div class="v">200 × 80</div></div>
+      <div class="s"><div class="l">Qty</div><div class="v">120 Nos</div></div>
+      <div class="s"><div class="l">Finish Spec</div><div class="v" style="font-size:12px; font-family:'IBM Plex Sans';">Black Fill, No Lamination</div></div>
+      <div class="s"><div class="l">Drilling</div><div class="v" style="font-size:12px; font-family:'IBM Plex Sans';">2 Holes, Ø3mm</div></div>
+      <div class="s"><div class="l">Due Date</div><div class="v">06 Aug 2026</div></div>
+    </div>
+
+    <div class="section-title">Process Stations</div>
+    <div class="section-sub">Tick the stations from the Station master that apply to this job — unticked stations are recorded as skipped. Selection is locked once confirmed.</div>
+
+    <div class="select-bar">
+      <div class="hint" id="selHint">Press <b>Start Work</b> to capture the start time and unlock station selection.</div>
+      <div class="acts">
+        <button class="btn btn-outline btn-sm" id="btnSelectAll" onclick="toggleAll()" disabled>Select all</button>
+        <button class="btn btn-primary btn-sm" id="btnConfirm" onclick="confirmSelection()" disabled>Confirm Station Selection</button>
+      </div>
+    </div>
+
+    <div class="count-strip">
+      <span><b id="cntMaster">12</b> in station master</span>
+      <span><b id="cntSelected">—</b> applicable</span>
+      <span><b id="cntDone">0</b> completed</span>
+      <span><b id="cntSkipped">—</b> skipped</span>
+    </div>
+
+    <div id="stationList">
+      <div class="station" data-op="Ganesh P.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">1</div>
+        <div><div class="station-name">1. Material Cutting / Shearing</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Ganesh P.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">2</div>
+        <div><div class="station-name">2. Surface Cleaning / Degreasing</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Farida S.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">3</div>
+        <div><div class="station-name">3. Photoresist Coating + Exposure + Developing</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Ravi Kumbhar">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">4</div>
+        <div><div class="station-name">4. Chemical Etching</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Ravi Kumbhar">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">5</div>
+        <div><div class="station-name">5. Resist Stripping</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Sudha M.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">6</div>
+        <div><div class="station-name">6. Color Fill (Black Epoxy)</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Sudha M.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">7</div>
+        <div><div class="station-name">7. Curing / Baking</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Ganesh P.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">8</div>
+        <div><div class="station-name">8. Surface Cleaning / Polishing</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Farida S.">
+        <div class="station-pick"><input type="checkbox" class="station-check" disabled></div>
+        <div class="station-num">9</div>
+        <div><div class="station-name">9. Lamination / Protective Coating</div><div class="station-meta">Finish spec says no lamination — untick to skip</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Imran K.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">10</div>
+        <div><div class="station-name">10. Trimming / Final Shape Cutting</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Imran K.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">11</div>
+        <div><div class="station-name">11. Hole Drilling (2 × Ø3mm)</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+      <div class="station" data-op="Sudha M.">
+        <div class="station-pick"><input type="checkbox" class="station-check" checked disabled></div>
+        <div class="station-num">12</div>
+        <div><div class="station-name">12. Packing</div><div class="station-meta">Op: —</div></div>
+        <div class="station-time"></div>
+      </div>
+    </div>
+
+    <div class="done-banner" id="doneBanner">✓ All applicable stations complete — job marked <b>Completed</b> and handed over to QA.</div>
+
+    <div class="btn-row">
+      <button class="btn btn-outline" id="btnFlag" disabled>Flag Issue at This Station</button>
+      <button class="btn btn-outline">Print Traveler Sheet</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Sidebar -->
+  <div>
+    <div class="card side-block">
+      <div class="st">Overall Progress</div>
+      <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+      <div class="progress-label"><span id="progressText">Not started — stations not selected yet</span><span id="progressPct">0%</span></div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Drawing Reference</div>
+      <div class="drawing-mini">
+        <div class="fname">📐 Deck_Tag_Brass.pdf</div>
+        <div class="frev">Rev 02 — Approved</div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Material Source</div>
+      <div class="material-box">
+        <div class="row"><span>UID</span><span>SHT-0812</span></div>
+        <div class="row"><span>Type</span><span>New Sheet</span></div>
+        <div class="row"><span>Size</span><span>8×4 ft</span></div>
+        <div class="row"><span>Status</span><span>Consumed</span></div>
+      </div>
+    </div>
+
+    <div class="card side-block">
+      <div class="st">Station Operators (Today)</div>
+      <div class="material-box">
+        <div class="row"><span>Cutting / Polishing</span><span>Ganesh P.</span></div>
+        <div class="row"><span>Coating / Expose</span><span>Farida S.</span></div>
+        <div class="row"><span>Etching / Stripping</span><span>Ravi Kumbhar</span></div>
+        <div class="row"><span>Fill / Cure / Pack</span><span>Sudha M.</span></div>
+        <div class="row"><span>Trim / Drill</span><span>Imran K.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // ---- Job state (static preview) -------------------------------------
+  // idle -> selecting -> running -> completed
+  var jobState = 'idle';
+  var jobStart = null;   // captured by Start Work
+  var lastMark = null;   // last station mark; duration = gap between marks
+
+  function stations() { return Array.prototype.slice.call(document.querySelectorAll('#stationList .station')); }
+  function checks()   { return Array.prototype.slice.call(document.querySelectorAll('.station-check')); }
+
+  function fmtClock(d) {
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }
+  function fmtDay(d) {
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  }
+  function fmtDur(ms) {
+    var s = Math.max(1, Math.round(ms / 1000));
+    if (s < 60) return s + ' s';
+    var m = Math.floor(s / 60), r = s % 60;
+    if (m < 60) return m + 'm ' + String(r).padStart(2, '0') + 's';
+    return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+  }
+
+  // ---- 1. Start Work — captures the start time ------------------------
+  function startWork() {
+    if (jobState !== 'idle') return;
+    jobState = 'selecting';
+    jobStart = new Date();
+
+    var started = document.getElementById('startedAt');
+    started.textContent = 'Work started ' + fmtDay(jobStart) + ' at ' + fmtClock(jobStart) + ' by Ramesh T.';
+    started.classList.add('live');
+
+    var btn = document.getElementById('btnStartWork');
+    btn.disabled = true;
+    btn.textContent = 'Work Started';
+
+    checks().forEach(function (c) { c.disabled = false; });
+    document.getElementById('btnConfirm').disabled = false;
+    document.getElementById('btnSelectAll').disabled = false;
+    refresh();
+  }
+
+  // ---- 2. Station selection ------------------------------------------
+  function toggleAll() {
+    if (jobState !== 'selecting') return;
+    var all = checks();
+    var target = all.some(function (c) { return !c.checked; });
+    all.forEach(function (c) { c.checked = target; });
+    refresh();
+  }
+
+  function confirmSelection() {
+    if (jobState !== 'selecting') return;
+    var picked = checks().filter(function (c) { return c.checked; });
+    if (picked.length === 0) {
+      document.getElementById('selHint').innerHTML = 'Tick at least <b>one</b> station before confirming.';
+      return;
+    }
+    jobState = 'running';
+    lastMark = new Date();
+
+    stations().forEach(function (st) {
+      var c = st.querySelector('.station-check');
+      c.disabled = true;
+      if (c.checked) {
+        st.classList.add('selected');
+        st.querySelector('.station-meta').innerHTML = 'Op: <span class="op">' + st.dataset.op + '</span> · Pending';
+      } else {
+        st.classList.add('skipped');
+        st.querySelector('.station-num').textContent = '—';
+        st.querySelector('.station-meta').textContent = 'Not applicable to this order';
+        st.querySelector('.station-time').innerHTML = '<span class="not-applicable">Skipped</span>';
+      }
+    });
+
+    document.getElementById('btnSelectAll').disabled = true;
+    document.getElementById('btnConfirm').disabled = true;
+    document.getElementById('btnConfirm').textContent = 'Selection Locked';
+    document.getElementById('btnFlag').disabled = false;
+
+    activateNext();
+    refresh();
+  }
+
+  // ---- 3. Per-station completion --------------------------------------
+  function activateNext() {
+    var next = stations().filter(function (st) {
+      return st.classList.contains('selected') && !st.classList.contains('done');
+    })[0];
+    if (!next) {
+      jobState = 'completed';
+      document.getElementById('doneBanner').classList.add('show');
+      document.getElementById('btnFlag').disabled = true;
+      return;
+    }
+    var now = new Date();
+    next.classList.add('current');
+    next.dataset.startedAt = fmtClock(now);
+    next.querySelector('.station-meta').innerHTML =
+      'Op: <span class="op">' + next.dataset.op + '</span> · Started ' + next.dataset.startedAt;
+    next.querySelector('.station-time').innerHTML =
+      '<button class="btn-mark-complete" onclick="markComplete(this)">Mark Complete</button>';
+  }
+
+  function markComplete(btn) {
+    if (jobState !== 'running') return;
+    var st = btn.closest('.station');
+    var now = new Date();
+    var dur = fmtDur(now - lastMark);   // duration = gap between marks (auto)
+    lastMark = now;
+
+    st.classList.remove('current');
+    st.classList.add('done');
+    st.querySelector('.station-num').textContent = '✓';
+    st.querySelector('.station-meta').innerHTML =
+      'Op: <span class="op">' + st.dataset.op + '</span> · ' + st.dataset.startedAt + ' → ' + fmtClock(now);
+    st.querySelector('.station-time').innerHTML =
+      fmtDay(now) + '<span class="dur">' + dur + '</span>';
+
+    activateNext();
+    refresh();
+  }
+
+  // ---- 4. Single source of truth for every count ----------------------
+  function refresh() {
+    var all = stations();
+    var total = all.length;
+    var ticked, selected, done, skipped;
+
+    if (jobState === 'idle' || jobState === 'selecting') {
+      ticked = checks().filter(function (c) { return c.checked; }).length;
+      selected = ticked;
+      done = 0;
+      skipped = total - ticked;
+    } else {
+      selected = all.filter(function (s) { return s.classList.contains('selected'); }).length;
+      done = all.filter(function (s) { return s.classList.contains('done'); }).length;
+      skipped = total - selected;
+    }
+    var pct = selected ? Math.round((done / selected) * 100) : 0;
+
+    document.getElementById('cntMaster').textContent = total;
+    document.getElementById('cntSelected').textContent = (jobState === 'idle') ? '—' : selected;
+    document.getElementById('cntDone').textContent = done;
+    document.getElementById('cntSkipped').textContent = (jobState === 'idle') ? '—' : skipped;
+
+    var fill = document.getElementById('progressFill');
+    fill.style.width = pct + '%';
+    fill.classList.toggle('complete', jobState === 'completed');
+    document.getElementById('progressPct').textContent = pct + '%';
+
+    var pill = document.getElementById('statusPill');
+    var hint = document.getElementById('selHint');
+    var prog = document.getElementById('progressText');
+    pill.className = 'status-pill';
+
+    if (jobState === 'idle') {
+      pill.classList.add('is-idle');
+      pill.textContent = 'Not started';
+      prog.textContent = 'Not started — stations not selected yet';
+    } else if (jobState === 'selecting') {
+      pill.classList.add('is-selecting');
+      pill.textContent = 'Selecting stations — ' + selected + ' of ' + total + ' ticked';
+      hint.innerHTML = 'Tick the applicable stations, then confirm. <b>' + selected + '</b> of <b>' + total +
+                       '</b> ticked · <b>' + skipped + '</b> will be skipped.';
+      prog.textContent = '0 of ' + selected + ' applicable stations done';
+    } else if (jobState === 'running') {
+      var current = all.filter(function (s) { return s.classList.contains('current'); })[0];
+      var name = current ? current.querySelector('.station-name').textContent.replace(/^\d+\.\s*/, '') : '';
+      pill.textContent = 'Station ' + (done + 1) + ' of ' + selected + ' — ' + name;
+      hint.innerHTML = 'Selection locked — <b>' + selected + '</b> applicable of <b>' + total +
+                       '</b> in master · <b>' + skipped + '</b> skipped.';
+      prog.textContent = done + ' of ' + selected + ' applicable stations done';
+    } else {
+      pill.classList.add('is-complete');
+      pill.textContent = 'Completed — ' + done + ' of ' + selected + ' stations';
+      hint.innerHTML = 'All <b>' + selected + '</b> applicable stations completed.';
+      prog.textContent = done + ' of ' + selected + ' applicable stations done';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    checks().forEach(function (c) { c.addEventListener('change', refresh); });
+    refresh();
+  });
+</script>
+{% endblock %}

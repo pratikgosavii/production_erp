@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stores — Scan Sheet QR{% endblock %}
+{% block topbar_sub %}Stores — Scan Sheet QR{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Stores</span>
+  <span class="name">Deepak Salvi</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .page-head h1 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
+  .page-head .crumb { font-size: 11px; color: var(--ink-soft); }
+
+  .scan-layout { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 950px) { .scan-layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 18px 20px 20px;
+  }
+  .panel h2 { font-size: 14.5px; margin: 0 0 4px; font-weight: 700; }
+  .panel .p-sub { font-size: 11.5px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 16px; }
+
+  /* Viewfinder */
+  .viewfinder {
+    position: relative; width: 100%; aspect-ratio: 4 / 3;
+    background: var(--navy); border-radius: var(--radius); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .viewfinder video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .viewfinder .vf-idle {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 20px;
+    color: #9db2c4; font-size: 12px; line-height: 1.6;
+  }
+  .viewfinder .vf-idle .big { font-size: 34px; opacity: .75; }
+  .viewfinder .vf-idle b { color: #fff; font-weight: 600; }
+
+  /* Scan frame overlay */
+  .scan-frame { position: absolute; width: 56%; aspect-ratio: 1 / 1; pointer-events: none; }
+  .scan-frame span {
+    position: absolute; width: 26px; height: 26px;
+    border: 3px solid #fff; border-radius: 2px;
+  }
+  .scan-frame span:nth-child(1) { top: 0; left: 0;  border-right: none; border-bottom: none; }
+  .scan-frame span:nth-child(2) { top: 0; right: 0; border-left: none;  border-bottom: none; }
+  .scan-frame span:nth-child(3) { bottom: 0; left: 0;  border-right: none; border-top: none; }
+  .scan-frame span:nth-child(4) { bottom: 0; right: 0; border-left: none;  border-top: none; }
+  .scan-frame .laser {
+    position: absolute; left: 0; right: 0; height: 2px; top: 0;
+    background: rgba(255,255,255,.85); box-shadow: 0 0 8px rgba(255,255,255,.6);
+    border: none; width: auto; border-radius: 0; display: none;
+  }
+  .viewfinder.live .scan-frame .laser { display: block; animation: sweep 2.2s ease-in-out infinite; }
+  @keyframes sweep { 0%,100% { top: 2%; } 50% { top: 96%; } }
+
+  .cam-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+  .cam-status { font-size: 11.5px; color: var(--ink-soft); }
+  .cam-status.err { color: var(--red); font-weight: 600; }
+  .cam-status.ok  { color: var(--green); font-weight: 600; }
+
+  .cam-msg {
+    margin-top: 12px; padding: 11px 14px; font-size: 11.5px; line-height: 1.6;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .cam-msg[hidden] { display: none; }
+  .cam-msg.warn { background: var(--amber-bg); border-left: 3px solid var(--amber); color: var(--amber); }
+  .cam-msg.bad  { background: var(--red-bg);   border-left: 3px solid var(--red);   color: var(--red); }
+  .cam-msg b { font-weight: 700; }
+
+  /* Manual fallback */
+  .manual { border: 1.3px solid var(--blue); background: var(--blue-bg); }
+  .manual h2 { color: var(--blue); }
+  .manual .p-sub { color: var(--blue); }
+  .manual .field input {
+    font-family: 'IBM Plex Mono'; font-size: 15px; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase;
+  }
+  .manual .field label { color: var(--blue); }
+  .manual .m-err { font-size: 11px; color: var(--red); font-weight: 600; margin-top: 6px; }
+  .manual .m-err[hidden] { display: none; }
+
+  .recent { margin-top: 16px; }
+  .recent .r-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-soft); font-weight: 600; margin-bottom: 8px;
+  }
+  .recent a.chip-uid {
+    display: inline-block; font-family: 'IBM Plex Mono'; font-size: 11.5px; font-weight: 600;
+    background: #fff; border: 1px solid var(--line); border-radius: 20px;
+    padding: 5px 12px; margin: 0 6px 6px 0; color: var(--steel); text-decoration: none;
+  }
+  .recent a.chip-uid:hover { border-color: var(--steel); background: var(--paper); text-decoration: none; }
+
+  /* Flow explainer */
+  .flow-steps { list-style: none; margin: 0; padding: 0; counter-reset: fstep; }
+  .flow-steps li {
+    position: relative; padding: 0 0 14px 34px; font-size: 12px; line-height: 1.55;
+    color: var(--ink-soft); counter-increment: fstep;
+  }
+  .flow-steps li::before {
+    content: counter(fstep); position: absolute; left: 0; top: -1px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--blue-bg); color: var(--blue);
+    font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .flow-steps li::after {
+    content: ''; position: absolute; left: 10.5px; top: 24px; bottom: 2px;
+    width: 1.3px; background: var(--line);
+  }
+  .flow-steps li:last-child { padding-bottom: 0; }
+  .flow-steps li:last-child::after { display: none; }
+  .flow-steps li b { color: var(--ink); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Stores</div>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+  <a href="{% url 'stores:log_sheet' %}" class="nav-item">
+    <span class="icon">➕</span> Log New Sheet
+  </a>
+  <a href="{% url 'stores:scan' %}" class="nav-item active">
+    <span class="icon">📷</span> Scan Sheet QR
+  </a>
+  <a href="{% url 'stores:dashboard' %}#dispatch" class="nav-item">
+    <span class="icon">🚚</span> Dispatch / Outward
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Scan Sheet QR</h1>
+    <div class="crumb">Stores › Scan Sheet QR</div>
+  </div>
+  <a href="{% url 'stores:dashboard' %}" class="btn btn-outline btn-sm">← Back to Inventory</a>
+</div>
+
+<div class="scan-layout">
+
+  <!-- Camera -->
+  <div class="panel">
+    <h2>Camera scanner</h2>
+    <div class="p-sub">
+      Hold the sheet's label inside the frame. On a phone, the label's QR also opens this
+      form directly from the stock camera app — this scanner is for the desk terminal.
+    </div>
+
+    <div class="viewfinder" id="viewfinder">
+      <video id="cam" playsinline muted hidden></video>
+      <div class="vf-idle" id="vf-idle">
+        <div class="big">📷</div>
+        <div><b>Camera is off</b><br>Press “Start Camera” to begin scanning.</div>
+      </div>
+      <div class="scan-frame">
+        <span></span><span></span><span></span><span></span>
+        <div class="laser"></div>
+      </div>
+    </div>
+
+    <div class="cam-actions">
+      <button class="btn btn-primary btn-sm" id="btn-start">Start Camera</button>
+      <button class="btn btn-outline btn-sm" id="btn-stop" disabled>Stop</button>
+      <span class="cam-status" id="cam-status">Idle</span>
+    </div>
+
+    <div class="cam-msg" id="cam-msg" hidden></div>
+  </div>
+
+  <!-- Manual fallback + explainer -->
+  <div>
+    <div class="panel manual">
+      <h2>Or enter Sheet No manually</h2>
+      <div class="p-sub">
+        Label torn, camera blocked, or working off a paper list? Type the sheet number
+        printed under the QR and open it directly.
+      </div>
+
+      <form id="manual-form" novalidate>
+        <div class="field">
+          <label for="manual-uid">Sheet No.</label>
+          <input type="text" id="manual-uid" value="SHT-0813" placeholder="SHT-0813"
+                 autocomplete="off" spellcheck="false">
+          <div class="m-err" id="manual-err" hidden></div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">
+          Open Sheet
+        </button>
+      </form>
+
+      <div class="recent">
+        <div class="r-label">Recently scanned</div>
+        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'SHT-0813' %}">SHT-0813</a>
+        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'SHT-0812' %}">SHT-0812</a>
+        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'OFF-0212' %}">OFF-0212</a>
+        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'SHT-0805' %}">SHT-0805</a>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <h2>How this works</h2>
+      <div class="p-sub">The whole point is that nothing gets written on paper twice.</div>
+      <ol class="flow-steps">
+        <li>A QR label was generated and <b>pasted on the physical sheet</b> when the lot arrived.</li>
+        <li>Scan that label here, or with any phone camera — the QR carries a full URL.</li>
+        <li>The sheet's <b>detail form opens</b> with whatever is already known about it.</li>
+        <li>Fill in or update material, grade, supplier, rack and status, then save.</li>
+        <li>The sheet is live stock — visible in Material Inventory and reservable by Design.</li>
+      </ol>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  // Django builds the URL for a sample UID; we swap the UID at click time so the
+  // preview stays a pure front-end flow with no invented route names.
+  var SAMPLE_URL = "{% url 'stores:sheet_detail' 'SHT-0813' %}";
+
+  function urlFor(uid) {
+    return SAMPLE_URL.replace('SHT-0813', encodeURIComponent(uid));
+  }
+
+  // ---------------- Manual fallback ----------------
+  var form  = document.getElementById('manual-form');
+  var input = document.getElementById('manual-uid');
+  var mErr  = document.getElementById('manual-err');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var uid = (input.value || '').trim().toUpperCase();
+
+    if (!uid) {
+      mErr.textContent = 'Enter a sheet number, e.g. SHT-0813.';
+      mErr.hidden = false;
+      return;
+    }
+    if (!/^(SHT|OFF)-\d{3,5}$/.test(uid)) {
+      mErr.textContent = 'Expected format SHT-0813 or OFF-0212.';
+      mErr.hidden = false;
+      return;
+    }
+    mErr.hidden = true;
+    window.location.href = urlFor(uid);
+  });
+
+  input.addEventListener('input', function () { mErr.hidden = true; });
+
+  // ---------------- Camera (graceful everywhere) ----------------
+  var vf      = document.getElementById('viewfinder');
+  var video   = document.getElementById('cam');
+  var idle    = document.getElementById('vf-idle');
+  var btnGo   = document.getElementById('btn-start');
+  var btnStop = document.getElementById('btn-stop');
+  var status  = document.getElementById('cam-status');
+  var msg     = document.getElementById('cam-msg');
+
+  var stream = null;
+
+  function setMsg(kind, html) {
+    if (!html) { msg.hidden = true; return; }
+    msg.className = 'cam-msg ' + kind;
+    msg.innerHTML = html;
+    msg.hidden = false;
+  }
+
+  function setStatus(kind, text) {
+    status.className = 'cam-status' + (kind ? ' ' + kind : '');
+    status.textContent = text;
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(function (t) {
+        try { t.stop(); } catch (e) { /* already stopped */ }
+      });
+      stream = null;
+    }
+    video.hidden = true;
+    try { video.srcObject = null; } catch (e) { /* ignore */ }
+    idle.hidden = false;
+    vf.classList.remove('live');
+    btnGo.disabled = false;
+    btnStop.disabled = true;
+    setStatus('', 'Idle');
+  }
+
+  function cameraUnavailable(reason) {
+    stopCamera();
+    setStatus('err', 'Camera unavailable');
+    setMsg('warn',
+      '<b>Camera could not be started.</b> ' + reason +
+      '<br>This is expected in a preview or over plain HTTP — use the ' +
+      '<b>“Or enter Sheet No manually”</b> box on the right to carry on with the flow.');
+  }
+
+  btnGo.addEventListener('click', function () {
+    setMsg('', '');
+    setStatus('', 'Requesting camera…');
+    btnGo.disabled = true;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      cameraUnavailable('This browser does not expose a camera API to the page.');
+      return;
+    }
+
+    var req;
+    try {
+      req = navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }, audio: false
+      });
+    } catch (err) {
+      cameraUnavailable('The browser rejected the request immediately.');
+      return;
+    }
+
+    Promise.resolve(req).then(function (s) {
+      stream = s;
+      video.srcObject = s;
+      video.hidden = false;
+      idle.hidden = true;
+      vf.classList.add('live');
+      btnStop.disabled = false;
+      setStatus('ok', 'Scanning — hold the label in the frame');
+      setMsg('warn',
+        '<b>Preview build:</b> the live video feed is real, but QR decoding is not wired up ' +
+        'yet. Use the manual box to open a sheet.');
+      var p = video.play();
+      if (p && typeof p.catch === 'function') { p.catch(function () { /* autoplay guard */ }); }
+    }).catch(function (err) {
+      var name = (err && err.name) || '';
+      var reason;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        reason = 'Permission was denied, or the page is not on a secure origin.';
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        reason = 'No camera device was found on this machine.';
+      } else if (name === 'NotReadableError') {
+        reason = 'Another application is already using the camera.';
+      } else {
+        reason = 'The browser reported: ' + (name || 'unknown error') + '.';
+      }
+      cameraUnavailable(reason);
+    });
+  });
+
+  btnStop.addEventListener('click', function () {
+    stopCamera();
+    setMsg('', '');
+  });
+
+  window.addEventListener('pagehide', stopCamera);
+})();
+</script>
+{% endblock %}

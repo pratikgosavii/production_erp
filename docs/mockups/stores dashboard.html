@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stores — Raw Material Inventory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#132435; --steel:#3f5c74; --paper:#eef1f4; --card:#ffffff; --line:#d7dde3;
+    --ink:#1a2432; --ink-soft:#5b6b7a;
+    --green:#1f7a4d; --green-bg:#e5f4ec;
+    --amber:#a9660b; --amber-bg:#fdf1e0;
+    --red:#b23a2f; --red-bg:#fbe9e7;
+    --blue:#2d5a7a; --blue-bg:#e6eef4;
+    --gray:#6b7684; --gray-bg:#eceef1;
+    --purple:#5b4b8a; --purple-bg:#efe9f7;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink);}
+  .num{font-family:'IBM Plex Mono',monospace;}
+
+  .topbar{background:var(--navy); color:#fff; padding:16px 28px; display:flex; align-items:center; justify-content:space-between;}
+  .topbar .brand{display:flex; align-items:center; gap:12px;}
+  .brand .mark{width:30px;height:30px;border:1.5px solid #fff; display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono';font-size:12px;font-weight:600; transform:rotate(45deg);}
+  .brand .mark span{transform:rotate(-45deg);}
+  .brand .title{font-weight:600; font-size:15px;}
+  .brand .sub{font-size:11px; color:#9db2c4; letter-spacing:.04em; text-transform:uppercase;}
+  .topbar .who{font-size:12.5px; color:#c7d4de; text-align:right;}
+  .topbar .who b{color:#fff; font-weight:600;}
+
+  .summary{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--line); border-bottom:1px solid var(--line);}
+  .summary .cell{background:var(--card); padding:14px 20px;}
+  .summary .cell .n{font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; line-height:1;}
+  .summary .cell .l{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-top:6px;}
+  .summary .cell.avail .n{color:var(--green);}
+  .summary .cell.reserved .n{color:var(--blue);}
+  .summary .cell.low .n{color:var(--red);}
+  .summary .cell.leftover .n{color:var(--purple);}
+
+  main{padding:22px 28px 60px;}
+  .page-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;}
+  .page-head h1{font-size:16px; margin:0; font-weight:600;}
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .toolbar input[type=text]{padding:7px 12px; border:1px solid var(--line); border-radius:3px; font-size:12.5px; width:190px;}
+  .toolbar select{padding:7px 10px; border:1px solid var(--line); border-radius:3px; font-size:12px; background:#fff;}
+  .toolbar .chip{padding:5px 11px; border:1px solid var(--line); border-radius:20px; font-size:11.5px; background:#fff; color:var(--ink-soft);}
+  .toolbar .chip.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .btn-add{background:var(--navy); color:#fff; border:none; padding:8px 16px; border-radius:3px; font-size:12.5px; font-weight:600; cursor:pointer;}
+
+  table.inv{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); font-size:12.5px;}
+  table.inv thead th{
+    background:var(--navy); color:#fff; text-align:left; padding:10px 12px;
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;
+  }
+  table.inv tbody tr{border-top:1px solid var(--line);}
+  table.inv tbody tr:hover{background:#fafbfc;}
+  table.inv td{padding:11px 12px; vertical-align:middle;}
+
+  .uid{font-family:'IBM Plex Mono'; font-weight:700; font-size:12px;}
+  .uid.sheet{color:var(--steel);}
+  .uid.offcut{color:var(--purple);}
+  .kind-tag{font-size:9.5px; font-weight:700; text-transform:uppercase; padding:2px 6px; border-radius:3px; margin-left:6px;}
+  .kind-tag.sheet{background:var(--blue-bg); color:var(--blue);}
+  .kind-tag.offcut{background:var(--purple-bg); color:var(--purple);}
+
+  .status-badge{
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
+    padding:4px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:5px;
+  }
+  .status-badge::before{content:''; width:6px; height:6px; border-radius:50%;}
+  .status-badge.available{background:var(--green-bg); color:var(--green);} .status-badge.available::before{background:var(--green);}
+  .status-badge.reserved{background:var(--blue-bg); color:var(--blue);} .status-badge.reserved::before{background:var(--blue);}
+  .status-badge.consumed{background:var(--gray-bg); color:var(--gray);} .status-badge.consumed::before{background:var(--gray);}
+
+  .against{font-size:11px; color:var(--ink-soft);}
+  .against b{color:var(--ink); font-family:'IBM Plex Mono'; font-weight:600;}
+
+  .origin{font-size:10.5px; color:var(--ink-soft); font-style:italic;}
+  .origin b{font-style:normal; color:var(--steel); font-family:'IBM Plex Mono';}
+
+  .loc{font-size:11.5px; color:var(--ink-soft);}
+
+  .low-flag{font-size:10px; color:var(--red); font-weight:600; margin-top:3px;}
+
+  .btn-issue{font-size:11px; font-weight:600; padding:5px 11px; border-radius:3px; border:1px solid var(--navy); background:#fff; color:var(--navy); cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><span>CE</span></div>
+    <div>
+      <div class="title">Chemical Etching Works — ERP</div>
+      <div class="sub">Stores — Raw Material Inventory</div>
+    </div>
+  </div>
+  <div class="who">Logged in as <b>Deepak Salvi</b><br>Stores Incharge</div>
+</div>
+
+<div class="summary">
+  <div class="cell"><div class="n">86</div><div class="l">Total items in stock</div></div>
+  <div class="cell avail"><div class="n">61</div><div class="l">Available</div></div>
+  <div class="cell reserved"><div class="n">14</div><div class="l">Reserved (nested)</div></div>
+  <div class="cell"><div class="n">11</div><div class="l">Consumed (this month)</div></div>
+  <div class="cell leftover"><div class="n">29</div><div class="l">Offcuts tracked</div></div>
+  <div class="cell low"><div class="n">3</div><div class="l">Below reorder level</div></div>
+</div>
+
+<main>
+  <div class="page-head">
+    <h1>Material Inventory</h1>
+    <div class="toolbar">
+      <input type="text" placeholder="Search UID / material...">
+      <select><option>Material: All</option><option>SS304</option><option>Brass</option><option>Aluminium</option></select>
+      <select><option>Type: All</option><option>New Sheet</option><option>Offcut</option></select>
+      <span class="chip active">All</span>
+      <span class="chip">Available</span>
+      <span class="chip">Reserved</span>
+      <span class="chip">Low Stock</span>
+      <button class="btn-add">+ Log New Sheet</button>
+    </div>
+  </div>
+
+  <table class="inv">
+    <thead>
+      <tr>
+        <th style="width:12%">UID</th>
+        <th style="width:12%">Material / Thk</th>
+        <th style="width:11%">Size</th>
+        <th style="width:11%">Status</th>
+        <th style="width:16%">Reserved / Consumed Against</th>
+        <th style="width:14%">Origin</th>
+        <th style="width:9%">Location</th>
+        <th style="width:9%">Received</th>
+        <th style="width:6%"></th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr>
+        <td><span class="uid sheet">SHT-0812</span><span class="kind-tag sheet">Sheet</span></td>
+        <td>Brass · 1.5mm</td>
+        <td>8 x 4 ft</td>
+        <td><span class="status-badge reserved">Reserved</span></td>
+        <td class="against">Nested for <b>SO-1035</b><br>by Meera D. (Design)</td>
+        <td class="origin">Purchased — GRN-2291</td>
+        <td class="loc">Rack B-3</td>
+        <td style="font-size:11px;">04 Aug 2026</td>
+        <td><button class="btn-issue">Issue</button></td>
+      </tr>
+
+      <tr>
+        <td><span class="uid offcut">OFF-0212</span><span class="kind-tag offcut">Offcut</span></td>
+        <td>SS304 · 1mm</td>
+        <td>18 x 14 in</td>
+        <td><span class="status-badge reserved">Reserved</span></td>
+        <td class="against">Nested for <b>SO-1029</b><br>by Meera D. (Design)</td>
+        <td class="origin">From <b>SHT-0771</b> (leftover)</td>
+        <td class="loc">Rack A-1</td>
+        <td style="font-size:11px;">28 Jul 2026</td>
+        <td><button class="btn-issue">Issue</button></td>
+      </tr>
+
+      <tr>
+        <td><span class="uid offcut">OFF-0198</span><span class="kind-tag offcut">Offcut</span></td>
+        <td>SS304 · 0.5mm</td>
+        <td>22 x 16 in</td>
+        <td><span class="status-badge reserved">Reserved</span></td>
+        <td class="against">Nested for <b>SO-1039</b><br>by Meera D. (Design)</td>
+        <td class="origin">From <b>SHT-0754</b> (leftover)</td>
+        <td class="loc">Rack A-2</td>
+        <td style="font-size:11px;">22 Jul 2026</td>
+        <td><button class="btn-issue">Issue</button></td>
+      </tr>
+
+      <tr>
+        <td><span class="uid sheet">SHT-0805</span><span class="kind-tag sheet">Sheet</span></td>
+        <td>Aluminium · 1mm</td>
+        <td>8 x 4 ft</td>
+        <td><span class="status-badge available">Available</span></td>
+        <td class="against">—</td>
+        <td class="origin">Purchased — GRN-2280</td>
+        <td class="loc">Rack C-1</td>
+        <td style="font-size:11px;">30 Jul 2026</td>
+        <td><button class="btn-issue" disabled style="opacity:.4; cursor:default;">Issue</button></td>
+      </tr>
+
+      <tr>
+        <td><span class="uid sheet">SHT-0798</span><span class="kind-tag sheet">Sheet</span></td>
+        <td>SS304 · 2mm</td>
+        <td>8 x 4 ft</td>
+        <td><span class="status-badge consumed">Consumed</span></td>
+        <td class="against">Consumed for <b>SO-1041</b><br>04 Aug — Deepak S.</td>
+        <td class="origin">Purchased — GRN-2265</td>
+        <td class="loc">—</td>
+        <td style="font-size:11px;">15 Jul 2026</td>
+        <td><span style="font-size:10.5px; color:var(--ink-soft);">Closed</span></td>
+      </tr>
+
+      <tr>
+        <td><span class="uid offcut">OFF-0187</span><span class="kind-tag offcut">Offcut</span></td>
+        <td>SS304 · 1mm</td>
+        <td>10 x 8 in</td>
+        <td><span class="status-badge available">Available</span></td>
+        <td class="against">—</td>
+        <td class="origin">From <b>SHT-0798</b> (leftover)</td>
+        <td class="loc">Rack A-1</td>
+        <td style="font-size:11px;">04 Aug 2026</td>
+        <td><button class="btn-issue">Issue</button></td>
+      </tr>
+
+      <tr>
+        <td><span class="uid sheet">SHT-0790</span><span class="kind-tag sheet">Sheet</span></td>
+        <td>Brass · 2mm</td>
+        <td>8 x 4 ft</td>
+        <td><span class="status-badge available">Available</span></td>
+        <td class="against">—</td>
+        <td class="origin">Purchased — GRN-2251</td>
+        <td class="loc">Rack B-2</td>
+        <td style="font-size:11px;">10 Jul 2026</td>
+        <td><button class="btn-issue">Issue</button></td>
+      </tr>
+
+      <tr style="background:var(--red-bg);">
+        <td colspan="9" style="padding:8px 12px; font-size:11.5px; color:var(--red); font-weight:600;">
+          ⚠ SS304 2mm — only 1 sheet remaining in stock, below reorder level (min: 3) — Purchase Requisition suggested
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+</main>
+
+</body>
+</html>

@@ -1,0 +1,611 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Quotation Approvals — Sales Manager{% endblock %}
+{% block topbar_sub %}Sales Manager — Approval Queue{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Sales Manager</span>
+  <span class="name">Rahul Deshmukh</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Summary strip */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border-bottom: 1px solid var(--line); margin: -24px -28px 24px;
+  }
+  .summary-strip .cell {
+    background: var(--card); padding: 16px 20px;
+  }
+  .summary-strip .cell .n {
+    font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1;
+  }
+  .summary-strip .cell .l {
+    font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase;
+    letter-spacing: .04em; margin-top: 6px;
+  }
+  .summary-strip .cell.pending .n { color: var(--amber); }
+  .summary-strip .cell.high .n { color: var(--red); }
+  .summary-strip .cell.resub .n { color: var(--blue); }
+  .summary-strip .cell.avg .n { color: var(--steel); font-size: 19px; }
+
+  /* Page header */
+  .page-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+  }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] {
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12.5px; width: 200px; font-family: 'IBM Plex Sans';
+  }
+  .chip {
+    padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  /* Table */
+  table.approval-table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    border: 1px solid var(--line); font-size: 12.5px;
+  }
+  table.approval-table thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.approval-table tbody tr { border-top: 1px solid var(--line); }
+  table.approval-table tbody tr:hover { background: #fafbfc; }
+  table.approval-table td { padding: 12px 12px; vertical-align: top; }
+
+  .qno {
+    font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 12px;
+  }
+  .qno .ver {
+    font-size: 10px; color: var(--ink-soft); font-weight: 400; margin-top: 2px;
+  }
+  .cust { font-weight: 600; }
+  .cust .sub { font-weight: 400; font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .amt {
+    font-family: 'IBM Plex Mono'; font-weight: 600; text-align: right; display: block;
+  }
+  .rate { font-family: 'IBM Plex Mono'; font-weight: 600; display: block; }
+  .rate-sub {
+    font-family: 'IBM Plex Mono'; font-size: 10px; color: var(--ink-soft);
+    font-weight: 400; display: block; margin-top: 2px; white-space: nowrap;
+  }
+  .days-pending {
+    font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 14px;
+  }
+  .days-pending.warn { color: var(--amber); }
+  .days-pending.ok { color: var(--green); }
+  .days-label { font-size: 10px; color: var(--ink-soft); }
+
+  /* Actions */
+  .action-group { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+  .btn-approve {
+    font-size: 11px; font-weight: 600; padding: 7px 14px; border-radius: 3px;
+    border: none; background: var(--green); color: #fff; cursor: pointer;
+  }
+  .btn-approve:hover { background: #186b40; }
+  .btn-reject {
+    font-size: 11px; font-weight: 600; padding: 7px 14px; border-radius: 3px;
+    border: 1px solid var(--red); background: #fff; color: var(--red); cursor: pointer;
+  }
+  .btn-reject:hover { background: var(--red-bg); }
+  .btn-revise {
+    font-size: 11px; font-weight: 600; padding: 7px 14px; border-radius: 3px;
+    border: 1px solid var(--steel); background: #fff; color: var(--steel);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn-revise:hover { background: var(--gray-bg); border-color: var(--navy-2); color: var(--navy-2); }
+  .btn-view-details {
+    font-size: 10.5px; color: var(--ink-soft); background: none; border: none;
+    text-decoration: underline; cursor: pointer; padding: 0; margin-top: 6px; display: block;
+  }
+
+  /* Expandable detail */
+  .row-detail {
+    display: none; background: #f8f9fb; border-top: 1px dashed var(--line);
+  }
+  .row-detail.open { display: table-row; }
+  .detail-inner {
+    padding: 16px 20px;
+  }
+  .detail-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px;
+  }
+  .detail-grid .dg-item .dg-label {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); margin-bottom: 4px;
+  }
+  .detail-grid .dg-item .dg-value {
+    font-size: 13px; font-weight: 600;
+  }
+
+  /* Reject form */
+  .reject-form {
+    display: none; margin-top: 10px; background: var(--red-bg);
+    border: 1px solid var(--red); border-radius: 4px; padding: 12px;
+  }
+  .reject-form.open { display: block; }
+  .reject-form textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: 'IBM Plex Sans'; font-size: 12px; resize: vertical; min-height: 60px;
+    margin-bottom: 8px;
+  }
+  .reject-form .rf-actions { display: flex; gap: 8px; }
+  .reject-form .btn-confirm-reject {
+    font-size: 11px; font-weight: 600; padding: 7px 14px; border-radius: 3px;
+    border: none; background: var(--red); color: #fff; cursor: pointer;
+  }
+  .reject-form .btn-cancel-reject {
+    font-size: 11px; padding: 7px 14px; border-radius: 3px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+
+  /* Request-revision form (same pattern as reject form, softer tone) */
+  .revise-form {
+    display: none; margin-top: 10px; background: var(--blue-bg);
+    border: 1px solid var(--blue); border-radius: 4px; padding: 12px;
+  }
+  .revise-form.open { display: block; }
+  .revise-form textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: 'IBM Plex Sans'; font-size: 12px; resize: vertical; min-height: 60px;
+    margin-bottom: 8px;
+  }
+  .revise-form .rf-actions { display: flex; gap: 8px; }
+  .revise-form .btn-confirm-revise {
+    font-size: 11px; font-weight: 600; padding: 7px 14px; border-radius: 3px;
+    border: none; background: var(--blue); color: #fff; cursor: pointer;
+  }
+  .revise-form .btn-cancel-revise {
+    font-size: 11px; padding: 7px 14px; border-radius: 3px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+
+  /* Line items preview (in detail row) */
+  .line-items-preview {
+    border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .line-items-preview table {
+    width: 100%; border-collapse: collapse; font-size: 11.5px;
+  }
+  .line-items-preview th {
+    background: var(--paper); padding: 8px 12px; text-align: left;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); font-weight: 600;
+  }
+  .line-items-preview td {
+    padding: 8px 12px; border-top: 1px solid var(--line); background: #fff;
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Sales Manager</div>
+  <a href="{% url 'sales:manager_approvals' %}" class="nav-item active">
+    <span class="icon">✅</span> Approval Queue
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Strip -->
+<div class="summary-strip">
+  <div class="cell pending"><div class="n">4</div><div class="l">Pending approval</div></div>
+  <div class="cell high"><div class="n">1</div><div class="l">High value (>₹50K)</div></div>
+  <div class="cell resub"><div class="n">2</div><div class="l">Resubmitted (v2+)</div></div>
+  <div class="cell avg"><div class="n">2.1 days</div><div class="l">Avg. days pending</div></div>
+</div>
+
+<div class="page-head">
+  <h1>Quotation Approval Queue</h1>
+  <div class="toolbar">
+    <input type="text" placeholder="Search customer / quotation no...">
+    <span class="chip active">All (4)</span>
+    <span class="chip">High Value (1)</span>
+    <span class="chip">Resubmitted (2)</span>
+  </div>
+</div>
+
+<div style="overflow-x:auto;">
+<table class="approval-table">
+  <thead>
+    <tr>
+      <th style="width:9%">QTN No.</th>
+      <th style="width:13%">Customer</th>
+      <th style="width:8%">Sales Person</th>
+      <th style="width:13%">Material / Spec</th>
+      <th style="width:6%">Qty</th>
+      <th style="width:9%">Rate / Unit</th>
+      <th style="width:10%">Grand Total</th>
+      <th style="width:8%">Submitted</th>
+      <th style="width:7%">Pending</th>
+      <th style="width:17%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <!-- Row 1: Resubmitted v2 -->
+    <tr id="row-0417">
+      <td>
+        <div class="qno">QTN-0417<div class="ver">v2 (resubmitted)</div></div>
+      </td>
+      <td>
+        <div class="cust">Veeransh Fabricators<div class="sub">New Customer</div></div>
+      </td>
+      <td style="font-size:12px;">Arjun P.</td>
+      <td>SS304 · 2mm · 150×110mm</td>
+      <td>7 Nos</td>
+      <td>
+        <span class="rate">₹145.00</span>
+        <span class="rate-sub">slab ₹120–145</span>
+      </td>
+      <td><span class="amt">₹9,676</span></td>
+      <td style="font-size:11.5px;">05 Aug 2026</td>
+      <td>
+        <span class="days-pending warn">3d</span>
+        <span class="days-label">pending</span>
+      </td>
+      <td>
+        <div class="action-group">
+          <button class="btn-approve" onclick="approveQuote('QTN-0417')">✓ Approve</button>
+          <button class="btn-reject" onclick="toggleReject('0417')">✕ Reject</button>
+          <button class="btn-revise" onclick="toggleRevise('0417')">↺ Request Revision</button>
+        </div>
+        <button class="btn-view-details" onclick="toggleDetail('0417')">View line items ▾</button>
+        <div class="reject-form" id="reject-0417">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
+          <textarea placeholder="e.g. Margin too low — revise rate to ₹XX per unit"></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-reject">Reject & Send Back</button>
+            <button class="btn-cancel-reject" onclick="toggleReject('0417')">Cancel</button>
+          </div>
+        </div>
+        <div class="revise-form" id="revise-0417">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
+          <textarea placeholder="e.g. Split tooling as a separate line and re-confirm the 101–500 slab rate"></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-revise">Send Back for Revision</button>
+            <button class="btn-cancel-revise" onclick="toggleRevise('0417')">Cancel</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Detail row for 0417 -->
+    <tr class="row-detail" id="detail-0417">
+      <td colspan="10">
+        <div class="detail-inner">
+          <div class="detail-grid">
+            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
+            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">50% Advance</div></div>
+            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">Ex-Works</div></div>
+            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">10-12 Days</div></div>
+          </div>
+          <div class="line-items-preview">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Description</th>
+                  <th>Material</th>
+                  <th>Size</th>
+                  <th>Qty Tier</th>
+                  <th>Rate/Unit</th>
+                  <th>Tooling</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td style="font-weight:600;">Nameplate — SS Etched</td>
+                  <td>SS304, 2mm</td>
+                  <td>150 × 110 mm</td>
+                  <td>1–100: ₹145<br>101–500: ₹120</td>
+                  <td>₹145.00</td>
+                  <td>₹2,500</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="font-size:11px; color:var(--ink-soft); font-style:italic;">
+            Previously rejected (v1): "Margin too low — revise rate" — resubmitted with revised pricing.
+          </div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Row 2: New high-value -->
+    <tr id="row-0421">
+      <td>
+        <div class="qno">QTN-0421<div class="ver">v1</div></div>
+      </td>
+      <td>
+        <div class="cust">Orion Compressors<div class="sub">New Customer</div></div>
+      </td>
+      <td style="font-size:12px;">Imran S.</td>
+      <td>Aluminium · 1mm · 80×50mm</td>
+      <td>250 Nos</td>
+      <td>
+        <span class="rate">₹78.00</span>
+        <span class="rate-sub">slab ₹65–95</span>
+      </td>
+      <td><span class="amt">₹1,08,000</span></td>
+      <td style="font-size:11.5px;">04 Aug 2026</td>
+      <td>
+        <span class="days-pending warn">4d</span>
+        <span class="days-label">pending</span>
+      </td>
+      <td>
+        <div class="action-group">
+          <button class="btn-approve" onclick="approveQuote('QTN-0421')">✓ Approve</button>
+          <button class="btn-reject" onclick="toggleReject('0421')">✕ Reject</button>
+          <button class="btn-revise" onclick="toggleRevise('0421')">↺ Request Revision</button>
+        </div>
+        <button class="btn-view-details" onclick="toggleDetail('0421')">View line items ▾</button>
+        <div class="reject-form" id="reject-0421">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
+          <textarea placeholder="e.g. Check with procurement if aluminium rate is current"></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-reject">Reject & Send Back</button>
+            <button class="btn-cancel-reject" onclick="toggleReject('0421')">Cancel</button>
+          </div>
+        </div>
+        <div class="revise-form" id="revise-0421">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
+          <textarea placeholder="e.g. Re-confirm current aluminium rate and add validity date before I approve"></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-revise">Send Back for Revision</button>
+            <button class="btn-cancel-revise" onclick="toggleRevise('0421')">Cancel</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+    <tr class="row-detail" id="detail-0421">
+      <td colspan="10">
+        <div class="detail-inner">
+          <div class="detail-grid">
+            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
+            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">100% Advance</div></div>
+            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">Ex-Works</div></div>
+            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">15 Days</div></div>
+          </div>
+          <div class="line-items-preview">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td style="font-weight:600;">Panel ID Tag — Etched Aluminium</td>
+                  <td>Aluminium, 1mm</td>
+                  <td>80 × 50 mm</td>
+                  <td>1–100: ₹95<br>101–250: ₹78<br>251–500: ₹65</td>
+                  <td>₹78.00</td>
+                  <td>₹3,500</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Row 3: Resubmitted v2 -->
+    <tr id="row-0419">
+      <td>
+        <div class="qno">QTN-0419<div class="ver">v2 (resubmitted)</div></div>
+      </td>
+      <td>
+        <div class="cust">Bharat Switchgear Co.<div class="sub">Repeat Customer</div></div>
+      </td>
+      <td style="font-size:12px;">Imran S.</td>
+      <td>Aluminium · 1mm · 100×60mm</td>
+      <td>100 Nos</td>
+      <td>
+        <span class="rate">₹95.00</span>
+        <span class="rate-sub">slab ₹95–120</span>
+      </td>
+      <td><span class="amt">₹63,000</span></td>
+      <td style="font-size:11.5px;">03 Aug 2026</td>
+      <td>
+        <span class="days-pending ok">1d</span>
+        <span class="days-label">pending</span>
+      </td>
+      <td>
+        <div class="action-group">
+          <button class="btn-approve" onclick="approveQuote('QTN-0419')">✓ Approve</button>
+          <button class="btn-reject" onclick="toggleReject('0419')">✕ Reject</button>
+          <button class="btn-revise" onclick="toggleRevise('0419')">↺ Request Revision</button>
+        </div>
+        <button class="btn-view-details" onclick="toggleDetail('0419')">View line items ▾</button>
+        <div class="reject-form" id="reject-0419">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
+          <textarea placeholder="Enter reason for rejection..."></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-reject">Reject & Send Back</button>
+            <button class="btn-cancel-reject" onclick="toggleReject('0419')">Cancel</button>
+          </div>
+        </div>
+        <div class="revise-form" id="revise-0419">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
+          <textarea placeholder="Describe the changes needed before this can be approved..."></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-revise">Send Back for Revision</button>
+            <button class="btn-cancel-revise" onclick="toggleRevise('0419')">Cancel</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+    <tr class="row-detail" id="detail-0419">
+      <td colspan="10">
+        <div class="detail-inner">
+          <div class="detail-grid">
+            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
+            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">30 Days Credit</div></div>
+            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">Ex-Works</div></div>
+            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">12 Days</div></div>
+          </div>
+          <div class="line-items-preview">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td style="font-weight:600;">Panel Plate — Etched Aluminium</td>
+                  <td>Aluminium, 1mm</td>
+                  <td>100 × 60 mm</td>
+                  <td>1–50: ₹120<br>51–200: ₹95</td>
+                  <td>₹95.00</td>
+                  <td>₹2,000</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="font-size:11px; color:var(--ink-soft); font-style:italic;">
+            Previously rejected (v1): "Add tooling charges separately" — fixed in v2.
+          </div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Row 4 -->
+    <tr id="row-0422">
+      <td>
+        <div class="qno">QTN-0422<div class="ver">v1</div></div>
+      </td>
+      <td>
+        <div class="cust">Zenith Controls<div class="sub">New Customer</div></div>
+      </td>
+      <td style="font-size:12px;">Sneha R.</td>
+      <td>Brass · 1.5mm · 200×80mm</td>
+      <td>120 Nos</td>
+      <td>
+        <span class="rate">₹360.00</span>
+        <span class="rate-sub">slab ₹360–420</span>
+      </td>
+      <td><span class="amt">₹45,600</span></td>
+      <td style="font-size:11.5px;">06 Aug 2026</td>
+      <td>
+        <span class="days-pending ok">2d</span>
+        <span class="days-label">pending</span>
+      </td>
+      <td>
+        <div class="action-group">
+          <button class="btn-approve" onclick="approveQuote('QTN-0422')">✓ Approve</button>
+          <button class="btn-reject" onclick="toggleReject('0422')">✕ Reject</button>
+          <button class="btn-revise" onclick="toggleRevise('0422')">↺ Request Revision</button>
+        </div>
+        <button class="btn-view-details" onclick="toggleDetail('0422')">View line items ▾</button>
+        <div class="reject-form" id="reject-0422">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
+          <textarea placeholder="Enter reason for rejection..."></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-reject">Reject & Send Back</button>
+            <button class="btn-cancel-reject" onclick="toggleReject('0422')">Cancel</button>
+          </div>
+        </div>
+        <div class="revise-form" id="revise-0422">
+          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
+          <textarea placeholder="Describe the changes needed before this can be approved..."></textarea>
+          <div class="rf-actions">
+            <button class="btn-confirm-revise">Send Back for Revision</button>
+            <button class="btn-cancel-revise" onclick="toggleRevise('0422')">Cancel</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+    <tr class="row-detail" id="detail-0422">
+      <td colspan="10">
+        <div class="detail-inner">
+          <div class="detail-grid">
+            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
+            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">50% Advance</div></div>
+            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">FOB</div></div>
+            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">14 Days</div></div>
+          </div>
+          <div class="line-items-preview">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td style="font-weight:600;">Control Box Label — Etched Brass</td>
+                  <td>Brass, 1.5mm</td>
+                  <td>200 × 80 mm</td>
+                  <td>1–50: ₹420<br>51–150: ₹360</td>
+                  <td>₹360.00</td>
+                  <td>₹4,000</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Toggle line-item detail row
+  function toggleDetail(id) {
+    const row = document.getElementById('detail-' + id);
+    row.classList.toggle('open');
+    const btn = document.querySelector('#row-' + id + ' .btn-view-details');
+    if (row.classList.contains('open')) {
+      btn.textContent = 'Hide line items ▴';
+    } else {
+      btn.textContent = 'View line items ▾';
+    }
+  }
+
+  // Toggle reject form (closes the revision form so only one is open)
+  function toggleReject(id) {
+    const form = document.getElementById('reject-' + id);
+    const revise = document.getElementById('revise-' + id);
+    if (revise) revise.classList.remove('open');
+    form.classList.toggle('open');
+  }
+
+  // Toggle request-revision form (closes the reject form so only one is open)
+  function toggleRevise(id) {
+    const form = document.getElementById('revise-' + id);
+    const reject = document.getElementById('reject-' + id);
+    if (reject) reject.classList.remove('open');
+    form.classList.toggle('open');
+  }
+
+  // Approve placeholder
+  function approveQuote(qtn) {
+    alert('✓ ' + qtn + ' approved! (placeholder — backend not wired yet)');
+  }
+
+  // Filter chips
+  document.querySelectorAll('.toolbar .chip').forEach(chip => {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+</script>
+{% endblock %}

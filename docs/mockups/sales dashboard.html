@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My Quotations — Sales Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#132435; --steel:#3f5c74; --paper:#eef1f4; --card:#ffffff; --line:#d7dde3;
+    --ink:#1a2432; --ink-soft:#5b6b7a;
+    --green:#1f7a4d; --green-bg:#e5f4ec;
+    --amber:#a9660b; --amber-bg:#fdf1e0;
+    --red:#b23a2f; --red-bg:#fbe9e7;
+    --blue:#2d5a7a; --blue-bg:#e6eef4;
+    --gray:#6b7684; --gray-bg:#eceef1;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink);}
+  .num{font-family:'IBM Plex Mono',monospace;}
+
+  .topbar{background:var(--navy); color:#fff; padding:16px 28px; display:flex; align-items:center; justify-content:space-between;}
+  .topbar .brand{display:flex; align-items:center; gap:12px;}
+  .brand .mark{width:30px;height:30px;border:1.5px solid #fff; display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono';font-size:12px;font-weight:600; transform:rotate(45deg);}
+  .brand .mark span{transform:rotate(-45deg);}
+  .brand .title{font-weight:600; font-size:15px;}
+  .brand .sub{font-size:11px; color:#9db2c4; letter-spacing:.04em; text-transform:uppercase;}
+  .topbar .who{font-size:12.5px; color:#c7d4de; text-align:right;}
+  .topbar .who b{color:#fff; font-weight:600;}
+  .role-tag{font-size:10px; text-transform:uppercase; letter-spacing:.05em; background:#2a3f52; color:#a9c3d8;
+    padding:2px 8px; border-radius:3px; margin-left:8px; font-weight:700;}
+
+  .summary{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--line); border-bottom:1px solid var(--line);}
+  .summary .cell{background:var(--card); padding:14px 20px;}
+  .summary .cell .n{font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; line-height:1;}
+  .summary .cell .l{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-top:6px;}
+  .summary .cell.pending .n{color:var(--amber);}
+  .summary .cell.rejected .n{color:var(--red);}
+  .summary .cell.approved .n{color:var(--green);}
+  .summary .cell.value .n{color:var(--blue); font-size:19px;}
+
+  main{padding:22px 28px 60px;}
+  .page-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;}
+  .page-head h1{font-size:16px; margin:0; font-weight:600;}
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .toolbar input[type=text]{padding:7px 12px; border:1px solid var(--line); border-radius:3px; font-size:12.5px; width:190px;}
+  .toolbar .chip{padding:5px 11px; border:1px solid var(--line); border-radius:20px; font-size:11.5px; background:#fff; color:var(--ink-soft); cursor:default;}
+  .toolbar .chip.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .btn-new{
+    background:var(--navy); color:#fff; border:none; padding:10px 18px; border-radius:3px; font-size:13px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  .btn-new::before{content:'+'; font-size:15px; line-height:1;}
+
+  table.q{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); font-size:12.5px;}
+  table.q thead th{
+    background:var(--navy); color:#fff; text-align:left; padding:10px 12px;
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;
+  }
+  table.q tbody tr{border-top:1px solid var(--line); cursor:pointer;}
+  table.q tbody tr:hover{background:#fafbfc;}
+  table.q td{padding:11px 12px; vertical-align:middle;}
+  .qno{font-family:'IBM Plex Mono'; font-weight:600; font-size:12px;}
+  .qno .ver{font-size:10px; color:var(--ink-soft); font-weight:400; margin-top:2px;}
+  .cust{font-weight:600;}
+  .cust .sub{font-weight:400; font-size:11px; color:var(--ink-soft); margin-top:2px;}
+  .amt{font-family:'IBM Plex Mono'; font-weight:600; text-align:right; display:block;}
+
+  .badge{
+    font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.03em;
+    padding:4px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+  }
+  .badge::before{content:''; width:6px; height:6px; border-radius:50%;}
+  .badge.pending{background:var(--amber-bg); color:var(--amber);} .badge.pending::before{background:var(--amber);}
+  .badge.approved{background:var(--green-bg); color:var(--green);} .badge.approved::before{background:var(--green);}
+  .badge.rejected{background:var(--red-bg); color:var(--red);} .badge.rejected::before{background:var(--red);}
+  .badge.draft{background:var(--gray-bg); color:var(--gray);} .badge.draft::before{background:var(--gray);}
+
+  .comment-flag{font-size:10.5px; color:var(--red); margin-top:4px; font-style:italic;}
+
+  .action-btn{
+    font-size:11px; font-weight:600; padding:5px 11px; border-radius:3px; border:1px solid var(--navy);
+    background:#fff; color:var(--navy); cursor:pointer; white-space:nowrap;
+  }
+  .action-stack{display:flex; flex-direction:column; gap:6px; align-items:flex-start;}
+  .action-btn.primary{background:var(--navy); color:#fff;}
+  .action-btn.upload{border-color:var(--blue); color:var(--blue);}
+  .action-btn.convert{border-color:var(--green); color:var(--green);}
+  .po-status{font-size:10.5px; margin-top:2px; display:flex; align-items:center; gap:5px;}
+  .po-status.waiting{color:var(--amber);}
+  .po-status.received{color:var(--green);}
+  .po-status::before{content:''; width:6px; height:6px; border-radius:50%; display:inline-block;}
+  .po-status.waiting::before{background:var(--amber);}
+  .po-status.received::before{background:var(--green);}
+  .file-mini{font-size:10.5px; color:var(--ink-soft); margin-top:3px;}
+  .file-mini span{color:var(--ink); font-weight:500;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><span>CE</span></div>
+    <div>
+      <div class="title">Chemical Etching Works — ERP</div>
+      <div class="sub">Sales Dashboard</div>
+    </div>
+  </div>
+  <div class="who">Logged in as <b>Arjun Patil</b><span class="role-tag">Sales</span></div>
+</div>
+
+<div class="summary">
+  <div class="cell"><div class="n">27</div><div class="l">Total quotations</div></div>
+  <div class="cell pending"><div class="n">4</div><div class="l">Pending approval</div></div>
+  <div class="cell rejected"><div class="n">1</div><div class="l">Rejected — needs revision</div></div>
+  <div class="cell approved"><div class="n">18</div><div class="l">Approved</div></div>
+  <div class="cell value"><div class="n">₹9.4L</div><div class="l">Approved value (this month)</div></div>
+  <div class="cell pending"><div class="n">6</div><div class="l">Awaiting PO from customer</div></div>
+</div>
+
+<main>
+  <div class="page-head">
+    <h1>My Quotations</h1>
+    <div class="toolbar">
+      <input type="text" placeholder="Search customer / quotation no...">
+      <span class="chip active">All (27)</span>
+      <span class="chip">Pending (4)</span>
+      <span class="chip">Rejected (1)</span>
+      <span class="chip">Awaiting PO (6)</span>
+      <span class="chip">Ready to Convert (3)</span>
+      <span class="chip">Drafts (4)</span>
+      <button class="btn-new">New Quotation</button>
+    </div>
+  </div>
+
+  <table class="q">
+    <thead>
+      <tr>
+        <th style="width:12%">Quotation No.</th>
+        <th style="width:20%">Customer</th>
+        <th style="width:14%">Material / Spec</th>
+        <th style="width:10%">Amount</th>
+        <th style="width:11%">Submitted</th>
+        <th style="width:16%">Status</th>
+        <th style="width:10%">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr>
+        <td><div class="qno">QTN-0417<div class="ver">v2 (resubmitted)</div></div></td>
+        <td><div class="cust">Veeransh Fabricators<div class="sub">New Customer</div></div></td>
+        <td>SS304 · 2mm · 150x110mm</td>
+        <td><span class="amt">₹9,676</span></td>
+        <td style="font-size:11.5px;">05 Aug 2026</td>
+        <td>
+          <span class="badge pending">Pending Approval</span>
+        </td>
+        <td><button class="action-btn">View</button></td>
+      </tr>
+
+      <tr>
+        <td><div class="qno">QTN-0415<div class="ver">v2</div></div></td>
+        <td><div class="cust">Marigold Textiles<div class="sub">Repeat Customer</div></div></td>
+        <td>SS304 · 1mm · 100x60mm</td>
+        <td><span class="amt">₹6,200</span></td>
+        <td style="font-size:11.5px;">04 Aug 2026</td>
+        <td>
+          <span class="badge rejected">Rejected</span>
+          <div class="comment-flag">"Margin too low — revise rate" — Manager</div>
+        </td>
+        <td><button class="action-btn">Revise &amp; Resubmit</button></td>
+      </tr>
+
+      <tr>
+        <td><div class="qno">QTN-0410<div class="ver">v1</div></div></td>
+        <td><div class="cust">Bharat Switchgear Co.<div class="sub">Repeat Customer</div></div></td>
+        <td>Aluminium · 1mm · 100x60mm</td>
+        <td><span class="amt">₹63,000</span></td>
+        <td style="font-size:11.5px;">02 Aug 2026</td>
+        <td>
+          <span class="badge approved">Approved</span>
+          <div class="po-status waiting">Awaiting PO from customer</div>
+        </td>
+        <td>
+          <div class="action-stack">
+            <button class="action-btn primary">Send to Customer</button>
+            <button class="action-btn upload">+ Upload PO / Drawing</button>
+          </div>
+        </td>
+      </tr>
+
+      <tr>
+        <td><div class="qno">QTN-0408<div class="ver">v1</div></div></td>
+        <td><div class="cust">Orion Compressors<div class="sub">New Customer</div></div></td>
+        <td>Aluminium · 1mm · —</td>
+        <td><span class="amt">₹1,08,000</span></td>
+        <td style="font-size:11.5px; color:var(--ink-soft);">Not submitted</td>
+        <td><span class="badge draft">Draft</span></td>
+        <td><button class="action-btn">Continue Editing</button></td>
+      </tr>
+
+      <tr>
+        <td><div class="qno">QTN-0401<div class="ver">v1</div></div></td>
+        <td><div class="cust">Trident Pumps Ltd<div class="sub">Repeat Customer</div></div></td>
+        <td>SS304 · 1mm · —</td>
+        <td><span class="amt">₹18,600</span></td>
+        <td style="font-size:11.5px;">28 Jul 2026</td>
+        <td>
+          <span class="badge approved">Approved</span>
+          <div class="po-status received">PO &amp; drawing received</div>
+          <div class="file-mini">📎 <span>PO_TP_991.pdf</span> · 📐 <span>Rating_Plate.pdf</span></div>
+        </td>
+        <td>
+          <div class="action-stack">
+            <button class="action-btn convert">Convert to Sales Order →</button>
+            <button class="action-btn">View PDF</button>
+          </div>
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+</main>
+
+</body>
+</html>

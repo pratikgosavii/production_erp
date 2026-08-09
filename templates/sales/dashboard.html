@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+
+{% block title %}My Quotations — Sales Dashboard{% endblock %}
+{% block topbar_sub %}Sales Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ---- Summary strip ---- */
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 1px; background: var(--line); border-bottom: 1px solid var(--line);
+    margin: -24px -28px 22px -28px;
+  }
+  .summary .cell { background: var(--card); padding: 14px 18px; }
+  .summary .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary .cell .l { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+  .summary .cell.pending  .n { color: var(--amber); }
+  .summary .cell.rejected .n { color: var(--red); }
+  .summary .cell.approved .n { color: var(--green); }
+  .summary .cell.value    .n { color: var(--blue); font-size: 19px; }
+
+  /* ---- Toolbar ---- */
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] {
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12.5px; width: 190px; font-family: 'IBM Plex Sans';
+  }
+  .toolbar input[type=text]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .chip {
+    padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .chip:hover:not(.active) { border-color: var(--steel); color: var(--ink); }
+
+  .btn-new {
+    background: var(--navy); color: #fff; border: none; padding: 10px 18px;
+    border-radius: 3px; font-size: 13px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Sans';
+    text-decoration: none;
+  }
+  .btn-new::before { content: '+'; font-size: 15px; line-height: 1; }
+  .btn-new:hover { background: var(--navy-2); text-decoration: none; color: #fff; }
+
+  /* ---- Data table ---- */
+  table.q { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  table.q thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.q tbody tr { border-top: 1px solid var(--line); cursor: pointer; }
+  table.q tbody tr:hover { background: #fafbfc; }
+  table.q td { padding: 11px 12px; vertical-align: middle; }
+
+  .qno { font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 12px; }
+  .qno .ver { font-size: 10px; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
+  .cust-name { font-weight: 600; }
+  .cust-name .sub { font-weight: 400; font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .amt { font-family: 'IBM Plex Mono'; font-weight: 600; text-align: right; display: block; }
+
+  .comment-flag { font-size: 10.5px; color: var(--red); margin-top: 4px; font-style: italic; }
+
+  .action-btn {
+    font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
+    border: 1px solid var(--navy); background: #fff; color: var(--navy);
+    cursor: pointer; white-space: nowrap; font-family: 'IBM Plex Sans';
+    text-decoration: none; display: inline-block;
+  }
+  .action-btn:hover { text-decoration: none; }
+  .action-stack { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .action-btn.primary { background: var(--navy); color: #fff; }
+  .action-btn.upload { border-color: var(--blue); color: var(--blue); }
+  .action-btn.convert { border-color: var(--green); color: var(--green); }
+
+  .po-status { font-size: 10.5px; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+  .po-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .po-status.waiting { color: var(--amber); }
+  .po-status.waiting::before { background: var(--amber); }
+  .po-status.received { color: var(--green); }
+  .po-status.received::before { background: var(--green); }
+  .po-status.rejected { color: var(--red); font-weight: 600; }
+  .po-status.rejected::before { background: var(--red); }
+
+  .file-mini { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+  .file-mini span { color: var(--ink); font-weight: 500; }
+  .file-mini .missing { color: var(--amber); font-weight: 600; }
+
+  /* Sent-to-customer confirmation stamp */
+  .sent-flag { font-size: 10.5px; color: var(--green); margin-top: 4px; }
+
+  /* Rejection note raised by ACCOUNTS on the PO (distinct from the manager
+     quotation-rejection .comment-flag above) */
+  .reject-note {
+    margin-top: 5px; padding: 6px 9px; font-size: 10.5px; line-height: 1.45;
+    background: var(--red-bg); border-left: 3px solid var(--red);
+    border-radius: 0 var(--radius) var(--radius) 0; color: var(--red);
+  }
+  .reject-note .who {
+    display: block; margin-top: 3px; font-size: 9.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; opacity: .8;
+  }
+
+  .action-btn.reupload { border-color: var(--red); color: var(--red); }
+  .action-btn.disabled,
+  .action-btn:disabled {
+    border-color: var(--line); color: var(--gray); background: var(--gray-bg);
+    cursor: not-allowed; opacity: .75;
+  }
+  .action-note { font-size: 9.5px; color: var(--ink-soft); line-height: 1.35; max-width: 120px; }
+
+  /* ---- Upload PO / Drawing modal ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--card); border-radius: 8px; width: 480px; max-width: 92vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-box .modal-head {
+    background: var(--navy); color: #fff; padding: 15px 20px;
+    font-size: 14px; font-weight: 700;
+  }
+  .modal-box .modal-head .sub {
+    display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+    opacity: .78; font-family: 'IBM Plex Mono';
+  }
+  .modal-box .modal-body { padding: 18px 20px 4px; max-height: 62vh; overflow-y: auto; }
+  .modal-box .modal-body .field { margin-bottom: 14px; }
+  .modal-box .modal-body .field input[type=file] {
+    padding: 8px 10px; font-size: 11.5px; background: #fafbfc;
+  }
+  .modal-box .modal-body .field input,
+  .modal-box .modal-body .field select { padding: 8px 11px; font-size: 12.5px; box-sizing: border-box; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .req { color: var(--red); }
+  .opt { color: var(--ink-soft); font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .field-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+  .field-hint.warn {
+    color: var(--amber); background: var(--amber-bg); border-left: 3px solid var(--amber);
+    border-radius: 0 var(--radius) var(--radius) 0; padding: 7px 9px; margin-top: 6px;
+  }
+  .field-hint.hidden { display: none; }
+  .radio-row { display: flex; gap: 18px; align-items: center; padding-top: 2px; }
+  .radio-row label {
+    display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;
+    font-size: 12.5px; font-weight: 500; color: var(--ink);
+    text-transform: none; letter-spacing: 0;
+  }
+  .modal-box .modal-body .radio-row input[type=radio] {
+    width: 15px; height: 15px; padding: 0; margin: 0; flex: none;
+    accent-color: var(--navy); box-shadow: none;
+  }
+  .modal-foot {
+    display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px;
+    border-top: 1px solid var(--line); background: #fafbfc;
+  }
+  .modal-foot .action-btn { padding: 9px 16px; font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Sales</div>
+  <a href="{% url 'sales:dashboard' %}" class="nav-item active">
+    <span class="icon">📋</span> My Quotations
+  </a>
+  <a href="{% url 'sales:quotation_create' %}" class="nav-item">
+    <span class="icon">✏️</span> New Quotation
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary strip -->
+<div class="summary">
+  <div class="cell"><div class="n">29</div><div class="l">Total quotations</div></div>
+  <div class="cell pending"><div class="n">4</div><div class="l">Pending approval</div></div>
+  <div class="cell rejected"><div class="n">1</div><div class="l">Rejected — needs revision</div></div>
+  <div class="cell approved"><div class="n">20</div><div class="l">Approved</div></div>
+  <div class="cell value"><div class="n">₹9.4L</div><div class="l">Approved value (this month)</div></div>
+  <div class="cell pending"><div class="n">6</div><div class="l">Awaiting PO from customer</div></div>
+  <div class="cell rejected"><div class="n">1</div><div class="l">PO rejected by Accounts</div></div>
+  <div class="cell pending"><div class="n">1</div><div class="l">Awaiting drawing</div></div>
+</div>
+
+<!-- Page head + toolbar -->
+<div class="flex-between mb-2" style="flex-wrap:wrap; gap:10px;">
+  <h1 style="font-size:16px; margin:0; font-weight:600;">My Quotations</h1>
+  <div class="toolbar">
+    <input type="text" placeholder="Search customer / quotation no...">
+    <span class="chip active">All (29)</span>
+    <span class="chip">Pending (4)</span>
+    <span class="chip">Rejected (1)</span>
+    <span class="chip">Awaiting PO (6)</span>
+    <span class="chip">PO Rejected (1)</span>
+    <span class="chip">Awaiting Drawing (1)</span>
+    <span class="chip">Ready to Convert (3)</span>
+    <span class="chip">Drafts (4)</span>
+    <a href="{% url 'sales:quotation_create' %}" class="btn-new">New Quotation</a>
+  </div>
+</div>
+
+<!-- Quotation list table -->
+<table class="q">
+  <thead>
+    <tr>
+      <th style="width:12%">Quotation No.</th>
+      <th style="width:20%">Customer</th>
+      <th style="width:14%">Material / Spec</th>
+      <th style="width:10%">Amount</th>
+      <th style="width:11%">Submitted</th>
+      <th style="width:16%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <!-- Row 1: Pending Approval -->
+    <tr>
+      <td><div class="qno">QTN-0417<div class="ver">v2 (resubmitted)</div></div></td>
+      <td><div class="cust-name">Veeransh Fabricators<div class="sub">New Customer</div></div></td>
+      <td>SS304 · 2mm · 150×110mm</td>
+      <td><span class="amt">₹9,676</span></td>
+      <td style="font-size:11.5px;">05 Aug 2026</td>
+      <td><span class="badge badge-amber">Pending Approval</span></td>
+      <td><button class="action-btn" onclick="alert('QTN-0417 v2 — Veeransh Fabricators\n\nStatus: Pending manager approval since 05 Aug 2026.\n\n(UI preview — no backend)')">View</button></td>
+    </tr>
+
+    <!-- Row 2: Rejected -->
+    <tr>
+      <td><div class="qno">QTN-0415<div class="ver">v2</div></div></td>
+      <td><div class="cust-name">Marigold Textiles<div class="sub">Repeat Customer</div></div></td>
+      <td>SS304 · 1mm · 100×60mm</td>
+      <td><span class="amt">₹6,200</span></td>
+      <td style="font-size:11.5px;">04 Aug 2026</td>
+      <td>
+        <span class="badge badge-red">Rejected</span>
+        <div class="comment-flag">"Margin too low — revise rate" — Manager</div>
+      </td>
+      <td><a href="{% url 'sales:quotation_create' %}" class="action-btn">Revise &amp; Resubmit</a></td>
+    </tr>
+
+    <!-- Row 3: Approved, Awaiting PO -->
+    <tr data-qno="QTN-0410" data-cust="Bharat Switchgear Co." data-email="purchase@bharatswitchgear.co.in">
+      <td><div class="qno">QTN-0410<div class="ver">v1</div></div></td>
+      <td><div class="cust-name">Bharat Switchgear Co.<div class="sub">Repeat Customer</div></div></td>
+      <td>Aluminium · 1mm · 100×60mm</td>
+      <td><span class="amt">₹63,000</span></td>
+      <td style="font-size:11.5px;">02 Aug 2026</td>
+      <td class="status-cell">
+        <span class="badge badge-green">Approved</span>
+        <div class="po-status waiting">Awaiting PO from customer</div>
+      </td>
+      <td class="action-cell">
+        <div class="action-stack">
+          <button class="action-btn primary" onclick="sendToCustomer(this)">Send to Customer</button>
+          <button class="action-btn upload" onclick="openPoModal(this, 'upload')">+ Upload PO / Drawing</button>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Row 3b: PO uploaded but REJECTED by Accounts — bounced back to sales (§10.1·2) -->
+    <tr data-qno="QTN-0412" data-cust="Kalyani Metal Works" data-email="stores@kalyanimetal.in" data-drawing="Plate_Layout.pdf">
+      <td><div class="qno">QTN-0412<div class="ver">v1</div></div></td>
+      <td><div class="cust-name">Kalyani Metal Works<div class="sub">Repeat Customer</div></div></td>
+      <td>SS304 · 1.5mm · 200×140mm</td>
+      <td><span class="amt">₹63,000</span></td>
+      <td style="font-size:11.5px;">03 Aug 2026</td>
+      <td class="status-cell">
+        <span class="badge badge-red">PO Rejected</span>
+        <div class="po-status rejected">Returned by Accounts — re-upload required</div>
+        <div class="reject-note">
+          "PO value ₹58,000 does not match approved quote ₹63,000 — please obtain a corrected PO."
+          <span class="who">✕ Priya Nair · Accounts · 06 Aug 2026</span>
+        </div>
+        <div class="file-mini">📎 <span>PO_KMW_2210.pdf</span> · 📐 <span>Plate_Layout.pdf</span></div>
+      </td>
+      <td class="action-cell">
+        <div class="action-stack">
+          <button class="action-btn reupload" onclick="openPoModal(this, 'reupload')">↻ Re-upload PO</button>
+          <button class="action-btn" onclick="alert('QTN-0412 — rejection history\n\n06 Aug 2026 · Priya Nair (Accounts)\nPO value ₹58,000 does not match approved quote ₹63,000.\n\n(UI preview — no backend)')">View Reason</button>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Row 3c: PO received but NO drawing — blocked out of the Design queue (§10.2·1) -->
+    <tr data-qno="QTN-0407" data-cust="Sunrise Enclosures" data-email="po@sunriseenclosures.com">
+      <td><div class="qno">QTN-0407<div class="ver">v1</div></div></td>
+      <td><div class="cust-name">Sunrise Enclosures<div class="sub">New Customer</div></div></td>
+      <td>MS · 2mm · 180×120mm</td>
+      <td><span class="amt">₹34,200</span></td>
+      <td style="font-size:11.5px;">01 Aug 2026</td>
+      <td class="status-cell">
+        <span class="badge badge-green">Approved</span>
+        <div class="po-status waiting">Awaiting drawing — cannot enter Design queue</div>
+        <div class="file-mini">📎 <span>PO_SE_4471.pdf</span> · 📐 <span class="missing">Drawing not uploaded</span></div>
+      </td>
+      <td class="action-cell">
+        <div class="action-stack">
+          <button class="action-btn upload" onclick="openPoModal(this, 'drawing')">+ Upload Drawing</button>
+          <button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Convert to Sales Order →</button>
+          <div class="action-note">Blocked until drawing is supplied</div>
+        </div>
+      </td>
+    </tr>
+
+    <!-- Row 4: Draft -->
+    <tr>
+      <td><div class="qno">QTN-0408<div class="ver">v1</div></div></td>
+      <td><div class="cust-name">Orion Compressors<div class="sub">New Customer</div></div></td>
+      <td>Aluminium · 1mm · —</td>
+      <td><span class="amt">₹1,08,000</span></td>
+      <td style="font-size:11.5px; color:var(--ink-soft);">Not submitted</td>
+      <td><span class="badge badge-gray">Draft</span></td>
+      <td><a href="{% url 'sales:quotation_create' %}" class="action-btn">Continue Editing</a></td>
+    </tr>
+
+    <!-- Row 5: Approved, PO & Drawing received → ready to convert -->
+    <tr data-qno="QTN-0401" data-cust="Trident Pumps Ltd" data-email="purchase@tridentpumps.com">
+      <td><div class="qno">QTN-0401<div class="ver">v1</div></div></td>
+      <td><div class="cust-name">Trident Pumps Ltd<div class="sub">Repeat Customer</div></div></td>
+      <td>SS304 · 1mm · —</td>
+      <td><span class="amt">₹18,600</span></td>
+      <td style="font-size:11.5px;">28 Jul 2026</td>
+      <td class="status-cell">
+        <span class="badge badge-green">Approved</span>
+        <div class="po-status received">PO &amp; drawing received</div>
+        <div class="file-mini">📎 <span>PO_TP_991.pdf</span> · 📐 <span>Rating_Plate.pdf</span></div>
+        <div class="sent-flag">✉ Quote PDF sent 28 Jul 2026 · purchase@tridentpumps.com</div>
+      </td>
+      <td class="action-cell">
+        <div class="action-stack">
+          <a href="{% url 'accounts:order_booking' %}" class="action-btn convert">Convert to Sales Order →</a>
+          <button class="action-btn" onclick="alert('Opening QTN-0401.pdf\n\n(UI preview — no backend)')">View PDF</button>
+        </div>
+      </td>
+    </tr>
+
+  </tbody>
+</table>
+
+<!-- ======== UPLOAD PO / DRAWING MODAL (§3.3) ======== -->
+<div class="modal-overlay" id="poModal">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="poModalTitle">
+    <div class="modal-head">
+      <span id="poModalTitle">Upload PO / Drawing</span>
+      <span class="sub" id="poModalSub">QTN-0410 · Bharat Switchgear Co.</span>
+    </div>
+    <form id="poForm" onsubmit="return submitPo(event)">
+      <div class="modal-body">
+
+        <div class="field">
+          <label for="poNumber">PO Number <span class="req">*</span></label>
+          <input type="text" id="poNumber" name="po_number" placeholder="e.g. BSG/PO/2026/0148" required>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="poFile" id="poFileLabel">PO File <span class="req">*</span></label>
+            <input type="file" id="poFile" name="po_file" accept=".pdf,.jpg,.jpeg,.png" required>
+            <div class="field-hint hidden" id="poFileHint">Leave empty to keep the PO already on file.</div>
+          </div>
+          <div class="field">
+            <label for="poDate">PO Date <span class="req">*</span></label>
+            <input type="date" id="poDate" name="po_date" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="drawingFile">Drawing File <span class="opt">(optional)</span></label>
+          <input type="file" id="drawingFile" name="drawing_file" accept=".pdf,.dxf,.dwg,.jpg,.jpeg,.png">
+          <div class="field-hint" id="drawingHintOk">Customer drawing / artwork. Accepted: PDF, DXF, DWG, image.</div>
+          <div class="field-hint warn" id="drawingHintWarn">
+            ⚠ No drawing attached — this order will be held as <strong>“Awaiting drawing”</strong>.
+            Accounts can still receive the PO, but Design cannot start and the job will
+            <strong>not enter the Design queue</strong> until the drawing is uploaded.
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="expDelivery">Expected Delivery Date <span class="req">*</span></label>
+            <input type="date" id="expDelivery" name="expected_delivery" required>
+          </div>
+          <div class="field">
+            <label for="orderType">Order Type <span class="req">*</span></label>
+            <div class="radio-row" id="orderType">
+              <label><input type="radio" name="order_type" value="New" checked> New</label>
+              <label><input type="radio" name="order_type" value="Repeat"> Repeat</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-hint" style="margin-bottom:14px;">
+          Expected delivery and New/Repeat entered here are carried through to the
+          Accounts, Design and Production screens.
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="action-btn" onclick="closePoModal()">Cancel</button>
+        <button type="submit" class="action-btn primary" id="poSubmitBtn">Upload &amp; Send to Accounts</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Chip filter toggle (UI only — no backend filtering yet)
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+
+  // Route used when a row becomes ready to convert (sales app has no PO route).
+  const ORDER_BOOKING_URL = "{% url 'accounts:order_booking' %}";
+
+  const poModal      = document.getElementById('poModal');
+  const poForm       = document.getElementById('poForm');
+  const poFileInput  = document.getElementById('poFile');
+  const drawingInput = document.getElementById('drawingFile');
+  const hintOk       = document.getElementById('drawingHintOk');
+  const hintWarn     = document.getElementById('drawingHintWarn');
+
+  // Row currently being edited + the mode the modal was opened in.
+  let poRow  = null;
+  let poMode = 'upload';   // 'upload' | 'reupload' | 'drawing'
+  let existingDrawing = null;   // drawing already held against the row, if any
+
+  function fmtDate(d) {
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return String(d.getDate()).padStart(2,'0') + ' ' + m[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  function isoToday(offsetDays) {
+    const d = new Date();
+    d.setDate(d.getDate() + (offsetDays || 0));
+    return d.toISOString().slice(0, 10);
+  }
+  function prettyIso(iso) {
+    if (!iso) return '—';
+    const p = iso.split('-');
+    return fmtDate(new Date(+p[0], +p[1] - 1, +p[2]));
+  }
+
+  // Drawing-missing warning: shown whenever the row would end up with no
+  // drawing at all, because that blocks the job out of Design (§10.2·1).
+  function syncDrawingHint() {
+    const picked   = !!(drawingInput.files && drawingInput.files.length);
+    const covered  = picked || !!existingDrawing;
+    hintWarn.classList.toggle('hidden', covered);
+    hintOk.classList.toggle('hidden', !covered);
+    if (picked) {
+      hintOk.textContent = 'Drawing attached — this order can enter the Design queue once Accounts confirms the PO.';
+    } else if (existingDrawing) {
+      hintOk.textContent = 'Drawing already on file: ' + existingDrawing + ' — leave empty to keep it.';
+    }
+  }
+  drawingInput.addEventListener('change', syncDrawingHint);
+
+  // ---- Open / close -------------------------------------------------------
+  function openPoModal(btn, mode) {
+    poRow  = btn.closest('tr');
+    poMode = mode || 'upload';
+    existingDrawing = poRow.dataset.drawing || null;
+
+    const qno  = poRow.dataset.qno  || '';
+    const cust = poRow.dataset.cust || '';
+    const isRepeat = /Repeat/i.test(poRow.querySelector('.cust-name .sub').textContent);
+
+    poForm.reset();
+    document.getElementById('poModalSub').textContent = qno + ' · ' + cust;
+    document.getElementById('poDate').value     = isoToday(0);
+    document.getElementById('expDelivery').value = isoToday(21);
+    poForm.querySelector('input[name=order_type][value="' + (isRepeat ? 'Repeat' : 'New') + '"]').checked = true;
+
+    const title  = document.getElementById('poModalTitle');
+    const submit = document.getElementById('poSubmitBtn');
+    const fileHint = document.getElementById('poFileHint');
+
+    if (poMode === 'reupload') {
+      title.textContent  = 'Re-upload Corrected PO';
+      submit.textContent = 'Re-upload & Resend to Accounts';
+      document.getElementById('poNumber').value = 'KMW/PO/2026/2210-R1';
+      poFileInput.required = true;
+      fileHint.classList.add('hidden');
+    } else if (poMode === 'drawing') {
+      title.textContent  = 'Upload Drawing';
+      submit.textContent = 'Upload & Send to Accounts';
+      document.getElementById('poNumber').value = 'SE/PO/2026/4471';
+      poFileInput.required = false;           // PO already on file
+      fileHint.classList.remove('hidden');
+    } else {
+      title.textContent  = 'Upload PO / Drawing';
+      submit.textContent = 'Upload & Send to Accounts';
+      poFileInput.required = true;
+      fileHint.classList.add('hidden');
+    }
+
+    syncDrawingHint();
+    poModal.classList.add('show');
+    document.getElementById('poNumber').focus();
+  }
+
+  function closePoModal() {
+    poModal.classList.remove('show');
+    poRow = null;
+    existingDrawing = null;
+  }
+
+  poModal.addEventListener('click', function (e) {
+    if (e.target === this) closePoModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && poModal.classList.contains('show')) closePoModal();
+  });
+
+  // ---- Submit: flip the row to its new PO state ---------------------------
+  function submitPo(e) {
+    e.preventDefault();
+    if (!poRow) { closePoModal(); return false; }
+
+    const poNo     = document.getElementById('poNumber').value.trim();
+    const poDate   = document.getElementById('poDate').value;
+    const expDel   = document.getElementById('expDelivery').value;
+    const ordType  = poForm.querySelector('input[name=order_type]:checked').value;
+
+    const poName      = (poFileInput.files[0] && poFileInput.files[0].name) ||
+                        (poMode === 'drawing' ? 'PO_SE_4471.pdf' : 'PO_' + poNo.replace(/[^\w]+/g, '_') + '.pdf');
+    const drawingName = (drawingInput.files[0] && drawingInput.files[0].name) || existingDrawing || null;
+
+    const row  = poRow;
+    const qno  = row.dataset.qno;
+    const cust = row.dataset.cust;
+    const statusCell = row.querySelector('.status-cell');
+    const actionCell = row.querySelector('.action-cell');
+    const sentFlag   = statusCell.querySelector('.sent-flag');
+
+    if (drawingName) { row.dataset.drawing = drawingName; }
+    else { delete row.dataset.drawing; }
+
+    const meta =
+      '<div class="file-mini">PO <span>' + poNo + '</span> · dated <span>' + prettyIso(poDate) + '</span></div>' +
+      '<div class="file-mini">Expected delivery <span>' + prettyIso(expDel) + '</span> · <span>' + ordType + '</span> order</div>';
+
+    if (drawingName) {
+      // Both PO and drawing present → can proceed to Accounts, then Design.
+      statusCell.innerHTML =
+        '<span class="badge badge-green">Approved</span>' +
+        '<div class="po-status received">PO &amp; drawing received — sent to Accounts</div>' +
+        '<div class="file-mini">📎 <span>' + poName + '</span> · 📐 <span>' + drawingName + '</span></div>' + meta;
+      actionCell.innerHTML =
+        '<div class="action-stack">' +
+          '<a href="' + ORDER_BOOKING_URL + '" class="action-btn convert">Convert to Sales Order →</a>' +
+          '<button class="action-btn" onclick="alert(\'Opening ' + qno + '.pdf\\n\\n(UI preview — no backend)\')">View PDF</button>' +
+        '</div>';
+    } else {
+      // PO only → held out of the Design queue until a drawing arrives (§10.2·1).
+      statusCell.innerHTML =
+        '<span class="badge badge-green">Approved</span>' +
+        '<div class="po-status waiting">Awaiting drawing — cannot enter Design queue</div>' +
+        '<div class="file-mini">📎 <span>' + poName + '</span> · 📐 <span class="missing">Drawing not uploaded</span></div>' + meta;
+      actionCell.innerHTML =
+        '<div class="action-stack">' +
+          '<button class="action-btn upload" onclick="openPoModal(this, \'drawing\')">+ Upload Drawing</button>' +
+          '<button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Convert to Sales Order →</button>' +
+          '<div class="action-note">Blocked until drawing is supplied</div>' +
+        '</div>';
+    }
+
+    if (sentFlag) statusCell.appendChild(sentFlag);
+
+    closePoModal();
+
+    alert(
+      (poMode === 'reupload' ? 'Corrected PO re-uploaded' : 'PO uploaded') + ' — ' + qno + ' · ' + cust + '\n\n' +
+      'PO number: ' + poNo + '  (' + prettyIso(poDate) + ')\n' +
+      'Expected delivery: ' + prettyIso(expDel) + '\n' +
+      'Order type: ' + ordType + '\n' +
+      'Drawing: ' + (drawingName ? drawingName : 'NOT SUPPLIED') + '\n\n' +
+      (drawingName
+        ? 'Sent to Accounts for order booking.'
+        : 'Sent to Accounts, but the job is held as "Awaiting drawing" and will NOT enter the Design queue until a drawing is uploaded.') +
+      '\n\n(UI preview — no backend)'
+    );
+    return false;
+  }
+
+  // ---- Send quotation PDF to the customer by email ------------------------
+  function sendToCustomer(btn) {
+    const row   = btn.closest('tr');
+    const qno   = row.dataset.qno;
+    const cust  = row.dataset.cust;
+    const email = row.dataset.email;
+
+    if (!confirm('Email the approved quotation PDF?\n\n' + qno + ' — ' + cust + '\nTo: ' + email +
+                 '\nAttachment: ' + qno + '.pdf\n\nThe customer is emailed automatically on confirm.')) return;
+
+    const today = fmtDate(new Date());
+    const statusCell = row.querySelector('.status-cell');
+    let flag = statusCell.querySelector('.sent-flag');
+    if (!flag) {
+      flag = document.createElement('div');
+      flag.className = 'sent-flag';
+      statusCell.appendChild(flag);
+    }
+    flag.textContent = '✉ Quote PDF sent ' + today + ' · ' + email;
+    btn.textContent = 'Resend to Customer';
+    alert('Quotation ' + qno + '.pdf emailed to ' + email + ' on ' + today + '.\n\n(UI preview — no backend)');
+  }
+</script>
+{% endblock %}

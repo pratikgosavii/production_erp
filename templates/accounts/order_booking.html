@@ -1,0 +1,917 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Order Booking Dashboard — Accounts{% endblock %}
+{% block topbar_sub %}Order Booking Dashboard{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Accounts</span>
+  <span class="name">Priya Nair</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Summary strip */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px;
+    background: var(--line); border-bottom: 1px solid var(--line); margin: -24px -28px 24px;
+  }
+  .summary-strip .cell { background: var(--card); padding: 14px 20px; }
+  .summary-strip .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary-strip .cell .l { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+  .summary-strip .cell.delayed .n { color: var(--red); }
+  .summary-strip .cell.held .n { color: var(--amber); }
+  .summary-strip .cell.ontrack .n { color: var(--green); }
+  .summary-strip .cell.value .n { color: var(--blue); font-size: 19px; }
+
+  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] { padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 12.5px; width: 200px; font-family: 'IBM Plex Sans'; }
+  .chip { padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px; font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer; }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  /* Orders table */
+  table.orders { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  table.orders thead th { background: var(--navy); color: #fff; text-align: left; padding: 10px 12px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  table.orders tbody tr { border-top: 1px solid var(--line); }
+  table.orders tbody tr:hover { background: #fafbfc; }
+  table.orders td { padding: 11px 12px; vertical-align: top; }
+
+  /* SO number = booked (navy mono). QTN = not yet booked (steel, dashed pill). */
+  .so-no { font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 12px; color: var(--navy); }
+  .so-no.qtn {
+    color: var(--steel); background: var(--gray-bg);
+    border: 1px dashed var(--steel); border-radius: 3px;
+    padding: 1px 6px; display: inline-block; font-size: 11.5px;
+  }
+  .cust { font-weight: 600; }
+  .cust .sub { font-weight: 400; font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .amt { font-family: 'IBM Plex Mono'; font-weight: 600; text-align: right; display: block; }
+
+  /* File chips */
+  .files { display: flex; flex-direction: column; gap: 5px; }
+  .file-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; padding: 4px 8px; border-radius: 3px; border: 1px solid var(--line);
+    background: #f8f9fb; color: var(--ink); width: fit-content; max-width: 150px;
+  }
+  .file-chip .ic {
+    width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: #fff;
+  }
+  .file-chip.po .ic { background: var(--blue); }
+  .file-chip.dwg .ic { background: var(--steel); }
+  .file-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-chip .rev { font-family: 'IBM Plex Mono'; font-size: 9px; color: var(--ink-soft); margin-left: auto; flex-shrink: 0; }
+
+  /* Stage track (inline dots) — 7 canonical stages, tightened for density */
+  .stage-track-inline { display: flex; align-items: center; gap: 2px; }
+  .stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex-shrink: 0; cursor: help; }
+  .stage-dot.done { background: var(--green); }
+  .stage-dot.current { background: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
+  .stage-line-h { flex: 1; height: 2px; background: var(--line); min-width: 4px; }
+  .stage-line-h.done { background: var(--green); }
+  .stage-label { font-size: 10.5px; color: var(--ink-soft); margin-top: 6px; }
+
+  /* Stage legend */
+  .stage-legend {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    font-size: 10.5px; color: var(--ink-soft);
+    background: var(--card); border: 1px solid var(--line); border-bottom: none; padding: 8px 12px;
+  }
+  .stage-legend .ttl { text-transform: uppercase; letter-spacing: .04em; font-weight: 600; color: var(--ink); }
+  .stage-legend .lg { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .stage-legend .lg i {
+    font-family: 'IBM Plex Mono'; font-style: normal; font-size: 9px; font-weight: 600;
+    width: 15px; height: 15px; border-radius: 50%; background: var(--paper); border: 1px solid var(--line);
+    display: inline-flex; align-items: center; justify-content: center; color: var(--steel);
+  }
+  .stage-legend .note { margin-left: auto; font-style: italic; color: var(--gray); }
+
+  /* Status badges */
+  .ob-badge {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  }
+  .ob-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+  .ob-badge.green { background: var(--green-bg); color: var(--green); }
+  .ob-badge.green::before { background: var(--green); }
+  .ob-badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .ob-badge.amber::before { background: var(--amber); }
+  .ob-badge.red { background: var(--red-bg); color: var(--red); }
+  .ob-badge.red::before { background: var(--red); }
+  .ob-badge.gray { background: var(--gray-bg); color: var(--gray); }
+  .ob-badge.gray::before { background: var(--gray); }
+
+  .hold-reason { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.35; max-width: 190px; }
+
+  /* Held / cancelled row states */
+  table.orders tbody tr.row-held,
+  table.orders tbody tr.row-held:hover { background: var(--amber-bg); }
+  table.orders tbody tr.row-cancelled,
+  table.orders tbody tr.row-cancelled:hover { background: var(--gray-bg); }
+  tr.row-cancelled .so-no, tr.row-cancelled .cust, tr.row-cancelled .amt, tr.row-cancelled .stage-label {
+    text-decoration: line-through; color: var(--gray);
+  }
+  tr.row-cancelled .stage-dot { background: var(--line) !important; box-shadow: none !important; }
+  tr.row-cancelled .stage-line-h { background: var(--line) !important; }
+  .no-actions { font-size: 10.5px; color: var(--gray); font-style: italic; }
+
+  .del-date { font-size: 11.5px; }
+  .del-date .lbl { color: var(--ink-soft); font-size: 10px; display: block; }
+
+  /* Action buttons */
+  .btn-confirm {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; border: none; border-radius: 4px;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: 'IBM Plex Sans'; white-space: nowrap; transition: all .15s;
+  }
+  .btn-confirm.primary {
+    background: var(--green); color: #fff;
+  }
+  .btn-confirm.primary:hover { background: #1a8a5a; }
+  .btn-confirm.outline {
+    background: none; border: 1px solid var(--line); color: var(--ink-soft);
+  }
+  .btn-confirm.outline:hover { border-color: var(--blue); color: var(--blue); }
+  .btn-confirm.warn {
+    background: var(--amber); color: #fff;
+  }
+  .btn-confirm.warn:hover { opacity: .85; }
+  .btn-confirm.danger { background: var(--red); color: #fff; }
+  .btn-confirm.danger:hover { opacity: .85; }
+  .btn-confirm[disabled] { opacity: .45; cursor: not-allowed; }
+  .btn-confirm[disabled]:hover { opacity: .45; border-color: var(--line); color: var(--ink-soft); }
+  .action-cell { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+  /* Overflow (kebab) menu */
+  .kebab-wrap { position: relative; display: inline-block; }
+  .btn-kebab {
+    width: 30px; height: 26px; border: 1px solid var(--line); background: #fff;
+    border-radius: 3px; cursor: pointer; color: var(--ink-soft);
+    font-size: 15px; line-height: 1; font-family: 'IBM Plex Sans';
+  }
+  .btn-kebab:hover { border-color: var(--steel); color: var(--ink); }
+  .kebab-menu {
+    display: none; position: absolute; left: 0; top: 30px; z-index: 60;
+    background: #fff; border: 1px solid var(--line); border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(19,36,53,.20); min-width: 172px; overflow: hidden;
+  }
+  .kebab-menu.up { top: auto; bottom: 30px; }
+  .kebab-wrap.open .kebab-menu { display: block; }
+  .kebab-menu button {
+    display: block; width: 100%; text-align: left; padding: 9px 12px;
+    border: none; background: none; font-size: 11.5px; font-family: 'IBM Plex Sans';
+    color: var(--ink); cursor: pointer;
+  }
+  .kebab-menu button:hover { background: var(--paper); }
+  .kebab-menu button.danger { color: var(--red); border-top: 1px solid var(--line); }
+  .kebab-menu button.danger:hover { background: var(--red-bg); }
+
+  /* Confirm modal overlay */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: #fff; border-radius: 8px; width: 440px; max-width: 92vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-box .modal-head {
+    background: var(--navy); color: #fff; padding: 16px 20px;
+    font-size: 14px; font-weight: 700;
+  }
+  .modal-box .modal-head.amber-head { background: var(--amber); }
+  .modal-box .modal-head.red-head { background: var(--red); }
+  .modal-box .modal-body { padding: 20px; }
+  .modal-box .modal-body .field { margin-bottom: 14px; }
+  .modal-box .modal-body label { font-size: 11px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; display: block; }
+  .modal-box .modal-body input,
+  .modal-box .modal-body select,
+  .modal-box .modal-body textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 12.5px; font-family: 'IBM Plex Sans'; box-sizing: border-box; }
+  .modal-box .modal-body textarea { resize: vertical; min-height: 60px; }
+  .modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 0 20px 20px; }
+  .modal-foot .btn-confirm { padding: 9px 20px; font-size: 12px; }
+
+  .modal-ref {
+    background: #f8f9fb; border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px; margin-bottom: 16px;
+  }
+  .modal-ref .r-id { font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 13px; }
+  .modal-ref .r-sub { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+  .mint-note {
+    font-size: 11px; color: var(--blue); background: var(--blue-bg);
+    border-radius: 3px; padding: 6px 9px; margin-top: 9px; line-height: 1.4;
+  }
+  .warn-note {
+    font-size: 11.5px; color: var(--red); background: var(--red-bg);
+    border: 1px solid #f0c9c4; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; line-height: 1.45;
+  }
+  .info-note {
+    font-size: 11.5px; color: var(--amber); background: var(--amber-bg);
+    border: 1px solid #efd9b4; border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; line-height: 1.45;
+  }
+  .req-star { color: var(--red); }
+
+  .checklist { list-style: none; padding: 0; margin: 0 0 6px; }
+  .checklist li { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 5px 0; color: var(--ink); }
+  .checklist li input[type=checkbox] { accent-color: var(--green); width: 15px; height: 15px; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Accounts</div>
+  <a href="{% url 'accounts:order_booking' %}" class="nav-item active">
+    <span class="icon">📦</span> Order Booking
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Strip -->
+<div class="summary-strip">
+  <div class="cell"><div class="n">42</div><div class="l">Open orders</div></div>
+  <div class="cell value"><div class="n">₹18.6L</div><div class="l">Booked (this month)</div></div>
+  <div class="cell ontrack"><div class="n">31</div><div class="l">On track</div></div>
+  <div class="cell held"><div class="n">7</div><div class="l">Held</div></div>
+  <div class="cell delayed"><div class="n">4</div><div class="l">Delayed</div></div>
+  <div class="cell"><div class="n">6</div><div class="l">New today</div></div>
+</div>
+
+<div class="page-head">
+  <h1>All Orders</h1>
+  <div class="toolbar">
+    <input type="text" placeholder="Search customer / QTN / SO / PO no...">
+    <span class="chip active">All (42)</span>
+    <span class="chip">Delayed (4)</span>
+    <span class="chip">Held (7)</span>
+    <span class="chip">On Hold (3)</span>
+    <span class="chip">Cancelled (2)</span>
+    <span class="chip">My Orders</span>
+    <span class="chip">Repeat Orders</span>
+  </div>
+</div>
+
+<!-- Canonical 7-stage track legend -->
+<div class="stage-legend">
+  <span class="ttl">Stage track</span>
+  <span class="lg"><i>1</i>PO Intake</span>
+  <span class="lg"><i>2</i>Design</span>
+  <span class="lg"><i>3</i>Material / Nesting</span>
+  <span class="lg"><i>4</i>Production</span>
+  <span class="lg"><i>5</i>QC</span>
+  <span class="lg"><i>6</i>Dispatch</span>
+  <span class="lg"><i>7</i>Delivered</span>
+  <span class="note">Stage (position) and status (health) move independently.</span>
+</div>
+
+<div style="overflow-x:auto; padding-bottom:120px; margin-bottom:-120px;">
+<table class="orders">
+  <thead>
+    <tr>
+      <th style="width:9%">QTN / SO No. &amp; Date</th>
+      <th style="width:11%">Customer</th>
+      <th style="width:10%">PO &amp; Drawing</th>
+      <th style="width:7%">Order Value</th>
+      <th style="width:21%">Stage</th>
+      <th style="width:8%">Expected Delivery</th>
+      <th style="width:11%">Status</th>
+      <th style="width:13%">Actions</th>
+      <th style="width:6%">Sales Person</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <!-- Row 1: On track, Production stage (4 of 7) -->
+    <tr>
+      <td>
+        <div class="so-no">SO-1042</div>
+        <div style="color:var(--ink-soft); font-size:10.5px;">03 Aug 2026</div>
+      </td>
+      <td>
+        <div class="cust">Bharat Switchgear Co.<div class="sub">Repeat · Ref QTN-0419</div></div>
+      </td>
+      <td>
+        <div class="files">
+          <div class="file-chip po"><span class="ic">PO</span><span class="name">PO_4471.pdf</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Panel_Plate_A</span><span class="rev">Rev01</span></div>
+        </div>
+      </td>
+      <td><span class="amt">₹63,000</span></td>
+      <td>
+        <div class="stage-track-inline">
+          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="2 · Design"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="3 · Material / Nesting"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot current" title="4 · Production"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="7 · Delivered"></div>
+        </div>
+        <div class="stage-label">Production — Etching in progress</div>
+      </td>
+      <td><div class="del-date"><span class="lbl">Expected</span>12 Aug 2026</div></td>
+      <td><span class="ob-badge green">On track</span></td>
+      <td class="action-cell">
+        <button class="btn-confirm outline" onclick="alert('View order detail (UI preview)')">👁 View</button>
+        <div class="kebab-wrap">
+          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
+          <div class="kebab-menu">
+            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
+            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:11.5px;">Imran S.</td>
+    </tr>
+
+    <!-- Row 2: Held at Design (2 of 7) -->
+    <tr>
+      <td>
+        <div class="so-no">SO-1041</div>
+        <div style="color:var(--ink-soft); font-size:10.5px;">02 Aug 2026</div>
+      </td>
+      <td>
+        <div class="cust">Veeransh Fabricators<div class="sub">New · Ref QTN-0417</div></div>
+      </td>
+      <td>
+        <div class="files">
+          <div class="file-chip po"><span class="ic">PO</span><span class="name">PO_VF_0812.pdf</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Nameplate_150x110</span><span class="rev">Rev00</span></div>
+        </div>
+      </td>
+      <td><span class="amt">₹9,676</span></td>
+      <td>
+        <div class="stage-track-inline">
+          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot current" title="2 · Design"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="7 · Delivered"></div>
+        </div>
+        <div class="stage-label">Design — Query raised on artwork</div>
+      </td>
+      <td><div class="del-date"><span class="lbl">Expected</span>09 Aug 2026</div></td>
+      <td><span class="ob-badge amber">Held — design query</span></td>
+      <td class="action-cell">
+        <button class="btn-confirm outline" onclick="alert('View query thread (UI preview)')">💬 View Query</button>
+        <div class="kebab-wrap">
+          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
+          <div class="kebab-menu">
+            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
+            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:11.5px;">Arjun P.</td>
+    </tr>
+
+    <!-- Row 3: Delayed at Material / Nesting (3 of 7) -->
+    <tr>
+      <td>
+        <div class="so-no">SO-1040</div>
+        <div style="color:var(--ink-soft); font-size:10.5px;">01 Aug 2026</div>
+      </td>
+      <td>
+        <div class="cust">Konkan Marine Pvt Ltd<div class="sub">New · Ref QTN-0418</div></div>
+      </td>
+      <td>
+        <div class="files">
+          <div class="file-chip po"><span class="ic">PO</span><span class="name">KM_PO_2207.pdf</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Deck_Tag_Brass</span><span class="rev">Rev02</span></div>
+        </div>
+      </td>
+      <td><span class="amt">₹76,800</span></td>
+      <td>
+        <div class="stage-track-inline">
+          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="2 · Design"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot current" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="7 · Delivered"></div>
+        </div>
+        <div class="stage-label">Material — Awaiting brass sheet (PO raised)</div>
+      </td>
+      <td><div class="del-date"><span class="lbl">Expected</span>18 Aug 2026</div></td>
+      <td><span class="ob-badge red">Delayed — material</span></td>
+      <td class="action-cell">
+        <button class="btn-confirm outline" onclick="alert('View order detail (UI preview)')">👁 View</button>
+        <div class="kebab-wrap">
+          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
+          <div class="kebab-menu">
+            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
+            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:11.5px;">Sneha R.</td>
+    </tr>
+
+    <!-- Row 4: Dispatch Ready (6 of 7) — PAST pre-dispatch, no Hold/Cancel -->
+    <tr>
+      <td>
+        <div class="so-no">SO-1039</div>
+        <div style="color:var(--ink-soft); font-size:10.5px;">29 Jul 2026</div>
+      </td>
+      <td>
+        <div class="cust">Anvi Engineering<div class="sub">Repeat · Ref QTN-0402</div></div>
+      </td>
+      <td>
+        <div class="files">
+          <div class="file-chip po"><span class="ic">PO</span><span class="name">AE_Aug_PO.pdf</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Rating_Plate_SS</span><span class="rev">Rev00</span></div>
+        </div>
+      </td>
+      <td><span class="amt">₹22,400</span></td>
+      <td>
+        <div class="stage-track-inline">
+          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="2 · Design"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="3 · Material / Nesting"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="4 · Production"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot done" title="5 · QC"></div><div class="stage-line-h done"></div>
+          <div class="stage-dot current" title="6 · Dispatch"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="7 · Delivered"></div>
+        </div>
+        <div class="stage-label">Dispatch — Ready, awaiting pickup</div>
+      </td>
+      <td><div class="del-date"><span class="lbl">Expected</span>06 Aug 2026</div></td>
+      <td><span class="ob-badge green">On track</span></td>
+      <td class="action-cell">
+        <button class="btn-confirm outline" onclick="alert('View order detail (UI preview)')">👁 View</button>
+      </td>
+      <td style="font-size:11.5px;">Arjun P.</td>
+    </tr>
+
+    <!-- Row 5: PO Intake (1 of 7) — NOT yet booked, so it carries a QTN, not an SO -->
+    <tr>
+      <td>
+        <div class="so-no qtn" title="Quotation reference — Sales Order number is assigned on booking">QTN-0411</div>
+        <div style="color:var(--ink-soft); font-size:10.5px;">28 Jul 2026</div>
+      </td>
+      <td>
+        <div class="cust">Trident Pumps Ltd<div class="sub">New</div></div>
+      </td>
+      <td>
+        <div class="files">
+          <div class="file-chip po"><span class="ic">PO</span><span class="name">TP_PO_991.pdf</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">—</span></div>
+        </div>
+      </td>
+      <td><span class="amt">₹14,200</span></td>
+      <td>
+        <div class="stage-track-inline">
+          <div class="stage-dot current" title="1 · PO Intake"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="2 · Design"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="7 · Delivered"></div>
+        </div>
+        <div class="stage-label">PO Intake — Drawing not yet received</div>
+      </td>
+      <td><div class="del-date"><span class="lbl">Expected</span>—</div></td>
+      <td><span class="ob-badge gray">Awaiting drawing</span></td>
+      <td class="action-cell">
+        <button class="btn-confirm warn" onclick="alert('Reminder sent to Imran S. (Sales) to upload the drawing.\n\nUI preview only.')">🔔 Request Drawing from Sales</button>
+        <button class="btn-confirm outline" disabled title="Drawing must be uploaded by Sales before this order can be booked">✓ Confirm &amp; Book</button>
+        <div class="kebab-wrap">
+          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
+          <div class="kebab-menu">
+            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
+            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:11.5px;">Imran S.</td>
+    </tr>
+
+    <!-- Row 6: PO received, ready to confirm & book — still a QTN until Accounts confirm -->
+    <tr style="background:#f0f7ff;">
+      <td>
+        <div class="so-no qtn" title="Quotation reference — Sales Order number is assigned on booking">QTN-0424</div>
+        <div style="color:var(--ink-soft); font-size:10.5px;">09 Aug 2026</div>
+      </td>
+      <td>
+        <div class="cust">Orion Compressors<div class="sub">New</div></div>
+      </td>
+      <td>
+        <div class="files">
+          <div class="file-chip po"><span class="ic">PO</span><span class="name">OC_PO_5510.pdf</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Control_Panel_Tag</span><span class="rev">Rev00</span></div>
+        </div>
+      </td>
+      <td><span class="amt">₹41,500</span></td>
+      <td>
+        <div class="stage-track-inline">
+          <div class="stage-dot current" title="1 · PO Intake"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="2 · Design"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
+          <div class="stage-dot" title="7 · Delivered"></div>
+        </div>
+        <div class="stage-label" style="color:var(--blue); font-weight:600;">PO Intake — Ready to book</div>
+      </td>
+      <td><div class="del-date"><span class="lbl">Expected</span>—</div></td>
+      <td><span class="ob-badge gray">Pending booking</span></td>
+      <td class="action-cell">
+        <button class="btn-confirm primary" onclick="openConfirmModal('QTN-0424','Orion Compressors','₹41,500')">✓ Confirm &amp; Send to Design</button>
+        <button class="btn-confirm outline" onclick="alert('Order rejected / returned to Sales (UI preview)')">✕ Reject PO</button>
+        <div class="kebab-wrap">
+          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
+          <div class="kebab-menu">
+            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
+            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:11.5px;">Sneha R.</td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+
+<!-- ======== CONFIRM & BOOK MODAL ======== -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-head">Confirm Order &amp; Send to Design</div>
+    <div class="modal-body">
+      <div class="modal-ref">
+        <div class="r-id" id="mSo">QTN-0424</div>
+        <div class="r-sub">
+          <span id="mCust">Orion Compressors</span> &middot; <span id="mVal">₹41,500</span>
+        </div>
+        <div class="mint-note">Confirming this PO converts the quotation into a Sales Order — a new SO number will be assigned now.</div>
+      </div>
+
+      <label style="font-size:11px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-bottom:8px; display:block;">Pre-booking checklist</label>
+      <ul class="checklist">
+        <li><input type="checkbox" checked> Customer PO received &amp; verified</li>
+        <li><input type="checkbox" checked> Drawing / artwork attached</li>
+        <li><input type="checkbox" checked> Order value matches approved quotation</li>
+        <li><input type="checkbox"> Advance payment terms confirmed</li>
+      </ul>
+
+      <div class="field" style="margin-top:16px;">
+        <label>Committed Delivery Date</label>
+        <input type="date" value="2026-08-28">
+      </div>
+
+      <div class="field">
+        <label>Assign to Designer</label>
+        <select>
+          <option>— Auto-assign (next available) —</option>
+          <option>Kavita M.</option>
+          <option>Rohit D.</option>
+          <option>Anjali S.</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Note to Design (optional)</label>
+        <textarea placeholder="e.g. Customer needs sample before bulk"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-confirm outline" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn-confirm primary" onclick="doConfirm()">✓ Book Order &amp; Send to Design</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== PUT ON HOLD MODAL ======== -->
+<div class="modal-overlay" id="holdModal">
+  <div class="modal-box">
+    <div class="modal-head amber-head">⏸ Put Order On Hold</div>
+    <div class="modal-body">
+      <div class="modal-ref">
+        <div class="r-id" id="hRef">—</div>
+        <div class="r-sub"><span id="hCust">—</span> &middot; <span id="hStage">—</span></div>
+      </div>
+
+      <div class="info-note">
+        Holding pauses the job and hides it from active production queues. It stays visible here as
+        <strong>Held</strong> with the reason below. This is <strong>resumable</strong> — resuming returns the
+        order to its previous status.
+      </div>
+
+      <div class="field">
+        <label>Reason for hold <span class="req-star">*</span> (mandatory — logged to audit trail)</label>
+        <textarea id="holdReason" oninput="checkHoldReason()" placeholder="e.g. Customer asked to pause pending revised artwork approval"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-confirm outline" onclick="closeHoldModal()">Cancel</button>
+      <button class="btn-confirm warn" id="holdConfirmBtn" onclick="doHold()" disabled>⏸ Put On Hold</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== CANCEL ORDER MODAL ======== -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal-box">
+    <div class="modal-head red-head">✕ Cancel Order</div>
+    <div class="modal-body">
+      <div class="modal-ref">
+        <div class="r-id" id="cRef">—</div>
+        <div class="r-sub"><span id="cCust">—</span> &middot; <span id="cStage">—</span></div>
+      </div>
+
+      <div class="warn-note">
+        <strong>Warning — this is TERMINAL.</strong> Cancelling kills the job permanently; it cannot be resumed.
+        Any material reserved against this order will be <strong>released back to available stock</strong>.
+        The cancellation and its reason are written to the audit trail.
+      </div>
+
+      <div class="field">
+        <label>Reason for cancellation <span class="req-star">*</span> (mandatory — logged to audit trail)</label>
+        <textarea id="cancelReason" oninput="checkCancelReason()" placeholder="e.g. Customer withdrew the PO — project shelved"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-confirm outline" onclick="closeCancelModal()">Keep Order</button>
+      <button class="btn-confirm danger" id="cancelConfirmBtn" onclick="doCancel()" disabled>✕ Cancel Order Permanently</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.toolbar .chip').forEach(chip => {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  /* ---------- helpers ---------- */
+  function rowRef(row) {
+    const el = row.querySelector('.so-no');
+    return el ? el.textContent.trim() : '—';
+  }
+  function rowCust(row) {
+    const el = row.querySelector('.cust');
+    return el && el.firstChild ? el.firstChild.textContent.trim() : '—';
+  }
+  function rowStage(row) {
+    const el = row.querySelector('.stage-label');
+    return el ? el.textContent.trim() : '—';
+  }
+  // Markup for the per-row overflow menu. cancelOnly = row is already on hold.
+  function kebabHTML(cancelOnly) {
+    return '<div class="kebab-wrap">'
+      + '<button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">&#8943;</button>'
+      + '<div class="kebab-menu">'
+      + (cancelOnly ? '' : '<button type="button" onclick="openHoldModal(this)">&#9208; Put On Hold</button>')
+      + '<button type="button" class="danger" onclick="openCancelModal(this)">&#10005; Cancel Order</button>'
+      + '</div></div>';
+  }
+
+  /* ---------- overflow (kebab) menu ---------- */
+  function closeAllKebabs() {
+    document.querySelectorAll('.kebab-wrap.open').forEach(w => w.classList.remove('open'));
+  }
+  function toggleKebab(btn, ev) {
+    ev.stopPropagation();
+    const wrap = btn.parentElement;
+    const wasOpen = wrap.classList.contains('open');
+    closeAllKebabs();
+    if (wasOpen) return;
+    const menu = wrap.querySelector('.kebab-menu');
+    menu.classList.remove('up');
+    wrap.classList.add('open');
+    // flip upward if it would fall off the viewport
+    if (menu.getBoundingClientRect().bottom > window.innerHeight - 8) menu.classList.add('up');
+  }
+  document.addEventListener('click', closeAllKebabs);
+
+  /* ---------- Confirm & Book modal (QTN -> SO minting) ---------- */
+  let currentRef = null;          // the QTN (or SO) shown in the first column
+  const NEXT_SO_NUMBER = 'SO-1044';
+
+  function openConfirmModal(ref, cust, val) {
+    currentRef = ref;
+    document.getElementById('mSo').textContent = ref;
+    document.getElementById('mCust').textContent = cust;
+    document.getElementById('mVal').textContent = val;
+    document.getElementById('confirmModal').classList.add('show');
+  }
+
+  function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('show');
+  }
+
+  function doConfirm() {
+    closeConfirmModal();
+    let newSo = null;
+    const rows = document.querySelectorAll('table.orders tbody tr');
+    rows.forEach(row => {
+      const soEl = row.querySelector('.so-no');
+      if (!soEl || soEl.textContent.trim() !== currentRef) return;
+
+      row.style.background = '';
+
+      // §1.1 — the SO number is minted right here, on Accounts confirming the PO.
+      const wasQtn = soEl.classList.contains('qtn');
+      if (wasQtn) {
+        newSo = NEXT_SO_NUMBER;
+        soEl.classList.remove('qtn');
+        soEl.removeAttribute('title');
+        soEl.textContent = newSo;
+        // the originating quotation now becomes the "Ref QTN-xxxx" sub-label
+        const sub = row.querySelector('.cust .sub');
+        if (sub) sub.textContent = 'New · Ref ' + currentRef;
+      }
+
+      // advance the 7-dot stage track: PO Intake (1) done -> Design (2) current
+      const dots = row.querySelectorAll('.stage-dot');
+      const lines = row.querySelectorAll('.stage-line-h');
+      if (dots.length >= 2) {
+        dots[0].className = 'stage-dot done';
+        if (lines[0]) lines[0].className = 'stage-line-h done';
+        dots[1].className = 'stage-dot current';
+      }
+      const label = row.querySelector('.stage-label');
+      if (label) {
+        label.textContent = 'Design — Queued, awaiting designer';
+        label.style.color = '';
+        label.style.fontWeight = '';
+      }
+      const badge = row.querySelector('.ob-badge');
+      if (badge) {
+        badge.className = 'ob-badge green';
+        badge.textContent = 'On track';
+      }
+      const del = row.querySelector('.del-date');
+      if (del) del.innerHTML = '<span class="lbl">Expected</span>28 Aug 2026';
+      const actions = row.querySelector('.action-cell');
+      if (actions) {
+        actions.innerHTML =
+          '<button class="btn-confirm outline" onclick="alert(\'View order detail (UI preview)\')">&#128065; View</button>'
+          + kebabHTML(false);   // still pre-dispatch, so Hold / Cancel remain available
+      }
+    });
+
+    if (newSo) {
+      alert(currentRef + ' confirmed and booked.\n\nSales Order ' + newSo + ' has been created.\n'
+        + 'Sent to the Design queue — designer has been notified.');
+    } else {
+      alert(currentRef + ' booked successfully.\n\nSent to Design queue.');
+    }
+    currentRef = null;
+  }
+
+  /* ---------- Put On Hold ---------- */
+  let holdRow = null;
+
+  function openHoldModal(btn) {
+    closeAllKebabs();
+    holdRow = btn.closest('tr');
+    document.getElementById('hRef').textContent = rowRef(holdRow);
+    document.getElementById('hCust').textContent = rowCust(holdRow);
+    document.getElementById('hStage').textContent = rowStage(holdRow);
+    const ta = document.getElementById('holdReason');
+    ta.value = '';
+    document.getElementById('holdConfirmBtn').disabled = true;
+    document.getElementById('holdModal').classList.add('show');
+    ta.focus();
+  }
+  function closeHoldModal() {
+    document.getElementById('holdModal').classList.remove('show');
+    holdRow = null;
+  }
+  function checkHoldReason() {
+    const v = document.getElementById('holdReason').value.trim();
+    document.getElementById('holdConfirmBtn').disabled = (v.length === 0);
+  }
+
+  function doHold() {
+    const reason = document.getElementById('holdReason').value.trim();
+    if (!reason || !holdRow) return;              // mandatory reason
+    const row = holdRow;
+    const badge = row.querySelector('.ob-badge');
+    const statusCell = badge.parentElement;
+    const actions = row.querySelector('.action-cell');
+
+    // remember the previous status + actions so Resume can restore them
+    if (!row._heldSnapshot) {
+      row._heldSnapshot = {
+        badgeClass: badge.className,
+        badgeText: badge.textContent,
+        actionsHTML: actions.innerHTML
+      };
+    }
+
+    badge.className = 'ob-badge amber';
+    badge.textContent = 'On hold';
+    let rn = statusCell.querySelector('.hold-reason');
+    if (!rn) { rn = document.createElement('div'); rn.className = 'hold-reason'; statusCell.appendChild(rn); }
+    rn.textContent = 'Reason: ' + reason;
+
+    row.style.background = '';
+    row.classList.add('row-held');
+    actions.innerHTML =
+      '<button class="btn-confirm outline" onclick="doResume(this)">&#9654; Resume</button>'
+      + kebabHTML(true);
+
+    const ref = rowRef(row);
+    closeHoldModal();
+    alert(ref + ' put ON HOLD.\n\nReason: ' + reason
+      + '\n\nThe job is hidden from active queues and can be resumed at any time.\nLogged to the audit trail.');
+  }
+
+  function doResume(btn) {
+    const row = btn.closest('tr');
+    const snap = row._heldSnapshot;
+    const badge = row.querySelector('.ob-badge');
+    if (snap && badge) {
+      badge.className = snap.badgeClass;
+      badge.textContent = snap.badgeText;
+    }
+    const rn = row.querySelector('.hold-reason');
+    if (rn) rn.remove();
+    row.classList.remove('row-held');
+    if (snap) row.querySelector('.action-cell').innerHTML = snap.actionsHTML;
+    row._heldSnapshot = null;
+    alert(rowRef(row) + ' resumed.\n\nRestored to its previous status: '
+      + (snap ? snap.badgeText : 'previous status') + '.\nLogged to the audit trail.');
+  }
+
+  /* ---------- Cancel Order (terminal) ---------- */
+  let cancelRow = null;
+
+  function openCancelModal(btn) {
+    closeAllKebabs();
+    cancelRow = btn.closest('tr');
+    document.getElementById('cRef').textContent = rowRef(cancelRow);
+    document.getElementById('cCust').textContent = rowCust(cancelRow);
+    document.getElementById('cStage').textContent = rowStage(cancelRow);
+    const ta = document.getElementById('cancelReason');
+    ta.value = '';
+    document.getElementById('cancelConfirmBtn').disabled = true;
+    document.getElementById('cancelModal').classList.add('show');
+    ta.focus();
+  }
+  function closeCancelModal() {
+    document.getElementById('cancelModal').classList.remove('show');
+    cancelRow = null;
+  }
+  function checkCancelReason() {
+    const v = document.getElementById('cancelReason').value.trim();
+    document.getElementById('cancelConfirmBtn').disabled = (v.length === 0);
+  }
+
+  function doCancel() {
+    const reason = document.getElementById('cancelReason').value.trim();
+    if (!reason || !cancelRow) return;            // mandatory reason
+    const row = cancelRow;
+    const badge = row.querySelector('.ob-badge');
+    const statusCell = badge.parentElement;
+
+    badge.className = 'ob-badge gray';
+    badge.textContent = 'Cancelled';
+    let rn = statusCell.querySelector('.hold-reason');
+    if (!rn) { rn = document.createElement('div'); rn.className = 'hold-reason'; statusCell.appendChild(rn); }
+    rn.textContent = 'Reason: ' + reason;
+
+    row.style.background = '';
+    row.classList.remove('row-held');
+    row.classList.add('row-cancelled');
+    row._heldSnapshot = null;
+    row.querySelector('.action-cell').innerHTML =
+      '<span class="no-actions">Cancelled — terminal, no actions</span>';
+
+    const ref = rowRef(row);
+    closeCancelModal();
+    alert(ref + ' CANCELLED.\n\nReason: ' + reason
+      + '\n\nThis is terminal — the job has been killed.\nReserved material has been released back to available stock.\nLogged to the audit trail.');
+  }
+
+  /* ---------- close modals on overlay click ---------- */
+  ['confirmModal', 'holdModal', 'cancelModal'].forEach(id => {
+    document.getElementById(id).addEventListener('click', function(e) {
+      if (e.target !== this) return;
+      this.classList.remove('show');
+      if (id === 'holdModal') holdRow = null;
+      if (id === 'cancelModal') cancelRow = null;
+    });
+  });
+</script>
+{% endblock %}

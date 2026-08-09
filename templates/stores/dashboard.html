@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stores — Raw Material Inventory{% endblock %}
+{% block topbar_sub %}Stores — Raw Material Inventory{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Stores</span>
+  <span class="name">Deepak Salvi</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root { --purple: #5b4b8a; --purple-bg: #efe9f7; }
+
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+    background: var(--line); border-bottom: 1px solid var(--line); margin: -24px -28px 24px;
+  }
+  .summary-strip .cell { background: var(--card); padding: 14px 20px; }
+  .summary-strip .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary-strip .cell .l { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+  .summary-strip .cell.avail .n { color: var(--green); }
+  .summary-strip .cell.reserved .n { color: var(--blue); }
+  .summary-strip .cell.issued .n { color: var(--amber); }
+  .summary-strip .cell.low .n { color: var(--red); }
+  .summary-strip .cell.leftover .n { color: var(--purple); }
+
+  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] { padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 12.5px; width: 190px; font-family: 'IBM Plex Sans'; }
+  .toolbar select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; background: #fff; font-family: 'IBM Plex Sans'; }
+  .chip { padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px; font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer; }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btn-add { background: var(--navy); color: #fff; border: none; padding: 8px 16px; border-radius: 3px; font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn-add:hover { background: var(--navy-2); color: #fff; text-decoration: none; }
+  .btn-scan { background: #fff; color: var(--navy); border: 1px solid var(--navy); padding: 7px 14px; border-radius: 3px; font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn-scan:hover { background: var(--blue-bg); color: var(--navy); text-decoration: none; }
+
+  /* Inventory table */
+  table.inv { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  table.inv thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.inv tbody tr { border-top: 1px solid var(--line); }
+  table.inv tbody tr:hover { background: #fafbfc; }
+  table.inv td { padding: 11px 12px; vertical-align: middle; }
+
+  .uid { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12px; }
+  .uid.sheet-uid { color: var(--steel); }
+  .uid.offcut-uid { color: var(--purple); }
+  a.uid { text-decoration: none; border-bottom: 1px dotted currentColor; }
+  a.uid:hover { text-decoration: none; border-bottom-style: solid; }
+  .kind-tag { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-left: 6px; }
+  .kind-tag.sheet { background: var(--blue-bg); color: var(--blue); }
+  .kind-tag.offcut { background: var(--purple-bg); color: var(--purple); }
+
+  .status-inv {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .status-inv::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+  .status-inv.available { background: var(--green-bg); color: var(--green); }
+  .status-inv.available::before { background: var(--green); }
+  .status-inv.reserved { background: var(--blue-bg); color: var(--blue); }
+  .status-inv.reserved::before { background: var(--blue); }
+  .status-inv.issued { background: var(--amber-bg); color: var(--amber); }
+  .status-inv.issued::before { background: var(--amber); }
+  .status-inv.consumed { background: var(--gray-bg); color: var(--gray); }
+  .status-inv.consumed::before { background: var(--gray); }
+
+  .against { font-size: 11px; color: var(--ink-soft); }
+  .against b { color: var(--ink); font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .origin { font-size: 10.5px; color: var(--ink-soft); font-style: italic; }
+  .origin b { font-style: normal; color: var(--steel); font-family: 'IBM Plex Mono'; }
+  .loc { font-size: 11.5px; color: var(--ink-soft); }
+
+  .btn-issue {
+    font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
+    border: 1px solid var(--navy); background: #fff; color: var(--navy); cursor: pointer;
+  }
+  .btn-issue:hover { background: var(--blue-bg); }
+  .btn-issue:disabled { opacity: .4; cursor: default; }
+  .btn-issue:disabled:hover { background: #fff; }
+  .cell-note { font-size: 10.5px; color: var(--ink-soft); }
+
+  .low-stock-alert {
+    padding: 8px 12px; font-size: 11.5px; color: var(--red); font-weight: 600;
+    background: var(--red-bg);
+  }
+
+  /* Dispatch / Outward */
+  .status-inv.dispatch-ready { background: var(--amber-bg); color: var(--amber); }
+  .status-inv.dispatch-ready::before { background: var(--amber); }
+  .status-inv.dispatched { background: var(--green-bg); color: var(--green); }
+  .status-inv.dispatched::before { background: var(--green); }
+
+  .section-head { display: flex; align-items: baseline; gap: 10px; margin: 30px 0 12px; flex-wrap: wrap; }
+  .section-head h2 { font-size: 15px; margin: 0; font-weight: 700; }
+  .section-head .hint { font-size: 11px; color: var(--ink-soft); }
+  .section-head .count-pill {
+    font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 600;
+    background: var(--amber-bg); color: var(--amber); padding: 2px 9px; border-radius: 20px;
+  }
+
+  table.inv td.so-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12px; color: var(--steel); }
+  .btn-dispatch {
+    font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
+    border: 1px solid var(--green); background: #fff; color: var(--green); cursor: pointer;
+  }
+  .btn-dispatch:hover { background: var(--green-bg); }
+  .btn-dispatch:disabled { opacity: .4; cursor: default; background: #fff; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Stores</div>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item active">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+  <a href="{% url 'stores:log_sheet' %}" class="nav-item">
+    <span class="icon">➕</span> Log New Sheet
+  </a>
+  <a href="{% url 'stores:scan' %}" class="nav-item">
+    <span class="icon">📷</span> Scan Sheet QR
+  </a>
+  <a href="#dispatch" class="nav-item">
+    <span class="icon">🚚</span> Dispatch / Outward
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary -->
+<div class="summary-strip">
+  <div class="cell"><div class="n">86</div><div class="l">Total items in stock</div></div>
+  <div class="cell avail"><div class="n">61</div><div class="l">Available</div></div>
+  <div class="cell reserved"><div class="n" id="cnt-reserved">11</div><div class="l">Reserved (nested)</div></div>
+  <div class="cell issued"><div class="n" id="cnt-issued">3</div><div class="l">Issued to production</div></div>
+  <div class="cell"><div class="n">11</div><div class="l">Consumed (this month)</div></div>
+  <div class="cell leftover"><div class="n">29</div><div class="l">Offcuts tracked</div></div>
+  <div class="cell low"><div class="n">3</div><div class="l">Below reorder level</div></div>
+</div>
+
+<div class="page-head">
+  <h1>Material Inventory</h1>
+  <div class="toolbar">
+    <input type="text" placeholder="Search UID / material...">
+    <select><option>Material: All</option><option>SS304</option><option>Brass</option><option>Aluminium</option></select>
+    <select><option>Type: All</option><option>New Sheet</option><option>Offcut</option></select>
+    <span class="chip active">All</span>
+    <span class="chip">Available</span>
+    <span class="chip">Reserved</span>
+    <span class="chip">Issued</span>
+    <span class="chip">Low Stock</span>
+    <a href="{% url 'stores:scan' %}" class="btn-scan">📷 Scan Sheet QR</a>
+    <a href="{% url 'stores:log_sheet' %}" class="btn-add">+ Log New Sheet</a>
+  </div>
+</div>
+
+<div style="overflow-x:auto;">
+<table class="inv">
+  <thead>
+    <tr>
+      <th style="width:12%">UID</th>
+      <th style="width:12%">Material / Thk</th>
+      <th style="width:11%">Size</th>
+      <th style="width:11%">Status</th>
+      <th style="width:16%">Reserved / Consumed Against</th>
+      <th style="width:14%">Origin</th>
+      <th style="width:9%">Location</th>
+      <th style="width:9%">Received</th>
+      <th style="width:6%"></th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <tr>
+      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0812' %}">SHT-0812</a><span class="kind-tag sheet">Sheet</span></td>
+      <td>Brass · 1.5mm</td>
+      <td>8 × 4 ft</td>
+      <td><span class="status-inv reserved">Reserved</span></td>
+      <td class="against">Nested for <b>SO-1035</b><br>by Meera D. (Design)</td>
+      <td class="origin">Purchased — Mehta Metals</td>
+      <td class="loc">Rack B-3</td>
+      <td style="font-size:11px;">04 Aug 2026</td>
+      <td><button class="btn-issue" data-so="SO-1035">Issue</button></td>
+    </tr>
+
+    <tr>
+      <td><a class="uid offcut-uid" href="{% url 'stores:sheet_detail' 'OFF-0212' %}">OFF-0212</a><span class="kind-tag offcut">Offcut</span></td>
+      <td>SS304 · 1mm</td>
+      <td>18 × 14 in</td>
+      <td><span class="status-inv issued">Issued</span></td>
+      <td class="against">Issued for <b>SO-1040</b><br>06 Aug — Deepak S.</td>
+      <td class="origin">From <b>SHT-0771</b> (leftover)</td>
+      <td class="loc">Shop floor</td>
+      <td style="font-size:11px;">28 Jul 2026</td>
+      <td><span class="cell-note">Handed over</span></td>
+    </tr>
+
+    <tr>
+      <td><a class="uid offcut-uid" href="{% url 'stores:sheet_detail' 'OFF-0198' %}">OFF-0198</a><span class="kind-tag offcut">Offcut</span></td>
+      <td>SS304 · 0.5mm</td>
+      <td>22 × 16 in</td>
+      <td><span class="status-inv reserved">Reserved</span></td>
+      <td class="against">Nested for <b>SO-1039</b><br>by Meera D. (Design)</td>
+      <td class="origin">From <b>SHT-0754</b> (leftover)</td>
+      <td class="loc">Rack A-2</td>
+      <td style="font-size:11px;">22 Jul 2026</td>
+      <td><button class="btn-issue" data-so="SO-1039">Issue</button></td>
+    </tr>
+
+    <tr>
+      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0805' %}">SHT-0805</a><span class="kind-tag sheet">Sheet</span></td>
+      <td>Aluminium · 1mm</td>
+      <td>8 × 4 ft</td>
+      <td><span class="status-inv available">Available</span></td>
+      <td class="against">—</td>
+      <td class="origin">Purchased — Shree Steel Traders</td>
+      <td class="loc">Rack C-1</td>
+      <td style="font-size:11px;">30 Jul 2026</td>
+      <td><button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button></td>
+    </tr>
+
+    <tr>
+      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0798' %}">SHT-0798</a><span class="kind-tag sheet">Sheet</span></td>
+      <td>SS304 · 2mm</td>
+      <td>8 × 4 ft</td>
+      <td><span class="status-inv consumed">Consumed</span></td>
+      <td class="against">Consumed for <b>SO-1041</b><br>04 Aug — Deepak S.</td>
+      <td class="origin">Purchased — Balaji Metal Co.</td>
+      <td class="loc">—</td>
+      <td style="font-size:11px;">15 Jul 2026</td>
+      <td><span class="cell-note">Closed</span></td>
+    </tr>
+
+    <tr>
+      <td><a class="uid offcut-uid" href="{% url 'stores:sheet_detail' 'OFF-0187' %}">OFF-0187</a><span class="kind-tag offcut">Offcut</span></td>
+      <td>SS304 · 1mm</td>
+      <td>10 × 8 in</td>
+      <td><span class="status-inv available">Available</span></td>
+      <td class="against">—</td>
+      <td class="origin">From <b>SHT-0798</b> (leftover)</td>
+      <td class="loc">Rack A-1</td>
+      <td style="font-size:11px;">04 Aug 2026</td>
+      <td><button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button></td>
+    </tr>
+
+    <tr>
+      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0790' %}">SHT-0790</a><span class="kind-tag sheet">Sheet</span></td>
+      <td>Brass · 2mm</td>
+      <td>8 × 4 ft</td>
+      <td><span class="status-inv available">Available</span></td>
+      <td class="against">—</td>
+      <td class="origin">Purchased — Mehta Metals</td>
+      <td class="loc">Rack B-2</td>
+      <td style="font-size:11px;">10 Jul 2026</td>
+      <td><button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button></td>
+    </tr>
+
+    <!-- Low stock alert row -->
+    <tr>
+      <td colspan="9" class="low-stock-alert">
+        ⚠ SS304 2mm — only 1 sheet remaining in stock, below reorder level (min: 3) — Purchase Requisition suggested
+      </td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+
+<!-- Dispatch / Outward -->
+<div class="section-head" id="dispatch">
+  <h2>Ready for Dispatch</h2>
+  <span class="count-pill" id="dispatch-pending">2 awaiting outward</span>
+  <span class="hint">Jobs completed on the shop floor. Store in-charge confirms the physical outward.</span>
+</div>
+
+<div style="overflow-x:auto;">
+<table class="inv" id="dispatch-table">
+  <thead>
+    <tr>
+      <th style="width:12%">SO No.</th>
+      <th style="width:22%">Customer</th>
+      <th style="width:26%">Item / Qty</th>
+      <th style="width:14%">Completed</th>
+      <th style="width:14%">Status</th>
+      <th style="width:12%"></th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <tr>
+      <td class="so-no">SO-1041</td>
+      <td>Kirloskar Pneumatic</td>
+      <td>SS304 control panel enclosure · 12 nos</td>
+      <td style="font-size:11px;">04 Aug 2026</td>
+      <td><span class="status-inv dispatch-ready">Dispatch Ready</span></td>
+      <td><button class="btn-dispatch">Mark Dispatched</button></td>
+    </tr>
+
+    <tr>
+      <td class="so-no">SO-1036</td>
+      <td>Sudarshan Chemical</td>
+      <td>Brass bracket set · 40 nos</td>
+      <td style="font-size:11px;">03 Aug 2026</td>
+      <td><span class="status-inv dispatch-ready">Dispatch Ready</span></td>
+      <td><button class="btn-dispatch">Mark Dispatched</button></td>
+    </tr>
+
+    <tr>
+      <td class="so-no">SO-1032</td>
+      <td>Thermax Ltd.</td>
+      <td>Aluminium cover plate · 25 nos</td>
+      <td style="font-size:11px;">31 Jul 2026</td>
+      <td><span class="status-inv dispatched">Dispatched</span></td>
+      <td><span class="cell-note">01 Aug — Deepak S.</span></td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll('.toolbar .chip').forEach(chip => {
+    chip.addEventListener('click', function() {
+      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // --- Static preview only: no backend call, just local row-state flips ---
+  var STORE_USER = 'Deepak S.';
+  var TODAY = '09 Aug';
+
+  // Reserved -> Issued (store in-charge confirms physical handover)
+  document.querySelectorAll('.btn-issue:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', function() {
+      var row = this.closest('tr');
+      var pill = row.querySelector('.status-inv');
+      var against = row.querySelector('.against');
+      var so = this.dataset.so || '';
+
+      pill.classList.remove('reserved');
+      pill.classList.add('issued');
+      pill.textContent = 'Issued';
+
+      if (against) {
+        against.innerHTML = 'Issued for <b>' + so + '</b><br>' + TODAY + ' — ' + STORE_USER;
+      }
+      var loc = row.querySelector('.loc');
+      if (loc) { loc.textContent = 'Shop floor'; }
+
+      this.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'cell-note', textContent: 'Handed over'
+      }));
+
+      var res = document.getElementById('cnt-reserved');
+      var iss = document.getElementById('cnt-issued');
+      if (res && iss) {
+        res.textContent = Math.max(0, parseInt(res.textContent, 10) - 1);
+        iss.textContent = parseInt(iss.textContent, 10) + 1;
+      }
+    });
+  });
+
+  // Dispatch Ready -> Dispatched (outward confirmed)
+  document.querySelectorAll('.btn-dispatch').forEach(btn => {
+    btn.addEventListener('click', function() {
+      var row = this.closest('tr');
+      var pill = row.querySelector('.status-inv');
+
+      pill.classList.remove('dispatch-ready');
+      pill.classList.add('dispatched');
+      pill.textContent = 'Dispatched';
+
+      this.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'cell-note', textContent: TODAY + ' — ' + STORE_USER
+      }));
+
+      var pending = document.querySelectorAll('#dispatch-table .status-inv.dispatch-ready').length;
+      var label = document.getElementById('dispatch-pending');
+      if (label) {
+        label.textContent = pending === 0 ? 'All cleared' : pending + ' awaiting outward';
+      }
+    });
+  });
+</script>
+{% endblock %}
