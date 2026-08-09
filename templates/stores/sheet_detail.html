@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Stores</span>
-  <span class="name">Deepak Salvi</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -147,18 +147,6 @@
     background: var(--gray-bg); color: var(--gray); padding: 2px 7px; border-radius: 3px;
   }
 
-  /* Lineage */
-  .lineage {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    background: var(--purple-bg); border-left: 3px solid var(--purple);
-    padding: 14px 16px; border-radius: 0 var(--radius) var(--radius) 0;
-  }
-  .lineage .ln-lab { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--purple); font-weight: 700; }
-  .lineage .ln-uid { font-family: 'IBM Plex Mono'; font-size: 16px; font-weight: 700; color: var(--purple); }
-  .lineage .ln-uid a { color: var(--purple); }
-  .lineage .ln-note { font-size: 11.5px; color: var(--ink-soft); }
-  .lineage .arrow { color: var(--purple); font-size: 16px; }
-
   .form-actions {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     background: var(--card); border: var(--border); border-radius: var(--radius);
@@ -210,10 +198,17 @@
   </div>
   <div class="sh-right">
     <div class="sh-meta">
-      Label batch <b>BATCH-2026-0233</b><br>
-      Last scanned <b>09 Aug 2026, 11:04</b> by Deepak S.
+      Label batch <b>{{ sheet.label_batch|default:"—" }}</b><br>
+      {% if sheet.last_scanned_at %}
+        Last scanned <b>{{ sheet.last_scanned_at|date:"d M Y, H:i" }}</b>
+        by {{ sheet.last_scanned_by.short_name|default:"—" }}
+      {% else %}
+        Never scanned
+      {% endif %}
     </div>
-    <span class="status-pill available" id="head-pill">Available</span>
+    <span class="status-pill {% if is_unassigned %}unassigned{% else %}{{ sheet.status|lower }}{% endif %}" id="head-pill">
+      {% if is_unassigned %}Unassigned{% else %}{{ sheet.get_status_display }}{% endif %}
+    </span>
   </div>
 </div>
 
@@ -223,9 +218,20 @@
   start empty and the sheet is <b>Unassigned</b> until you save it.
 </div>
 
-<div class="saved-msg" id="saved-msg" hidden></div>
+{% for message in messages %}
+<div class="saved-msg"{% if message.level_tag == 'error' %} style="background:var(--red-bg);border-left-color:var(--red);color:var(--red);"{% endif %}>{{ message }}</div>
+{% endfor %}
 
-<form id="sheet-form" novalidate>
+{% if form.errors %}
+<div class="saved-msg" style="background:var(--red-bg);border-left-color:var(--red);color:var(--red);">
+  <b>Not saved.</b>
+  {% for field, errs in form.errors.items %}{{ field }}: {{ errs|join:" " }} {% endfor %}
+</div>
+{% endif %}
+
+<form id="sheet-form" method="post" enctype="multipart/form-data"
+      action="{% url 'stores:sheet_detail' sheet.uid %}" novalidate>
+  {% csrf_token %}
 
   <!-- SECTION 1 -->
   <div class="section">
@@ -240,97 +246,92 @@
     <div class="grid-3">
       <div class="field">
         <label for="f-material">Material / Category <span class="req">*</span></label>
-        <select id="f-material" required>
+        <select id="f-material" name="material" required>
           <option value="">— Select material —</option>
-          <option selected>SS 304</option>
-          <option>SS 316</option>
-          <option>Brass</option>
-          <option>Aluminium</option>
-          <option>Mild Steel</option>
-          <option>Copper</option>
+          {% for m in materials %}
+          <option value="{{ m.pk }}" {% if form.material.value|stringformat:"s" == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.name }}</option>
+          {% endfor %}
         </select>
       </div>
 
       <div class="field">
         <label for="f-thickness">Thickness <span class="req">*</span></label>
-        <select id="f-thickness" required>
+        <select id="f-thickness" name="thickness" required>
           <option value="">— Select thickness —</option>
-          <option>0.5 mm</option>
-          <option selected>1.0 mm</option>
-          <option>1.5 mm</option>
-          <option>2.0 mm</option>
-          <option>3.0 mm</option>
+          {% for t in thicknesses %}
+          <option value="{{ t.pk }}" {% if form.thickness.value|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>
+          {% endfor %}
         </select>
       </div>
 
       <div class="field">
         <label for="f-grade">Grade <span class="req">*</span></label>
-        <select id="f-grade" required>
+        <select id="f-grade" name="grade" required>
           <option value="">— Select grade —</option>
-          <option>Commercial</option>
-          <option selected>Prime</option>
-          <option>Secondary</option>
+          {% for g in grades %}
+          <option value="{{ g.pk }}" {% if form.grade.value|stringformat:"s" == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>
+          {% endfor %}
         </select>
       </div>
 
       <div class="field">
         <label for="f-size">Size <span class="req">*</span></label>
-        <select id="f-size" required>
+        <select id="f-size" name="size" required>
           <option value="">— Select size —</option>
-          <option data-mm="2438 × 1219 mm" selected>8 × 4 ft</option>
-          <option data-mm="1829 × 914 mm">6 × 3 ft</option>
-          <option data-mm="1219 × 610 mm">4 × 2 ft</option>
-          <option data-mm="3048 × 1219 mm">10 × 4 ft</option>
+          {% for s in sizes %}
+          <option value="{{ s.pk }}" data-mm="{{ s.length_mm }} × {{ s.width_mm }} mm"
+                  {% if form.size.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
         </select>
-        <div class="hint" id="size-mm">≈ 2438 × 1219 mm</div>
+        <div class="hint" id="size-mm">
+          {% if sheet.size %}≈ {{ sheet.size.length_mm }} × {{ sheet.size.width_mm }} mm
+          {% elif sheet.size_note %}{{ sheet.size_note }} (free size)
+          {% else %}Metric equivalent shown once a size is picked.{% endif %}
+        </div>
       </div>
 
       <div class="field">
         <label for="f-finish">Finish <span class="opt">(optional)</span></label>
-        <select id="f-finish">
+        <select id="f-finish" name="finish">
           <option value="">— Select finish —</option>
-          <option>Mill Finish</option>
-          <option selected>Matt</option>
-          <option>Mirror</option>
-          <option>Brushed</option>
-          <option>Anodized</option>
+          {% for f in finishes %}
+          <option value="{{ f.pk }}" {% if form.finish.value|stringformat:"s" == f.pk|stringformat:"s" %}selected{% endif %}>{{ f.name }}</option>
+          {% endfor %}
           <option value="__other">Other (type)…</option>
         </select>
-        <input type="text" id="f-finish-other" placeholder="Type the finish name" style="margin-top:8px;" hidden>
+        <input type="text" id="f-finish-other" name="finish_other" placeholder="Type the finish name"
+               value="{{ form.finish_other.value|default:'' }}" style="margin-top:8px;" hidden>
       </div>
 
       <div class="field">
         <label for="f-supplier">Supplier / Dealer <span class="req">*</span></label>
-        <select id="f-supplier" required>
+        <select id="f-supplier" name="supplier" required>
           <option value="">— Select supplier —</option>
-          <option selected>Mehta Metals</option>
-          <option>Shree Steel Traders</option>
-          <option>Balaji Metal Co.</option>
-          <option>Konkan Steel</option>
+          {% for s in suppliers %}
+          <option value="{{ s.pk }}" {% if form.supplier.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
         </select>
       </div>
 
       <div class="field">
         <label for="f-rack">Rack / Shelf location <span class="req">*</span></label>
-        <select id="f-rack" required>
+        <select id="f-rack" name="rack" required>
           <option value="">— Select location —</option>
-          <option>Rack A-1</option>
-          <option selected>Rack A-2</option>
-          <option>Rack B-2</option>
-          <option>Rack B-3</option>
-          <option>Rack C-1</option>
-          <option>Shop floor</option>
+          {% for r in racks %}
+          <option value="{{ r.pk }}" {% if form.rack.value|stringformat:"s" == r.pk|stringformat:"s" %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
         </select>
       </div>
 
       <div class="field">
         <label for="f-date">Date of Purchase <span class="req">*</span></label>
-        <input type="date" id="f-date" value="2026-07-22" required>
+        <input type="date" id="f-date" name="purchase_date" required
+               value="{% if sheet.purchase_date %}{{ sheet.purchase_date|date:'Y-m-d' }}{% else %}{{ form.purchase_date.value|default:'' }}{% endif %}">
       </div>
 
       <div class="field">
         <label for="f-remarks">Remarks <span class="opt">(optional)</span></label>
-        <input type="text" id="f-remarks" value="Minor edge dent — usable area unaffected">
+        <input type="text" id="f-remarks" name="remarks" value="{{ form.remarks.value|default:'' }}">
       </div>
     </div>
 
@@ -340,11 +341,13 @@
         Attach the purchase invoice, test certificate or delivery challan. PDF or image,
         up to 10 MB. Not required to save this sheet.
       </div>
-      <input type="file" id="f-doc" accept=".pdf,.png,.jpg,.jpeg">
+      <input type="file" id="f-doc" name="document" accept=".pdf,.png,.jpg,.jpeg">
+      {% if sheet.document %}
       <div class="u-existing">
-        📎 Already attached: <span class="mono">MEHTA-INV-4471.pdf</span>
-        <span class="text-xs text-soft">— uploaded 22 Jul 2026</span>
+        📎 Already attached: <a class="mono" href="{{ sheet.document.url }}">{{ sheet.document.name }}</a>
+        <span class="text-xs text-soft">— uploaded {{ sheet.updated_at|date:"d M Y" }}</span>
       </div>
+      {% endif %}
     </div>
   </div>
 
@@ -358,42 +361,46 @@
 
     <div class="status-now">
       <span class="lbl">Current status</span>
-      <span class="val">Available</span>
-      <span class="since">On the rack since 30 Jul 2026 · Rack C-1</span>
+      <span class="val">{{ sheet.get_status_display }}</span>
+      <span class="since">
+        {% if sheet.rack %}{{ sheet.rack.name }}{% else %}Location not set{% endif %}
+        {% if sheet.received_on %} · received {{ sheet.received_on|date:"d M Y" }}{% endif %}
+        · {{ sheet.origin }}
+      </span>
     </div>
 
     <div class="status-grid locked" id="status-grid">
-      <div class="status-opt sel" data-pill="available">
+      <div class="status-opt {% if sheet.status == 'AVAILABLE' %}sel{% endif %}" data-pill="available">
         <div class="so-top"><span class="dot"></span><span class="so-name">Available</span></div>
         <div class="so-desc">On the rack, free for Design to nest against any job.</div>
         <div class="so-by">Set on logging the sheet</div>
       </div>
 
-      <div class="status-opt" data-pill="reserved">
+      <div class="status-opt {% if sheet.status == 'RESERVED' %}sel{% endif %}" data-pill="reserved">
         <div class="so-top"><span class="dot"></span><span class="so-name">Reserved</span></div>
         <div class="so-desc">Nested for a specific SO but still physically in Stores.</div>
         <div class="so-by">Set by Design — job detail screen</div>
       </div>
 
-      <div class="status-opt" data-pill="issued">
+      <div class="status-opt {% if sheet.status == 'ISSUED' %}sel{% endif %}" data-pill="issued">
         <div class="so-top"><span class="dot"></span><span class="so-name">Issued</span></div>
         <div class="so-desc">Handed over to the shop floor against a job card.</div>
         <div class="so-by">Set by Stores — Issue button on inventory</div>
       </div>
 
-      <div class="status-opt" data-pill="consumed">
+      <div class="status-opt {% if sheet.status == 'CONSUMED' %}sel{% endif %}" data-pill="consumed">
         <div class="so-top"><span class="dot"></span><span class="so-name">Consumed</span></div>
         <div class="so-desc">Fully used up. Closed — no usable area left.</div>
         <div class="so-by">Set by Production — cut booked, no remnant</div>
       </div>
 
-      <div class="status-opt" data-pill="leftover">
+      <div class="status-opt {% if sheet.status == 'LEFTOVER' %}sel{% endif %}" data-pill="leftover">
         <div class="so-top"><span class="dot"></span><span class="so-name">Leftover (offcut)</span></div>
         <div class="so-desc">Usable remnant. Gets its own OFF- label and re-enters stock.</div>
         <div class="so-by">Set by Production — cut booked with remnant</div>
       </div>
 
-      <div class="status-opt" data-pill="scrap">
+      <div class="status-opt {% if sheet.status == 'SCRAP' %}sel{% endif %}" data-pill="scrap">
         <div class="so-top"><span class="dot"></span><span class="so-name">Scrap</span></div>
         <div class="so-desc">Damaged or too small to nest. Goes to the scrap register.</div>
         <div class="so-by">Set by Stores — scrap register</div>
@@ -403,55 +410,55 @@
 
   <!-- SECTION 3 -->
   <div class="section">
-    <h2><span class="n">3</span> Usage History <span class="readonly-tag">Read only</span></h2>
+    <h2><span class="n">3</span> Reservation History <span class="readonly-tag">Read only</span></h2>
     <div class="s-sub">
-      Every cut booked against this sheet, newest first. Written by Production when a job
-      card closes — Stores cannot edit it.
+      Every reservation raised against this sheet, newest first — who nested it, who handed
+      it over and who booked it as consumed. Written by the workflow; Stores cannot edit it.
     </div>
 
     <div class="table-wrap">
       <table class="hist">
         <thead>
           <tr>
-            <th style="width:13%">Date</th>
-            <th style="width:14%">Job / SO</th>
-            <th style="width:22%">Cutter / Operator</th>
-            <th style="width:17%">Size Before</th>
-            <th style="width:17%">Used</th>
-            <th style="width:17%">Left</th>
+            <th style="width:16%">Job / SO</th>
+            <th style="width:21%">Reserved</th>
+            <th style="width:21%">Issued</th>
+            <th style="width:21%">Consumed</th>
+            <th style="width:21%">Released</th>
           </tr>
         </thead>
         <tbody>
+          {% for res in reservations %}
           <tr>
-            <td class="num">06 Aug 2026</td>
-            <td class="job">SO-1040</td>
-            <td>Ramesh K. — Shear 02</td>
-            <td class="num">48 × 30 in</td>
-            <td class="num">30 × 16 in</td>
-            <td class="num">18 × 14 in</td>
+            <td class="job">{{ res.so_item.order.number }} #{{ res.so_item.position }}</td>
+            <td class="num">
+              {{ res.reserved_at|date:"d M Y" }}<br>
+              <span class="text-xs text-soft">{{ res.reserved_by.short_name|default:"—" }}</span>
+            </td>
+            <td class="num">
+              {% if res.issued_at %}{{ res.issued_at|date:"d M Y" }}<br>
+                <span class="text-xs text-soft">{{ res.issued_by.short_name|default:"—" }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="num">
+              {% if res.consumed_at %}{{ res.consumed_at|date:"d M Y" }}<br>
+                <span class="text-xs text-soft">{{ res.consumed_by.short_name|default:"—" }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="num">{% if res.released_at %}{{ res.released_at|date:"d M Y" }}{% else %}—{% endif %}</td>
           </tr>
-          <tr>
-            <td class="num">31 Jul 2026</td>
-            <td class="job">SO-1035</td>
-            <td>Sunil M. — Shear 01</td>
-            <td class="num">96 × 48 in</td>
-            <td class="num">48 × 18 in</td>
-            <td class="num">48 × 30 in</td>
-          </tr>
-          <tr>
-            <td class="num">24 Jul 2026</td>
-            <td class="job">SO-1029</td>
-            <td>Ramesh K. — Shear 02</td>
-            <td class="num">96 × 48 in</td>
-            <td class="num">Trim only</td>
-            <td class="num">96 × 48 in</td>
-          </tr>
+          {% empty %}
+          <tr><td colspan="5" style="text-align:center; color:var(--ink-soft); padding:26px;">
+            This sheet has never been reserved against a job.
+          </td></tr>
+          {% endfor %}
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="6">
-              3 cuts booked · 68% of the original sheet consumed ·
-              current usable remnant <span class="mono">18 × 14 in</span>
+            <td colspan="5">
+              {{ reservations|length }} reservation{{ reservations|length|pluralize }} on record.
+              Per-cut sizes (size before / used / left) are not tracked yet — there is no
+              cut model behind this screen.
             </td>
           </tr>
         </tfoot>
@@ -459,42 +466,11 @@
     </div>
   </div>
 
-  <!-- SECTION 4 -->
-  <div class="section">
-    <h2><span class="n">4</span> Lineage</h2>
-    <div class="s-sub">
-      Offcuts stay tied to the sheet they were cut from, so cost and yield roll up to the
-      original purchase.
-    </div>
-
-    <div class="lineage">
-      <div>
-        <div class="ln-lab">Parent sheet</div>
-        <div class="ln-uid"><a href="{% url 'stores:sheet_detail' 'SHT-0771' %}">SHT-0771</a></div>
-      </div>
-      <span class="arrow">→</span>
-      <div>
-        <div class="ln-lab">This item</div>
-        <div class="ln-uid">{{ uid }}</div>
-      </div>
-      <div class="ln-note">
-        Cut from <b>SHT-0771</b> on 31 Jul 2026 against SO-1035.<br>
-        If this item is a full new sheet rather than an offcut, leave the parent blank.
-      </div>
-    </div>
-
-    <div class="field" style="margin-top:16px; max-width:340px;">
-      <label for="f-parent">Cut from (parent sheet) <span class="opt">(blank if new sheet)</span></label>
-        <input type="text" id="f-parent" class="mono" value="SHT-0771" placeholder="e.g. SHT-0771">
-      <div class="hint">Type a sheet UID to re-parent this offcut.</div>
-    </div>
-  </div>
-
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Save Details</button>
     <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Cancel</a>
-    <a href="{% url 'stores:qr_labels' %}" class="btn btn-outline">🖨 Print This Label</a>
-    <span class="note">Static preview — nothing is written to a database.</span>
+    <a href="{% url 'stores:qr_labels' %}?ids={{ sheet.uid }}" class="btn btn-outline">🖨 Print This Label</a>
+    <span class="note">Status is not on this form — it is set by the workflow.</span>
   </div>
 
 </form>
@@ -522,6 +498,8 @@
     other.hidden = !isOther;
     if (isOther) { other.focus(); } else { other.value = ''; }
   });
+  // A sheet already carrying a free-typed finish opens with the box showing.
+  if (other.value) { finish.value = '__other'; other.hidden = false; }
 
   // ---- Status is read-only: the header pill just mirrors the current state ----
   // The status changes through workflow actions (Design reserves, Stores issues,
@@ -533,13 +511,11 @@
     pill.textContent = current.querySelector('.so-name').textContent.trim();
   }
 
-  // ---- Save (static preview: validate then confirm, no POST) ----
-  var form  = document.getElementById('sheet-form');
-  var saved = document.getElementById('saved-msg');
+  // ---- Save: the form POSTs for real. This only flags empty required fields
+  //      early; the ModelForm is the authority and re-renders its own errors.
+  var form = document.getElementById('sheet-form');
 
   form.addEventListener('submit', function (e) {
-    e.preventDefault();
-
     var missing = [];
     form.querySelectorAll('[required]').forEach(function (el) {
       if (!el.value) {
@@ -547,22 +523,15 @@
         missing.push(lbl ? lbl.textContent.replace('*', '').trim() : el.id);
       }
     });
-
     if (missing.length) {
-      saved.style.cssText = 'background:var(--red-bg);border-left-color:var(--red);color:var(--red);';
-      saved.innerHTML = '<b>Not saved.</b> Complete: ' + missing.join(', ') + '.';
-      saved.hidden = false;
-    } else {
-      saved.style.cssText = '';
-      saved.innerHTML = '<b>Saved.</b> {{ uid }} updated — ' +
-        document.getElementById('f-material').value + ' · ' +
-        document.getElementById('f-thickness').value + ' · ' +
-        document.getElementById('f-rack').value +
-        '. Status unchanged (set by workflow). ' +
-        '<span class="text-xs">(Static preview — no database write.)</span>';
-      saved.hidden = false;
+      e.preventDefault();
+      var box = document.createElement('div');
+      box.className = 'saved-msg';
+      box.style.cssText = 'background:var(--red-bg);border-left-color:var(--red);color:var(--red);';
+      box.innerHTML = '<b>Not saved.</b> Complete: ' + missing.join(', ') + '.';
+      form.parentNode.insertBefore(box, form);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 })();
 </script>

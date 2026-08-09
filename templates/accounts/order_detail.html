@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Order {{ order.number }} — Full Detail{% endblock %}
+{% block topbar_sub %}Sales Order — Full Detail{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">{% if request.user.is_accounts %}Accounts{% elif request.user.is_sales_manager %}Sales Manager{% elif request.user.is_production_manager %}Production Manager{% else %}Admin{% endif %}</span>
+  <span class="name">{{ request.user.short_name }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* --purple is not in erp.css's token set; the rest below are reused as-is. */
+  :root { --purple: #5b4b8a; --purple-bg: #efe9f7; }
+
+  .crumb { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 14px; }
+  .crumb b { color: var(--ink); font-family: 'IBM Plex Mono'; }
+
+  /* ---------- Header card ---------- */
+  .header-card {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 16px;
+  }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .so-title { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 700; }
+  .so-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+  .overall-badge {
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 8px 16px; border-radius: 20px; white-space: nowrap;
+  }
+  .overall-badge.green { background: var(--green-bg); color: var(--green); }
+  .overall-badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .overall-badge.red   { background: var(--red-bg);   color: var(--red); }
+  .overall-badge.gray  { background: var(--gray-bg);  color: var(--gray); }
+
+  .header-meta {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line);
+  }
+  .header-meta .m { background: #fff; padding: 10px 13px; min-width: 0; }
+  .header-meta .m .l { font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 4px; }
+  .header-meta .m .v { font-size: 12px; font-weight: 600; word-break: break-word; }
+
+  .overall-progress { margin-top: 16px; }
+  .op-label { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--ink-soft); margin-bottom: 6px; flex-wrap: wrap; }
+  .op-bar { height: 10px; background: var(--gray-bg); border-radius: 20px; overflow: hidden; display: flex; }
+  .op-seg { height: 100%; }
+
+  .section-title {
+    font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); margin: 22px 0 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .section-title .hint { font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-soft); }
+
+  /* ---------- Item master table ---------- */
+  table.items { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12px; }
+  table.items thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 9px 11px;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; font-weight: 600;
+  }
+  table.items tbody tr { border-top: 1px solid var(--line); }
+  table.items tbody tr:hover { background: #fafbfc; }
+  table.items td { padding: 10px 11px; vertical-align: middle; }
+  .item-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; }
+  .item-code .internal { font-weight: 400; color: var(--ink-soft); font-size: 9.5px; display: block; margin-top: 2px; }
+  .rate { font-family: 'IBM Plex Mono'; font-weight: 600; white-space: nowrap; }
+
+  .dwg-chip {
+    font-size: 10px; display: inline-flex; align-items: center; gap: 4px;
+    background: #f8f9fb; border: 1px solid var(--line);
+    padding: 3px 7px; border-radius: 3px; color: var(--ink);
+  }
+  a.dwg-chip:hover { border-color: var(--steel); text-decoration: none; }
+  .dwg-chip .rev { font-family: 'IBM Plex Mono'; color: var(--ink-soft); }
+  .dwg-chip.missing { color: var(--gray); border-style: dashed; }
+
+  .status-pill-sm { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 3px 8px; border-radius: 20px; display: inline-block; line-height: 1.5; }
+  .status-pill-sm.done     { background: var(--green-bg); color: var(--green); }
+  .status-pill-sm.stuck    { background: var(--amber-bg); color: var(--amber); }
+  .status-pill-sm.blocked  { background: var(--red-bg);   color: var(--red); }
+  .status-pill-sm.progress { background: var(--blue-bg);  color: var(--blue); }
+
+  .jc-ref { font-family: 'IBM Plex Mono'; font-size: 10.5px; font-weight: 600; color: var(--blue); }
+  .jc-ref.none { color: var(--gray); font-weight: 400; }
+  .qr-ref { font-family: 'IBM Plex Mono'; font-size: 10px; color: var(--ink-soft); }
+
+  table.items tfoot td { background: var(--gray-bg); font-weight: 700; padding: 10px 11px; font-size: 12px; }
+  .items-empty td { padding: 40px 12px; text-align: center; color: var(--gray); font-style: italic; }
+
+  /* ---------- Job cards ---------- */
+  .jc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .jc-card {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+    border-radius: 3px; padding: 14px 16px;
+  }
+  .jc-card.done { border-left-color: var(--green); }
+  .jc-card.urgent { border-left-color: var(--red); }
+  .jc-card.pending { border-left-color: var(--gray); opacity: .75; }
+  .jc-card .jc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .jc-card .jc-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 13px; }
+  .jc-card .jc-status { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .jc-card .jc-status.done { background: var(--green-bg); color: var(--green); }
+  .jc-card .jc-status.progress { background: var(--blue-bg); color: var(--blue); }
+  .jc-card .jc-items { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 8px; line-height: 1.5; }
+  .jc-card .jc-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+  .jc-chip-sm { font-size: 9.5px; font-family: 'IBM Plex Mono'; background: #f4f6f9; padding: 2px 6px; border-radius: 3px; color: var(--ink); }
+  .jc-urgent-tag { font-size: 9px; font-weight: 700; background: var(--red); color: #fff; padding: 2px 7px; border-radius: 20px; margin-left: 6px; text-transform: uppercase; }
+  .jc-urgent-why { font-size: 10px; color: var(--red); margin-bottom: 8px; line-height: 1.45; }
+
+  /* ---------- Documents ---------- */
+  .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .doc-chip {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
+  }
+  a.doc-chip:hover { border-color: var(--steel); text-decoration: none; }
+  .doc-chip .ic {
+    width: 24px; height: 24px; border-radius: var(--radius); background: var(--blue); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8.5px; font-weight: 700; flex-shrink: 0;
+  }
+  .doc-chip.dwg .ic { background: var(--steel); }
+  .doc-chip.rc .ic { background: var(--purple); }
+  .doc-chip .name { font-size: 11px; font-weight: 600; word-break: break-word; }
+  .doc-chip .meta { font-size: 9.5px; color: var(--ink-soft); }
+
+  /* ---------- Activity log ---------- */
+  .log-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; font-size: 11.5px; }
+  .log-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .log-item:last-child { border-bottom: none; }
+  .log-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; height: fit-content; margin-top: 1px; font-family: 'IBM Plex Mono'; }
+  .log-tag.i1 { background: var(--blue-bg); color: var(--blue); }
+  .log-tag.i2 { background: var(--purple-bg); color: var(--purple); }
+  .log-tag.so { background: var(--gray-bg); color: var(--gray); }
+  .log-item .ld { font-size: 11px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; }
+  .log-item .lt { color: var(--ink-soft); font-size: 10px; margin-top: 2px; }
+  .log-empty { color: var(--gray); font-style: italic; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Accounts</div>
+  <a href="{% url 'accounts:order_booking' %}" class="nav-item">
+    <span class="icon">📦</span> Order Booking
+  </a>
+  <a href="{% url 'accounts:order_detail' order.number %}" class="nav-item active">
+    <span class="icon">🧾</span> {{ order.number }}
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{% url 'accounts:order_booking' %}">Order Booking</a> → <b>{{ order.number }}</b></div>
+
+<!-- ======== HEADER ======== -->
+<div class="header-card">
+  <div class="header-top">
+    <div>
+      <div class="so-title">{{ order.number }}</div>
+      <div class="so-sub">
+        {{ order.customer.name }} · Ref {{ order.quotation.number }}
+        {% if po_chip.name != '—' %} · PO: {{ po_chip.name }}{% endif %}
+        {% if order.booked_on %} · Order Date: {{ order.booked_on|date:"d M Y" }}{% endif %}
+      </div>
+    </div>
+    <span class="overall-badge {{ badge_class }}">{{ badge_text }}</span>
+  </div>
+
+  <div class="header-meta">
+    <div class="m"><div class="l">Customer</div><div class="v">{{ meta.customer }}</div></div>
+    <div class="m"><div class="l">Sales Person</div><div class="v">{{ meta.salesperson }}</div></div>
+    <div class="m"><div class="l">Total Order Value</div><div class="v">{{ meta.order_value }}</div></div>
+    <div class="m"><div class="l">Item Codes</div><div class="v">{{ meta.item_codes }}</div></div>
+    <div class="m"><div class="l">Job Cards</div><div class="v">{{ meta.job_cards }}</div></div>
+    <div class="m"><div class="l">Expected Delivery</div><div class="v">{{ order.expected_delivery|date:"d M Y"|default:"—" }}</div></div>
+    <div class="m"><div class="l">Order Type</div><div class="v">{{ meta.order_type }}</div></div>
+  </div>
+
+  <div class="overall-progress">
+    <div class="op-label">
+      <span>Overall Order Progress (by item value)</span>
+      <span>{{ progress_label }}</span>
+    </div>
+    <div class="op-bar">
+      {% for seg in segments %}
+      <div class="op-seg" style="width:{{ seg.width }}%; background:{{ seg.colour }};" title="{{ seg.title }}"></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ======== ITEM CODE MASTER ======== -->
+<div class="section-title">
+  Item Code Master — Rates, Drawings &amp; Status
+  <span class="hint">Rate source: Customer Rate Card (auto-pulled) unless newly quoted</span>
+</div>
+
+<div class="table-wrap">
+<table class="items">
+  <thead>
+    <tr>
+      <th style="width:11%">Item Code</th>
+      <th style="width:18%">Specification</th>
+      <th style="width:7%">Qty</th>
+      <th style="width:8%">Rate</th>
+      <th style="width:8%">Amount</th>
+      <th style="width:12%">Drawing</th>
+      <th style="width:14%">Status</th>
+      <th style="width:9%">Job Card</th>
+      <th style="width:9%">Package QR</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>
+        <div class="item-code">{{ row.code }}
+          {% if row.artwork_ref %}<span class="internal">Internal: {{ row.artwork_ref }}</span>{% endif %}
+        </div>
+      </td>
+      <td>{{ row.spec }}</td>
+      <td>{{ row.quantity }} Nos</td>
+      <td class="rate">{{ row.rate }}</td>
+      <td class="rate">{{ row.amount }}</td>
+      <td>
+        {% if row.drawing %}
+          {% if row.drawing.url %}
+          <a class="dwg-chip" href="{{ row.drawing.url }}">📐 View <span class="rev">{{ row.drawing.label }}</span></a>
+          {% else %}
+          <span class="dwg-chip">📐 <span class="rev">{{ row.drawing.label }}</span> — no file</span>
+          {% endif %}
+        {% else %}
+        <span class="dwg-chip missing">📐 Not uploaded</span>
+        {% endif %}
+      </td>
+      <td><span class="status-pill-sm {{ row.status_class }}">{{ row.status_icon }} {{ row.status_label }}</span></td>
+      <td>
+        {% if row.job_card %}
+        <a class="jc-ref" href="{{ row.job_card_url }}">{{ row.job_card }}</a>
+        {% else %}
+        <span class="jc-ref none">Unassigned</span>
+        {% endif %}
+      </td>
+      <td><span class="qr-ref">{{ row.package_qr|default:"—" }}</span></td>
+    </tr>
+    {% empty %}
+    <tr class="items-empty">
+      <td colspan="9">This sales order has no item codes on it yet.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  {% if rows %}
+  <tfoot>
+    <tr>
+      <td colspan="4">Total ({{ item_count }} Item Code{{ item_count|pluralize }})</td>
+      <td class="rate">{{ items_total }}</td>
+      <td colspan="4"></td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+</div>
+
+<!-- ======== JOB CARDS ======== -->
+<div class="section-title">
+  Job Cards Against This Sales Order
+  <span class="hint">One SO can have multiple Job Cards — created as batches of items become ready</span>
+</div>
+
+<div class="jc-grid">
+  {% for card in cards %}
+  <div class="jc-card {{ card.card_class }}">
+    <div class="jc-top">
+      <span class="jc-no">
+        <a href="{{ card.url }}">{{ card.number }}</a>
+        {% if card.is_urgent_split %}<span class="jc-urgent-tag">Urgent Split</span>{% endif %}
+      </span>
+      <span class="jc-status {{ card.status_class }}">{{ card.status_text }}</span>
+    </div>
+    <div class="jc-items">
+      Created {{ card.created|date:"d M" }} · {{ card.item_line }} · {{ card.value }} · {{ card.progress_percent }}% stations done
+    </div>
+    {% if card.is_urgent_split and card.urgent_reason %}
+    <div class="jc-urgent-why">Split reason: {{ card.urgent_reason }}</div>
+    {% endif %}
+    <div class="jc-chips">
+      {% for chip in card.chips %}<span class="jc-chip-sm">{{ chip }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if placeholder %}
+  <div class="jc-card pending">
+    <div class="jc-top"><span class="jc-no" style="color:var(--gray);">Not yet created</span></div>
+    <div class="jc-items">
+      {{ placeholder.blocked_count }} item{{ placeholder.blocked_count|pluralize }} still blocked ·
+      {{ placeholder.value }} pending across {{ placeholder.count }} un-carded item{{ placeholder.count|pluralize }}
+      — will form one or more Job Cards once cleared
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not cards and not placeholder %}
+  <div class="jc-card pending">
+    <div class="jc-top"><span class="jc-no" style="color:var(--gray);">No job cards</span></div>
+    <div class="jc-items">Nothing has been released to production against this order.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ======== DOCUMENTS ======== -->
+<div class="section-title">Order-Level Documents</div>
+<div class="doc-grid">
+  {% for doc in documents %}
+  {% if doc.url %}
+  <a class="doc-chip {{ doc.style }}" href="{{ doc.url }}">
+    <div class="ic">{{ doc.tag }}</div>
+    <div><div class="name">{{ doc.name }}</div><div class="meta">{{ doc.meta }}</div></div>
+  </a>
+  {% else %}
+  <div class="doc-chip {{ doc.style }}">
+    <div class="ic">{{ doc.tag }}</div>
+    <div><div class="name">{{ doc.name }}</div><div class="meta">{{ doc.meta }}</div></div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+<!-- ======== ACTIVITY LOG ======== -->
+<div class="section-title">Order Activity Log <span class="hint">Audit trail for {{ order.number }}, newest first</span></div>
+<div class="log-card">
+  {% for entry in activity %}
+  <div class="log-item">
+    <span class="log-tag {{ entry.tag_class }}">{{ entry.tag }}</span>
+    <div>
+      <div>{{ entry.action }}</div>
+      {% if entry.detail %}<div class="ld">{{ entry.detail }}</div>{% endif %}
+      <div class="lt">{{ entry.created_at|date:"d M, g:i A" }} · {{ entry.actor }}</div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="log-empty">No activity has been logged against {{ order.number }} yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}

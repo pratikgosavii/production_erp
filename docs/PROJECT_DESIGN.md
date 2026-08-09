@@ -411,7 +411,7 @@ system's DB archive.
 4. **DrawingRevision** — per SOItem: Rev 00/01…, file, source, uploaded_by, is_current (old ones viewable).
 5. **DesignQuery / QueryMessage** — routed to the quote's salesperson (§7.1).
 6. **MaterialReservation** — SOItem ↔ sheet/offcut, reserved_by/at, issued_by/at (manual pick, no nesting calc).
-7. **JobCard + JobCardStation** — **one JC per SOItem** (`JC-0001`); stations picked manually by Floor Manager from StationMaster; per-station operator + timestamps, duration auto-computed. No QC station.
+7. **JobCard + JobCardItem + JobCardStation** — **one JC covers a SUBSET of item codes** (`JC-0001`), via the `JobCardItem` junction; the subset may even span several Sales Orders. A card pulled out of a batch early is flagged `is_urgent_split` and must carry a written `urgent_reason`. Stations are picked manually by the Floor Manager from StationMaster; per-station operator + timestamps, duration auto-computed. No QC station.
 8. **Sheet / Offcut** (stores) — UID display, GRN no., rack location, status (available/reserved/consumed), offcut parent link.
 9. **Notification + AuditLog** — `core` app, used by every module.
 10. ~~QA models~~ — deferred (§7.2).

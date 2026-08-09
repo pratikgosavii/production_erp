@@ -1,3 +1,205 @@
-from django.db import models
+"""Drawings, design queries and material reservation (§3.6, §7.1, §10.1·3)."""
+from django.conf import settings
+from django.db import models, transaction
+from django.utils import timezone
 
-# Create your models here.
+from core.constants import QueryStatus, SheetStatus
+from core.models import TimeStampedModel
+
+
+class DrawingRevision(TimeStampedModel):
+    """§10.2·3 — Sales and Design can both upload; old revisions stay viewable."""
+
+    so_item = models.ForeignKey(
+        'accounts.SOItem', on_delete=models.CASCADE, related_name='drawing_revisions',
+    )
+    revision = models.PositiveSmallIntegerField(default=0)
+    file = models.FileField(upload_to='drawings/')
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='drawing_uploads',
+    )
+    source = models.CharField(max_length=30, blank=True, help_text='Sales / Design / Customer')
+    is_current = models.BooleanField(default=True)
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['-revision']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['so_item', 'revision'], name='uniq_revision_per_item',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.so_item} Rev {self.revision:02d}'
+
+    @property
+    def label(self):
+        return f'Rev {self.revision:02d}'
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        if self.is_current:
+            # Only one current revision per item; the rest stay readable.
+            DrawingRevision.objects.filter(
+                so_item=self.so_item, is_current=True,
+            ).exclude(pk=self.pk).update(is_current=False)
+        super().save(*args, **kwargs)
+
+
+class DesignQuery(TimeStampedModel):
+    """Routed to the exact salesperson who raised the originating quote (§7.1)."""
+
+    order = models.ForeignKey(
+        'accounts.SalesOrder', on_delete=models.CASCADE, related_name='queries',
+    )
+    so_item = models.ForeignKey(
+        'accounts.SOItem', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='queries',
+    )
+    raised_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='raised_queries',
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='assigned_queries',
+    )
+    subject = models.CharField(max_length=200)
+    status = models.CharField(
+        max_length=10, choices=QueryStatus.choices, default=QueryStatus.OPEN,
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'design queries'
+
+    def __str__(self):
+        return f'{self.order.number}: {self.subject[:40]}'
+
+    @classmethod
+    def raise_for(cls, order, raised_by, subject, body, so_item=None):
+        """Assignment is automatic — the quote's salesperson, not 'sales'."""
+        query = cls.objects.create(
+            order=order, so_item=so_item, raised_by=raised_by,
+            assigned_to=order.salesperson, subject=subject,
+        )
+        QueryMessage.objects.create(query=query, author=raised_by, body=body)
+        return query
+
+    def reply(self, author, body, attachment=None):
+        msg = QueryMessage.objects.create(
+            query=self, author=author, body=body, attachment=attachment,
+        )
+        self.status = (
+            QueryStatus.ANSWERED if author_id_is_sales(author, self) else QueryStatus.OPEN
+        )
+        self.save(update_fields=['status', 'updated_at'])
+        return msg
+
+    def close(self):
+        self.status = QueryStatus.CLOSED
+        self.resolved_at = timezone.now()
+        self.save(update_fields=['status', 'resolved_at', 'updated_at'])
+
+
+def author_id_is_sales(author, query):
+    """A reply from the assignee is an answer; from the designer it re-opens."""
+    return author_id(author) == author_id(query.assigned_to)
+
+
+def author_id(user):
+    return getattr(user, 'pk', None)
+
+
+class QueryMessage(TimeStampedModel):
+    query = models.ForeignKey(DesignQuery, on_delete=models.CASCADE, related_name='messages')
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='query_messages',
+    )
+    body = models.TextField()
+    attachment = models.FileField(upload_to='queries/', blank=True, null=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'{self.query_id}: {self.body[:30]}'
+
+
+class MaterialReservation(TimeStampedModel):
+    """The two-step material handoff (§10.1·3).
+
+    Design reserves; Stores issues. The production gate reads issued_at, so a
+    reservation alone never releases a job to the floor.
+    """
+
+    so_item = models.ForeignKey(
+        'accounts.SOItem', on_delete=models.CASCADE, related_name='reservations',
+    )
+    sheet = models.ForeignKey(
+        'stores.Sheet', on_delete=models.PROTECT, related_name='reservations',
+    )
+
+    reserved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='reservations_made',
+    )
+    reserved_at = models.DateTimeField(auto_now_add=True)
+
+    issued_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='materials_issued',
+    )
+    issued_at = models.DateTimeField(null=True, blank=True)
+
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    consumed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='materials_consumed',
+    )
+    released_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-reserved_at']
+
+    def __str__(self):
+        return f'{self.sheet.uid} -> {self.so_item}'
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        creating = self.pk is None
+        super().save(*args, **kwargs)
+        if creating:
+            self.sheet.status = SheetStatus.RESERVED
+            self.sheet.save(update_fields=['status', 'updated_at'])
+
+    @transaction.atomic
+    def issue(self, user):
+        """Store in-charge confirms physical handover."""
+        if self.issued_at:
+            return self
+        self.issued_by = user
+        self.issued_at = timezone.now()
+        self.save(update_fields=['issued_by', 'issued_at', 'updated_at'])
+        self.sheet.status = SheetStatus.ISSUED
+        self.sheet.save(update_fields=['status', 'updated_at'])
+        return self
+
+    @transaction.atomic
+    def consume(self, user, leftover=None):
+        """Material fully used. `leftover` optionally records a new offcut."""
+        self.consumed_at = timezone.now()
+        self.consumed_by = user
+        self.save(update_fields=['consumed_at', 'consumed_by', 'updated_at'])
+        self.sheet.status = SheetStatus.CONSUMED
+        self.sheet.save(update_fields=['status', 'updated_at'])
+        return self
+
+    @transaction.atomic
+    def release(self):
+        """Cancelling an order puts the sheet back into available stock."""
+        self.released_at = timezone.now()
+        self.save(update_fields=['released_at', 'updated_at'])
+        self.sheet.status = SheetStatus.AVAILABLE
+        self.sheet.save(update_fields=['status', 'updated_at'])

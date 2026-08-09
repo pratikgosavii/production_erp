@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Stores</span>
-  <span class="name">Deepak Salvi</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -115,6 +115,18 @@
   }
   .btn-dispatch:hover { background: var(--green-bg); }
   .btn-dispatch:disabled { opacity: .4; cursor: default; background: #fff; }
+
+  /* States the workflow can also produce */
+  .status-inv.leftover { background: var(--purple-bg); color: var(--purple); }
+  .status-inv.leftover::before { background: var(--purple); }
+  .status-inv.scrap { background: var(--red-bg); color: var(--red); }
+  .status-inv.scrap::before { background: var(--red); }
+
+  .inline-form { display: inline; margin: 0; }
+  .flash { padding: 10px 14px; font-size: 11.5px; line-height: 1.55; margin-bottom: 14px; border-radius: 0 var(--radius) var(--radius) 0; }
+  .flash.success { background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green); }
+  .flash.error   { background: var(--red-bg);   border-left: 3px solid var(--red);   color: var(--red); }
+  .empty-cell { padding: 34px 20px !important; text-align: center; color: var(--ink-soft); background: #fafbfc; }
 </style>
 {% endblock %}
 
@@ -137,31 +149,46 @@
 {% endblock %}
 
 {% block content %}
+{% for message in messages %}
+  <div class="flash {{ message.tags }}">{{ message }}</div>
+{% endfor %}
+
 <!-- Summary -->
 <div class="summary-strip">
-  <div class="cell"><div class="n">86</div><div class="l">Total items in stock</div></div>
-  <div class="cell avail"><div class="n">61</div><div class="l">Available</div></div>
-  <div class="cell reserved"><div class="n" id="cnt-reserved">11</div><div class="l">Reserved (nested)</div></div>
-  <div class="cell issued"><div class="n" id="cnt-issued">3</div><div class="l">Issued to production</div></div>
-  <div class="cell"><div class="n">11</div><div class="l">Consumed (this month)</div></div>
-  <div class="cell leftover"><div class="n">29</div><div class="l">Offcuts tracked</div></div>
-  <div class="cell low"><div class="n">3</div><div class="l">Below reorder level</div></div>
+  <div class="cell"><div class="n">{{ summary.total }}</div><div class="l">Total items in stock</div></div>
+  <div class="cell avail"><div class="n">{{ summary.available }}</div><div class="l">Available</div></div>
+  <div class="cell reserved"><div class="n" id="cnt-reserved">{{ summary.reserved }}</div><div class="l">Reserved (nested)</div></div>
+  <div class="cell issued"><div class="n" id="cnt-issued">{{ summary.issued }}</div><div class="l">Issued to production</div></div>
+  <div class="cell"><div class="n">{{ summary.consumed_this_month }}</div><div class="l">Consumed (this month)</div></div>
+  <div class="cell leftover"><div class="n">{{ summary.offcuts }}</div><div class="l">Offcuts tracked</div></div>
+  <div class="cell low"><div class="n">{{ summary.below_reorder }}</div><div class="l">Below reorder level</div></div>
 </div>
 
 <div class="page-head">
   <h1>Material Inventory</h1>
-  <div class="toolbar">
-    <input type="text" placeholder="Search UID / material...">
-    <select><option>Material: All</option><option>SS304</option><option>Brass</option><option>Aluminium</option></select>
-    <select><option>Type: All</option><option>New Sheet</option><option>Offcut</option></select>
-    <span class="chip active">All</span>
-    <span class="chip">Available</span>
-    <span class="chip">Reserved</span>
-    <span class="chip">Issued</span>
-    <span class="chip">Low Stock</span>
+  <form method="get" class="toolbar">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search UID / material...">
+    <select name="material" onchange="this.form.submit()">
+      <option value="">Material: All</option>
+      {% for m in materials %}
+        <option value="{{ m.pk }}" {% if material_id == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="kind" onchange="this.form.submit()">
+      <option value="">Type: All</option>
+      <option value="sheet" {% if kind == 'sheet' %}selected{% endif %}>New Sheet</option>
+      <option value="offcut" {% if kind == 'offcut' %}selected{% endif %}>Offcut</option>
+    </select>
+    <input type="hidden" name="status" value="{{ chip }}">
+    <button type="submit" class="chip">Search</button>
+    <a class="chip {% if not chip %}active{% endif %}" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if material_id %}material={{ material_id }}&amp;{% endif %}{% if kind %}kind={{ kind }}{% endif %}">All</a>
+    <a class="chip {% if chip == 'available' %}active{% endif %}" href="?status=available{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Available</a>
+    <a class="chip {% if chip == 'reserved' %}active{% endif %}" href="?status=reserved{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Reserved</a>
+    <a class="chip {% if chip == 'issued' %}active{% endif %}" href="?status=issued{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Issued</a>
+    <a class="chip {% if chip == 'low' %}active{% endif %}" href="?status=low{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Low Stock</a>
     <a href="{% url 'stores:scan' %}" class="btn-scan">📷 Scan Sheet QR</a>
     <a href="{% url 'stores:log_sheet' %}" class="btn-add">+ Log New Sheet</a>
-  </div>
+  </form>
 </div>
 
 <div style="overflow-x:auto;">
@@ -181,96 +208,67 @@
   </thead>
   <tbody>
 
+    {% for sheet in sheets %}
+    {% with res=sheet.active_reservation %}
     <tr>
-      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0812' %}">SHT-0812</a><span class="kind-tag sheet">Sheet</span></td>
-      <td>Brass · 1.5mm</td>
-      <td>8 × 4 ft</td>
-      <td><span class="status-inv reserved">Reserved</span></td>
-      <td class="against">Nested for <b>SO-1035</b><br>by Meera D. (Design)</td>
-      <td class="origin">Purchased — Mehta Metals</td>
-      <td class="loc">Rack B-3</td>
-      <td style="font-size:11px;">04 Aug 2026</td>
-      <td><button class="btn-issue" data-so="SO-1035">Issue</button></td>
-    </tr>
-
-    <tr>
-      <td><a class="uid offcut-uid" href="{% url 'stores:sheet_detail' 'OFF-0212' %}">OFF-0212</a><span class="kind-tag offcut">Offcut</span></td>
-      <td>SS304 · 1mm</td>
-      <td>18 × 14 in</td>
-      <td><span class="status-inv issued">Issued</span></td>
-      <td class="against">Issued for <b>SO-1040</b><br>06 Aug — Deepak S.</td>
-      <td class="origin">From <b>SHT-0771</b> (leftover)</td>
-      <td class="loc">Shop floor</td>
-      <td style="font-size:11px;">28 Jul 2026</td>
-      <td><span class="cell-note">Handed over</span></td>
-    </tr>
-
-    <tr>
-      <td><a class="uid offcut-uid" href="{% url 'stores:sheet_detail' 'OFF-0198' %}">OFF-0198</a><span class="kind-tag offcut">Offcut</span></td>
-      <td>SS304 · 0.5mm</td>
-      <td>22 × 16 in</td>
-      <td><span class="status-inv reserved">Reserved</span></td>
-      <td class="against">Nested for <b>SO-1039</b><br>by Meera D. (Design)</td>
-      <td class="origin">From <b>SHT-0754</b> (leftover)</td>
-      <td class="loc">Rack A-2</td>
-      <td style="font-size:11px;">22 Jul 2026</td>
-      <td><button class="btn-issue" data-so="SO-1039">Issue</button></td>
-    </tr>
-
-    <tr>
-      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0805' %}">SHT-0805</a><span class="kind-tag sheet">Sheet</span></td>
-      <td>Aluminium · 1mm</td>
-      <td>8 × 4 ft</td>
-      <td><span class="status-inv available">Available</span></td>
-      <td class="against">—</td>
-      <td class="origin">Purchased — Shree Steel Traders</td>
-      <td class="loc">Rack C-1</td>
-      <td style="font-size:11px;">30 Jul 2026</td>
-      <td><button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button></td>
-    </tr>
-
-    <tr>
-      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0798' %}">SHT-0798</a><span class="kind-tag sheet">Sheet</span></td>
-      <td>SS304 · 2mm</td>
-      <td>8 × 4 ft</td>
-      <td><span class="status-inv consumed">Consumed</span></td>
-      <td class="against">Consumed for <b>SO-1041</b><br>04 Aug — Deepak S.</td>
-      <td class="origin">Purchased — Balaji Metal Co.</td>
-      <td class="loc">—</td>
-      <td style="font-size:11px;">15 Jul 2026</td>
-      <td><span class="cell-note">Closed</span></td>
-    </tr>
-
-    <tr>
-      <td><a class="uid offcut-uid" href="{% url 'stores:sheet_detail' 'OFF-0187' %}">OFF-0187</a><span class="kind-tag offcut">Offcut</span></td>
-      <td>SS304 · 1mm</td>
-      <td>10 × 8 in</td>
-      <td><span class="status-inv available">Available</span></td>
-      <td class="against">—</td>
-      <td class="origin">From <b>SHT-0798</b> (leftover)</td>
-      <td class="loc">Rack A-1</td>
-      <td style="font-size:11px;">04 Aug 2026</td>
-      <td><button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button></td>
-    </tr>
-
-    <tr>
-      <td><a class="uid sheet-uid" href="{% url 'stores:sheet_detail' 'SHT-0790' %}">SHT-0790</a><span class="kind-tag sheet">Sheet</span></td>
-      <td>Brass · 2mm</td>
-      <td>8 × 4 ft</td>
-      <td><span class="status-inv available">Available</span></td>
-      <td class="against">—</td>
-      <td class="origin">Purchased — Mehta Metals</td>
-      <td class="loc">Rack B-2</td>
-      <td style="font-size:11px;">10 Jul 2026</td>
-      <td><button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button></td>
-    </tr>
-
-    <!-- Low stock alert row -->
-    <tr>
-      <td colspan="9" class="low-stock-alert">
-        ⚠ SS304 2mm — only 1 sheet remaining in stock, below reorder level (min: 3) — Purchase Requisition suggested
+      <td>
+        <a class="uid {% if sheet.is_offcut %}offcut-uid{% else %}sheet-uid{% endif %}"
+           href="{% url 'stores:sheet_detail' sheet.uid %}">{{ sheet.uid }}</a>
+        <span class="kind-tag {% if sheet.is_offcut %}offcut{% else %}sheet{% endif %}">{% if sheet.is_offcut %}Offcut{% else %}Sheet{% endif %}</span>
+      </td>
+      <td>
+        {% if sheet.material.name == unassigned %}<span class="cell-note">— unassigned —</span>
+        {% else %}{{ sheet.material.name }} · {{ sheet.thickness.name }}{% endif %}
+      </td>
+      <td>{{ sheet.size_display|default:"—" }}</td>
+      <td><span class="status-inv {{ sheet.status|lower }}">{{ sheet.get_status_display }}</span></td>
+      <td class="against">
+        {% if res %}
+          {% if res.consumed_at %}
+            Consumed for <b>{{ res.so_item.order.number }}</b><br>
+            {{ res.consumed_at|date:"d M" }} — {{ res.consumed_by.short_name|default:"—" }}
+          {% elif res.issued_at %}
+            Issued for <b>{{ res.so_item.order.number }}</b><br>
+            {{ res.issued_at|date:"d M" }} — {{ res.issued_by.short_name|default:"—" }}
+          {% else %}
+            Nested for <b>{{ res.so_item.order.number }}</b><br>
+            by {{ res.reserved_by.short_name|default:"—" }} (Design)
+          {% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td class="origin">{{ sheet.origin }}</td>
+      <td class="loc">{{ sheet.rack.name|default:"—" }}</td>
+      <td style="font-size:11px;">{{ sheet.received_on|date:"d M Y"|default:"—" }}</td>
+      <td>
+        {% if sheet.status == 'RESERVED' and res %}
+          <form method="post" class="inline-form" action="{% url 'stores:issue_sheet' sheet.uid %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn-issue">Issue</button>
+          </form>
+        {% elif sheet.status == 'ISSUED' %}
+          <span class="cell-note">Handed over</span>
+        {% elif sheet.status == 'CONSUMED' %}
+          <span class="cell-note">Closed</span>
+        {% else %}
+          <button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button>
+        {% endif %}
       </td>
     </tr>
+    {% endwith %}
+    {% empty %}
+    <tr><td colspan="9" class="empty-cell">No sheets match this filter.</td></tr>
+    {% endfor %}
+
+    <!-- Low stock alerts — one row per material+thickness under its reorder level -->
+    {% for row in low_rows %}
+    <tr>
+      <td colspan="9" class="low-stock-alert">
+        ⚠ {{ row.material.name }} {{ row.thickness.name }} — only {{ row.have }} sheet{{ row.have|pluralize }} remaining in stock,
+        below reorder level (min: {{ row.minimum }}) — Purchase Requisition suggested
+      </td>
+    </tr>
+    {% endfor %}
 
   </tbody>
 </table>
@@ -279,7 +277,7 @@
 <!-- Dispatch / Outward -->
 <div class="section-head" id="dispatch">
   <h2>Ready for Dispatch</h2>
-  <span class="count-pill" id="dispatch-pending">2 awaiting outward</span>
+  <span class="count-pill" id="dispatch-pending">{% if dispatch_pending %}{{ dispatch_pending }} awaiting outward{% else %}All cleared{% endif %}</span>
   <span class="hint">Jobs completed on the shop floor. Store in-charge confirms the physical outward.</span>
 </div>
 
@@ -297,32 +295,37 @@
   </thead>
   <tbody>
 
+    {% for rec in dispatches %}
     <tr>
-      <td class="so-no">SO-1041</td>
-      <td>Kirloskar Pneumatic</td>
-      <td>SS304 control panel enclosure · 12 nos</td>
-      <td style="font-size:11px;">04 Aug 2026</td>
-      <td><span class="status-inv dispatch-ready">Dispatch Ready</span></td>
-      <td><button class="btn-dispatch">Mark Dispatched</button></td>
+      <td class="so-no">{{ rec.order.number }}</td>
+      <td>{{ rec.order.customer.name }}</td>
+      <td>
+        {% for item in rec.order.items.all %}
+          {{ item.quotation_item.description|default:item.quotation_item.item_code }} · {{ item.quantity }} nos{% if not forloop.last %}<br>{% endif %}
+        {% empty %}—{% endfor %}
+      </td>
+      <td style="font-size:11px;">{% if rec.ready_at %}{{ rec.ready_at|date:"d M Y" }}{% else %}{{ rec.created_at|date:"d M Y" }}{% endif %}</td>
+      <td>
+        {% if rec.is_dispatched %}
+          <span class="status-inv dispatched">Dispatched</span>
+        {% else %}
+          <span class="status-inv dispatch-ready">Dispatch Ready</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if rec.is_dispatched %}
+          <span class="cell-note">{{ rec.dispatched_at|date:"d M" }} — {{ rec.dispatched_by.short_name|default:"—" }}</span>
+        {% else %}
+          <form method="post" class="inline-form" action="{% url 'stores:mark_dispatched' rec.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-dispatch">Mark Dispatched</button>
+          </form>
+        {% endif %}
+      </td>
     </tr>
-
-    <tr>
-      <td class="so-no">SO-1036</td>
-      <td>Sudarshan Chemical</td>
-      <td>Brass bracket set · 40 nos</td>
-      <td style="font-size:11px;">03 Aug 2026</td>
-      <td><span class="status-inv dispatch-ready">Dispatch Ready</span></td>
-      <td><button class="btn-dispatch">Mark Dispatched</button></td>
-    </tr>
-
-    <tr>
-      <td class="so-no">SO-1032</td>
-      <td>Thermax Ltd.</td>
-      <td>Aluminium cover plate · 25 nos</td>
-      <td style="font-size:11px;">31 Jul 2026</td>
-      <td><span class="status-inv dispatched">Dispatched</span></td>
-      <td><span class="cell-note">01 Aug — Deepak S.</span></td>
-    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="empty-cell">Nothing is waiting on outward right now.</td></tr>
+    {% endfor %}
 
   </tbody>
 </table>
@@ -331,67 +334,13 @@
 
 {% block extra_js %}
 <script>
-  document.querySelectorAll('.toolbar .chip').forEach(chip => {
-    chip.addEventListener('click', function() {
-      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
-
-  // --- Static preview only: no backend call, just local row-state flips ---
-  var STORE_USER = 'Deepak S.';
-  var TODAY = '09 Aug';
-
-  // Reserved -> Issued (store in-charge confirms physical handover)
-  document.querySelectorAll('.btn-issue:not([disabled])').forEach(btn => {
-    btn.addEventListener('click', function() {
-      var row = this.closest('tr');
-      var pill = row.querySelector('.status-inv');
-      var against = row.querySelector('.against');
-      var so = this.dataset.so || '';
-
-      pill.classList.remove('reserved');
-      pill.classList.add('issued');
-      pill.textContent = 'Issued';
-
-      if (against) {
-        against.innerHTML = 'Issued for <b>' + so + '</b><br>' + TODAY + ' — ' + STORE_USER;
-      }
-      var loc = row.querySelector('.loc');
-      if (loc) { loc.textContent = 'Shop floor'; }
-
-      this.replaceWith(Object.assign(document.createElement('span'), {
-        className: 'cell-note', textContent: 'Handed over'
-      }));
-
-      var res = document.getElementById('cnt-reserved');
-      var iss = document.getElementById('cnt-issued');
-      if (res && iss) {
-        res.textContent = Math.max(0, parseInt(res.textContent, 10) - 1);
-        iss.textContent = parseInt(iss.textContent, 10) + 1;
-      }
-    });
-  });
-
-  // Dispatch Ready -> Dispatched (outward confirmed)
-  document.querySelectorAll('.btn-dispatch').forEach(btn => {
-    btn.addEventListener('click', function() {
-      var row = this.closest('tr');
-      var pill = row.querySelector('.status-inv');
-
-      pill.classList.remove('dispatch-ready');
-      pill.classList.add('dispatched');
-      pill.textContent = 'Dispatched';
-
-      this.replaceWith(Object.assign(document.createElement('span'), {
-        className: 'cell-note', textContent: TODAY + ' — ' + STORE_USER
-      }));
-
-      var pending = document.querySelectorAll('#dispatch-table .status-inv.dispatch-ready').length;
-      var label = document.getElementById('dispatch-pending');
-      if (label) {
-        label.textContent = pending === 0 ? 'All cleared' : pending + ' awaiting outward';
-      }
+  // Filters are real querystring filters and the chips are links, so the row
+  // state comes back from the server. Nothing is flipped locally any more —
+  // Issue and Mark Dispatched are POST forms.
+  document.querySelectorAll('.btn-issue[type=submit], .btn-dispatch').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      if (btn.form) { btn.form.submit(); }
     });
   });
 </script>

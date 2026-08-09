@@ -41,6 +41,18 @@
     </div>
   </div>
 
+  {% if messages %}
+  <div style="position:fixed; top:64px; right:24px; z-index:2000; max-width:380px;">
+    {% for message in messages %}
+    <div style="margin-bottom:8px; padding:10px 14px; border-radius:4px; font-size:12.5px;
+                line-height:1.5; background:#fff; box-shadow:0 8px 24px rgba(19,36,53,.18);
+                border-left:4px solid {% if message.tags == 'error' %}var(--red){% elif message.tags == 'warning' %}var(--amber){% else %}var(--green){% endif %};">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% block extra_js %}{% endblock %}
 </body>
 </html>

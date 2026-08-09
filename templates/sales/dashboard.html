@@ -29,7 +29,9 @@
   .chip {
     padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
     font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer;
+    text-decoration: none; display: inline-block;
   }
+  .chip:hover { text-decoration: none; }
   .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
   .chip:hover:not(.active) { border-color: var(--steel); color: var(--ink); }
 
@@ -175,29 +177,40 @@
 {% block content %}
 <!-- Summary strip -->
 <div class="summary">
-  <div class="cell"><div class="n">29</div><div class="l">Total quotations</div></div>
-  <div class="cell pending"><div class="n">4</div><div class="l">Pending approval</div></div>
-  <div class="cell rejected"><div class="n">1</div><div class="l">Rejected — needs revision</div></div>
-  <div class="cell approved"><div class="n">20</div><div class="l">Approved</div></div>
-  <div class="cell value"><div class="n">₹9.4L</div><div class="l">Approved value (this month)</div></div>
-  <div class="cell pending"><div class="n">6</div><div class="l">Awaiting PO from customer</div></div>
-  <div class="cell rejected"><div class="n">1</div><div class="l">PO rejected by Accounts</div></div>
-  <div class="cell pending"><div class="n">1</div><div class="l">Awaiting drawing</div></div>
+  <div class="cell"><div class="n">{{ total_count }}</div><div class="l">Total quotations</div></div>
+  <div class="cell pending"><div class="n">{{ counts.pending }}</div><div class="l">Pending approval</div></div>
+  <div class="cell rejected"><div class="n">{{ counts.rejected }}</div><div class="l">Rejected — needs revision</div></div>
+  <div class="cell approved"><div class="n">{{ approved_count }}</div><div class="l">Approved</div></div>
+  <div class="cell value"><div class="n">{{ approved_value }}</div><div class="l">Approved value (this month)</div></div>
+  <div class="cell pending"><div class="n">{{ counts.awaiting_po }}</div><div class="l">Awaiting PO from customer</div></div>
+  <div class="cell rejected"><div class="n">{{ counts.po_rejected }}</div><div class="l">PO rejected by Accounts</div></div>
+  <div class="cell pending"><div class="n">{{ counts.awaiting_drawing }}</div><div class="l">Awaiting drawing</div></div>
 </div>
 
 <!-- Page head + toolbar -->
 <div class="flex-between mb-2" style="flex-wrap:wrap; gap:10px;">
   <h1 style="font-size:16px; margin:0; font-weight:600;">My Quotations</h1>
   <div class="toolbar">
-    <input type="text" placeholder="Search customer / quotation no...">
-    <span class="chip active">All (29)</span>
-    <span class="chip">Pending (4)</span>
-    <span class="chip">Rejected (1)</span>
-    <span class="chip">Awaiting PO (6)</span>
-    <span class="chip">PO Rejected (1)</span>
-    <span class="chip">Awaiting Drawing (1)</span>
-    <span class="chip">Ready to Convert (3)</span>
-    <span class="chip">Drafts (4)</span>
+    <form method="get" action="{% url 'sales:dashboard' %}" style="display:contents">
+      <input type="text" name="q" value="{{ search }}" placeholder="Search customer / quotation no...">
+      <input type="hidden" name="status" value="{{ active_filter }}">
+    </form>
+    <a href="?status=all{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'all' %}active{% endif %}">All ({{ counts.all }})</a>
+    <a href="?status=pending{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'pending' %}active{% endif %}">Pending ({{ counts.pending }})</a>
+    <a href="?status=rejected{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'rejected' %}active{% endif %}">Rejected ({{ counts.rejected }})</a>
+    <a href="?status=awaiting_po{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'awaiting_po' %}active{% endif %}">Awaiting PO ({{ counts.awaiting_po }})</a>
+    <a href="?status=po_rejected{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'po_rejected' %}active{% endif %}">PO Rejected ({{ counts.po_rejected }})</a>
+    <a href="?status=awaiting_drawing{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'awaiting_drawing' %}active{% endif %}">Awaiting Drawing ({{ counts.awaiting_drawing }})</a>
+    <a href="?status=ready{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'ready' %}active{% endif %}">Ready to Convert ({{ counts.ready }})</a>
+    <a href="?status=draft{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'draft' %}active{% endif %}">Drafts ({{ counts.draft }})</a>
     <a href="{% url 'sales:quotation_create' %}" class="btn-new">New Quotation</a>
   </div>
 </div>
@@ -216,128 +229,126 @@
     </tr>
   </thead>
   <tbody>
+  {% for q in quotations %}
+    <tr data-qno="{{ q.number }}"
+        data-cust="{{ q.customer.name }}"
+        data-email="{{ q.customer.email }}"
+        {% if q.has_drawing %}data-drawing="{{ q.drawing_file.name|cut:'drawings/' }}"{% endif %}
+        data-pono="{{ q.po_number }}"
+        data-podate="{{ q.po_date|date:'Y-m-d' }}"
+        data-expdel="{{ q.expected_delivery|date:'Y-m-d' }}"
+        data-ordertype="{{ q.order_type }}"
+        data-post-url="{% url 'sales:quotation_po' q.pk %}">
 
-    <!-- Row 1: Pending Approval -->
+      <td><div class="qno">{{ q.number }}<div class="ver">v{{ q.version }}{% if q.supersedes %} (resubmitted){% endif %}</div></div></td>
+
+      <td><div class="cust-name">{{ q.customer.name }}<div class="sub">{{ q.get_order_type_display }} Customer</div></div></td>
+
+      <td>{{ q.spec_display }}</td>
+
+      <td><span class="amt">₹{{ q.amount_display }}</span></td>
+
+      <td style="font-size:11.5px;{% if not q.submitted_at %} color:var(--ink-soft);{% endif %}">
+        {% if q.submitted_at %}{{ q.submitted_at|date:'d M Y' }}{% else %}Not submitted{% endif %}
+      </td>
+
+      <td class="status-cell">
+        <span class="badge {{ q.badge_class }}">{{ q.get_status_display }}</span>
+
+        {% if q.action_kind == 'rejected' and q.manager_comment %}
+          <div class="comment-flag">"{{ q.manager_comment }}" — Manager</div>
+        {% endif %}
+
+        {% if q.action_kind == 'awaiting_po' %}
+          <div class="po-status waiting">Awaiting PO from customer</div>
+        {% elif q.action_kind == 'convertible' %}
+          <div class="po-status received">PO &amp; drawing received</div>
+          <div class="file-mini">📎 <span>{{ q.po_file.name|cut:"po/" }}</span> · 📐 <span>{{ q.drawing_file.name|cut:"drawings/" }}</span></div>
+        {% elif q.action_kind == 'no_drawing' %}
+          <div class="po-status waiting">Awaiting drawing — cannot enter Design queue</div>
+          <div class="file-mini">📎 <span>{{ q.po_file.name|cut:"po/"|default:"PO on file" }}</span> · 📐 <span class="missing">Drawing not uploaded</span></div>
+        {% elif q.action_kind == 'po_rejected' %}
+          <div class="po-status rejected">Returned by Accounts — re-upload required</div>
+          {% if q.po_rejection_reason %}
+          <div class="reject-note">
+            "{{ q.po_rejection_reason }}"
+            <span class="who">✕ {{ q.po_rejected_by.short_name|default:"Accounts" }} · Accounts · {{ q.po_rejected_at|date:'d M Y' }}</span>
+          </div>
+          {% endif %}
+          <div class="file-mini">📎 <span>{{ q.po_file.name|cut:"po/"|default:"—" }}</span>{% if q.has_drawing %} · 📐 <span>{{ q.drawing_file.name|cut:"drawings/" }}</span>{% endif %}</div>
+        {% endif %}
+
+        {% if q.sent_to_customer_at %}
+          <div class="sent-flag">✉ Quote PDF sent {{ q.sent_to_customer_at|date:'d M Y' }}{% if q.customer.email %} · {{ q.customer.email }}{% endif %}</div>
+        {% endif %}
+      </td>
+
+      <td class="action-cell">
+        {% if q.action_kind == 'draft' %}
+          <a href="{% url 'sales:quotation_edit' q.pk %}" class="action-btn">Continue Editing</a>
+
+        {% elif q.action_kind == 'pending' %}
+          <a href="{% url 'sales:quotation_edit' q.pk %}" class="action-btn">View</a>
+
+        {% elif q.action_kind == 'rejected' %}
+          <form method="post" action="{% url 'sales:quotation_revise' q.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="action-btn">Revise &amp; Resubmit</button>
+          </form>
+
+        {% elif q.action_kind == 'awaiting_po' %}
+          <div class="action-stack">
+            <form method="post" action="{% url 'sales:quotation_send' q.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="action-btn primary" onclick="return sendToCustomer(this)">
+                {% if q.sent_to_customer_at %}Resend to Customer{% else %}Send to Customer{% endif %}
+              </button>
+            </form>
+            <button type="button" class="action-btn upload" onclick="openPoModal(this, 'upload')">+ Upload PO / Drawing</button>
+          </div>
+
+        {% elif q.action_kind == 'convertible' %}
+          <div class="action-stack">
+            <form method="post" action="{% url 'sales:quotation_convert' q.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="action-btn convert">Convert to Sales Order →</button>
+            </form>
+            {% if q.po_file %}
+              <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PDF</a>
+            {% endif %}
+          </div>
+
+        {% elif q.action_kind == 'no_drawing' %}
+          <div class="action-stack">
+            <button type="button" class="action-btn upload" onclick="openPoModal(this, 'drawing')">+ Upload Drawing</button>
+            <button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Convert to Sales Order →</button>
+            <div class="action-note">Blocked until drawing is supplied</div>
+          </div>
+
+        {% elif q.action_kind == 'po_rejected' %}
+          <div class="action-stack">
+            <button type="button" class="action-btn reupload" onclick="openPoModal(this, 'reupload')">↻ Re-upload PO</button>
+            {% if q.po_file %}
+              <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
+            {% endif %}
+          </div>
+
+        {% else %}
+          {% if q.po_file %}
+            <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
+          {% else %}
+            <span class="action-note">Booked by Accounts</span>
+          {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+  {% empty %}
     <tr>
-      <td><div class="qno">QTN-0417<div class="ver">v2 (resubmitted)</div></div></td>
-      <td><div class="cust-name">Veeransh Fabricators<div class="sub">New Customer</div></div></td>
-      <td>SS304 · 2mm · 150×110mm</td>
-      <td><span class="amt">₹9,676</span></td>
-      <td style="font-size:11.5px;">05 Aug 2026</td>
-      <td><span class="badge badge-amber">Pending Approval</span></td>
-      <td><button class="action-btn" onclick="alert('QTN-0417 v2 — Veeransh Fabricators\n\nStatus: Pending manager approval since 05 Aug 2026.\n\n(UI preview — no backend)')">View</button></td>
-    </tr>
-
-    <!-- Row 2: Rejected -->
-    <tr>
-      <td><div class="qno">QTN-0415<div class="ver">v2</div></div></td>
-      <td><div class="cust-name">Marigold Textiles<div class="sub">Repeat Customer</div></div></td>
-      <td>SS304 · 1mm · 100×60mm</td>
-      <td><span class="amt">₹6,200</span></td>
-      <td style="font-size:11.5px;">04 Aug 2026</td>
-      <td>
-        <span class="badge badge-red">Rejected</span>
-        <div class="comment-flag">"Margin too low — revise rate" — Manager</div>
-      </td>
-      <td><a href="{% url 'sales:quotation_create' %}" class="action-btn">Revise &amp; Resubmit</a></td>
-    </tr>
-
-    <!-- Row 3: Approved, Awaiting PO -->
-    <tr data-qno="QTN-0410" data-cust="Bharat Switchgear Co." data-email="purchase@bharatswitchgear.co.in">
-      <td><div class="qno">QTN-0410<div class="ver">v1</div></div></td>
-      <td><div class="cust-name">Bharat Switchgear Co.<div class="sub">Repeat Customer</div></div></td>
-      <td>Aluminium · 1mm · 100×60mm</td>
-      <td><span class="amt">₹63,000</span></td>
-      <td style="font-size:11.5px;">02 Aug 2026</td>
-      <td class="status-cell">
-        <span class="badge badge-green">Approved</span>
-        <div class="po-status waiting">Awaiting PO from customer</div>
-      </td>
-      <td class="action-cell">
-        <div class="action-stack">
-          <button class="action-btn primary" onclick="sendToCustomer(this)">Send to Customer</button>
-          <button class="action-btn upload" onclick="openPoModal(this, 'upload')">+ Upload PO / Drawing</button>
-        </div>
+      <td colspan="7" style="padding:28px 12px; text-align:center; color:var(--ink-soft); font-style:italic;">
+        No quotations {% if active_filter != 'all' or search %}match this filter{% else %}yet — start with “New Quotation”{% endif %}.
       </td>
     </tr>
-
-    <!-- Row 3b: PO uploaded but REJECTED by Accounts — bounced back to sales (§10.1·2) -->
-    <tr data-qno="QTN-0412" data-cust="Kalyani Metal Works" data-email="stores@kalyanimetal.in" data-drawing="Plate_Layout.pdf">
-      <td><div class="qno">QTN-0412<div class="ver">v1</div></div></td>
-      <td><div class="cust-name">Kalyani Metal Works<div class="sub">Repeat Customer</div></div></td>
-      <td>SS304 · 1.5mm · 200×140mm</td>
-      <td><span class="amt">₹63,000</span></td>
-      <td style="font-size:11.5px;">03 Aug 2026</td>
-      <td class="status-cell">
-        <span class="badge badge-red">PO Rejected</span>
-        <div class="po-status rejected">Returned by Accounts — re-upload required</div>
-        <div class="reject-note">
-          "PO value ₹58,000 does not match approved quote ₹63,000 — please obtain a corrected PO."
-          <span class="who">✕ Priya Nair · Accounts · 06 Aug 2026</span>
-        </div>
-        <div class="file-mini">📎 <span>PO_KMW_2210.pdf</span> · 📐 <span>Plate_Layout.pdf</span></div>
-      </td>
-      <td class="action-cell">
-        <div class="action-stack">
-          <button class="action-btn reupload" onclick="openPoModal(this, 'reupload')">↻ Re-upload PO</button>
-          <button class="action-btn" onclick="alert('QTN-0412 — rejection history\n\n06 Aug 2026 · Priya Nair (Accounts)\nPO value ₹58,000 does not match approved quote ₹63,000.\n\n(UI preview — no backend)')">View Reason</button>
-        </div>
-      </td>
-    </tr>
-
-    <!-- Row 3c: PO received but NO drawing — blocked out of the Design queue (§10.2·1) -->
-    <tr data-qno="QTN-0407" data-cust="Sunrise Enclosures" data-email="po@sunriseenclosures.com">
-      <td><div class="qno">QTN-0407<div class="ver">v1</div></div></td>
-      <td><div class="cust-name">Sunrise Enclosures<div class="sub">New Customer</div></div></td>
-      <td>MS · 2mm · 180×120mm</td>
-      <td><span class="amt">₹34,200</span></td>
-      <td style="font-size:11.5px;">01 Aug 2026</td>
-      <td class="status-cell">
-        <span class="badge badge-green">Approved</span>
-        <div class="po-status waiting">Awaiting drawing — cannot enter Design queue</div>
-        <div class="file-mini">📎 <span>PO_SE_4471.pdf</span> · 📐 <span class="missing">Drawing not uploaded</span></div>
-      </td>
-      <td class="action-cell">
-        <div class="action-stack">
-          <button class="action-btn upload" onclick="openPoModal(this, 'drawing')">+ Upload Drawing</button>
-          <button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Convert to Sales Order →</button>
-          <div class="action-note">Blocked until drawing is supplied</div>
-        </div>
-      </td>
-    </tr>
-
-    <!-- Row 4: Draft -->
-    <tr>
-      <td><div class="qno">QTN-0408<div class="ver">v1</div></div></td>
-      <td><div class="cust-name">Orion Compressors<div class="sub">New Customer</div></div></td>
-      <td>Aluminium · 1mm · —</td>
-      <td><span class="amt">₹1,08,000</span></td>
-      <td style="font-size:11.5px; color:var(--ink-soft);">Not submitted</td>
-      <td><span class="badge badge-gray">Draft</span></td>
-      <td><a href="{% url 'sales:quotation_create' %}" class="action-btn">Continue Editing</a></td>
-    </tr>
-
-    <!-- Row 5: Approved, PO & Drawing received → ready to convert -->
-    <tr data-qno="QTN-0401" data-cust="Trident Pumps Ltd" data-email="purchase@tridentpumps.com">
-      <td><div class="qno">QTN-0401<div class="ver">v1</div></div></td>
-      <td><div class="cust-name">Trident Pumps Ltd<div class="sub">Repeat Customer</div></div></td>
-      <td>SS304 · 1mm · —</td>
-      <td><span class="amt">₹18,600</span></td>
-      <td style="font-size:11.5px;">28 Jul 2026</td>
-      <td class="status-cell">
-        <span class="badge badge-green">Approved</span>
-        <div class="po-status received">PO &amp; drawing received</div>
-        <div class="file-mini">📎 <span>PO_TP_991.pdf</span> · 📐 <span>Rating_Plate.pdf</span></div>
-        <div class="sent-flag">✉ Quote PDF sent 28 Jul 2026 · purchase@tridentpumps.com</div>
-      </td>
-      <td class="action-cell">
-        <div class="action-stack">
-          <a href="{% url 'accounts:order_booking' %}" class="action-btn convert">Convert to Sales Order →</a>
-          <button class="action-btn" onclick="alert('Opening QTN-0401.pdf\n\n(UI preview — no backend)')">View PDF</button>
-        </div>
-      </td>
-    </tr>
-
+  {% endfor %}
   </tbody>
 </table>
 
@@ -348,7 +359,8 @@
       <span id="poModalTitle">Upload PO / Drawing</span>
       <span class="sub" id="poModalSub">QTN-0410 · Bharat Switchgear Co.</span>
     </div>
-    <form id="poForm" onsubmit="return submitPo(event)">
+    <form id="poForm" method="post" enctype="multipart/form-data" action="">
+      {% csrf_token %}
       <div class="modal-body">
 
         <div class="field">
@@ -387,8 +399,8 @@
           <div class="field">
             <label for="orderType">Order Type <span class="req">*</span></label>
             <div class="radio-row" id="orderType">
-              <label><input type="radio" name="order_type" value="New" checked> New</label>
-              <label><input type="radio" name="order_type" value="Repeat"> Repeat</label>
+              <label><input type="radio" name="order_type" value="NEW" checked> New</label>
+              <label><input type="radio" name="order_type" value="REPEAT"> Repeat</label>
             </div>
           </div>
         </div>
@@ -411,16 +423,8 @@
 
 {% block extra_js %}
 <script>
-  // Chip filter toggle (UI only — no backend filtering yet)
-  document.querySelectorAll('.chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-    });
-  });
-
-  // Route used when a row becomes ready to convert (sales app has no PO route).
-  const ORDER_BOOKING_URL = "{% url 'accounts:order_booking' %}";
+  // The filter chips are real querystring links now (?status=...), so there is
+  // no client-side toggling left to do — the server owns the active chip.
 
   const poModal      = document.getElementById('poModal');
   const poForm       = document.getElementById('poForm');
@@ -442,11 +446,6 @@
     const d = new Date();
     d.setDate(d.getDate() + (offsetDays || 0));
     return d.toISOString().slice(0, 10);
-  }
-  function prettyIso(iso) {
-    if (!iso) return '—';
-    const p = iso.split('-');
-    return fmtDate(new Date(+p[0], +p[1] - 1, +p[2]));
   }
 
   // Drawing-missing warning: shown whenever the row would end up with no
@@ -472,35 +471,37 @@
 
     const qno  = poRow.dataset.qno  || '';
     const cust = poRow.dataset.cust || '';
-    const isRepeat = /Repeat/i.test(poRow.querySelector('.cust-name .sub').textContent);
+    const isRepeat = (poRow.dataset.ordertype || 'NEW') === 'REPEAT';
 
     poForm.reset();
+    // Every state change is a POST to the row's own URL (§9).
+    poForm.action = poRow.dataset.postUrl;
     document.getElementById('poModalSub').textContent = qno + ' · ' + cust;
-    document.getElementById('poDate').value     = isoToday(0);
-    document.getElementById('expDelivery').value = isoToday(21);
-    poForm.querySelector('input[name=order_type][value="' + (isRepeat ? 'Repeat' : 'New') + '"]').checked = true;
+    document.getElementById('poNumber').value    = poRow.dataset.pono || '';
+    document.getElementById('poDate').value      = poRow.dataset.podate || isoToday(0);
+    document.getElementById('expDelivery').value = poRow.dataset.expdel || isoToday(21);
+    poForm.querySelector('input[name=order_type][value="' + (isRepeat ? 'REPEAT' : 'NEW') + '"]').checked = true;
 
     const title  = document.getElementById('poModalTitle');
     const submit = document.getElementById('poSubmitBtn');
     const fileHint = document.getElementById('poFileHint');
+    const hasPoFile = !!poRow.dataset.pono;
 
     if (poMode === 'reupload') {
       title.textContent  = 'Re-upload Corrected PO';
       submit.textContent = 'Re-upload & Resend to Accounts';
-      document.getElementById('poNumber').value = 'KMW/PO/2026/2210-R1';
       poFileInput.required = true;
       fileHint.classList.add('hidden');
     } else if (poMode === 'drawing') {
       title.textContent  = 'Upload Drawing';
       submit.textContent = 'Upload & Send to Accounts';
-      document.getElementById('poNumber').value = 'SE/PO/2026/4471';
       poFileInput.required = false;           // PO already on file
       fileHint.classList.remove('hidden');
     } else {
       title.textContent  = 'Upload PO / Drawing';
       submit.textContent = 'Upload & Send to Accounts';
-      poFileInput.required = true;
-      fileHint.classList.add('hidden');
+      poFileInput.required = !hasPoFile;
+      fileHint.classList.toggle('hidden', !hasPoFile);
     }
 
     syncDrawingHint();
@@ -521,98 +522,19 @@
     if (e.key === 'Escape' && poModal.classList.contains('show')) closePoModal();
   });
 
-  // ---- Submit: flip the row to its new PO state ---------------------------
-  function submitPo(e) {
-    e.preventDefault();
-    if (!poRow) { closePoModal(); return false; }
+  // The modal now posts itself (multipart) to sales:quotation_po — the row is
+  // re-rendered from the database on the redirect, not patched in the DOM.
 
-    const poNo     = document.getElementById('poNumber').value.trim();
-    const poDate   = document.getElementById('poDate').value;
-    const expDel   = document.getElementById('expDelivery').value;
-    const ordType  = poForm.querySelector('input[name=order_type]:checked').value;
-
-    const poName      = (poFileInput.files[0] && poFileInput.files[0].name) ||
-                        (poMode === 'drawing' ? 'PO_SE_4471.pdf' : 'PO_' + poNo.replace(/[^\w]+/g, '_') + '.pdf');
-    const drawingName = (drawingInput.files[0] && drawingInput.files[0].name) || existingDrawing || null;
-
-    const row  = poRow;
-    const qno  = row.dataset.qno;
-    const cust = row.dataset.cust;
-    const statusCell = row.querySelector('.status-cell');
-    const actionCell = row.querySelector('.action-cell');
-    const sentFlag   = statusCell.querySelector('.sent-flag');
-
-    if (drawingName) { row.dataset.drawing = drawingName; }
-    else { delete row.dataset.drawing; }
-
-    const meta =
-      '<div class="file-mini">PO <span>' + poNo + '</span> · dated <span>' + prettyIso(poDate) + '</span></div>' +
-      '<div class="file-mini">Expected delivery <span>' + prettyIso(expDel) + '</span> · <span>' + ordType + '</span> order</div>';
-
-    if (drawingName) {
-      // Both PO and drawing present → can proceed to Accounts, then Design.
-      statusCell.innerHTML =
-        '<span class="badge badge-green">Approved</span>' +
-        '<div class="po-status received">PO &amp; drawing received — sent to Accounts</div>' +
-        '<div class="file-mini">📎 <span>' + poName + '</span> · 📐 <span>' + drawingName + '</span></div>' + meta;
-      actionCell.innerHTML =
-        '<div class="action-stack">' +
-          '<a href="' + ORDER_BOOKING_URL + '" class="action-btn convert">Convert to Sales Order →</a>' +
-          '<button class="action-btn" onclick="alert(\'Opening ' + qno + '.pdf\\n\\n(UI preview — no backend)\')">View PDF</button>' +
-        '</div>';
-    } else {
-      // PO only → held out of the Design queue until a drawing arrives (§10.2·1).
-      statusCell.innerHTML =
-        '<span class="badge badge-green">Approved</span>' +
-        '<div class="po-status waiting">Awaiting drawing — cannot enter Design queue</div>' +
-        '<div class="file-mini">📎 <span>' + poName + '</span> · 📐 <span class="missing">Drawing not uploaded</span></div>' + meta;
-      actionCell.innerHTML =
-        '<div class="action-stack">' +
-          '<button class="action-btn upload" onclick="openPoModal(this, \'drawing\')">+ Upload Drawing</button>' +
-          '<button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Convert to Sales Order →</button>' +
-          '<div class="action-note">Blocked until drawing is supplied</div>' +
-        '</div>';
-    }
-
-    if (sentFlag) statusCell.appendChild(sentFlag);
-
-    closePoModal();
-
-    alert(
-      (poMode === 'reupload' ? 'Corrected PO re-uploaded' : 'PO uploaded') + ' — ' + qno + ' · ' + cust + '\n\n' +
-      'PO number: ' + poNo + '  (' + prettyIso(poDate) + ')\n' +
-      'Expected delivery: ' + prettyIso(expDel) + '\n' +
-      'Order type: ' + ordType + '\n' +
-      'Drawing: ' + (drawingName ? drawingName : 'NOT SUPPLIED') + '\n\n' +
-      (drawingName
-        ? 'Sent to Accounts for order booking.'
-        : 'Sent to Accounts, but the job is held as "Awaiting drawing" and will NOT enter the Design queue until a drawing is uploaded.') +
-      '\n\n(UI preview — no backend)'
-    );
-    return false;
-  }
-
-  // ---- Send quotation PDF to the customer by email ------------------------
+  // ---- Send the quotation PDF to the customer -----------------------------
+  // Confirms, then lets the surrounding POST form submit for real.
   function sendToCustomer(btn) {
     const row   = btn.closest('tr');
     const qno   = row.dataset.qno;
     const cust  = row.dataset.cust;
-    const email = row.dataset.email;
+    const email = row.dataset.email || '(no email on the customer master)';
 
-    if (!confirm('Email the approved quotation PDF?\n\n' + qno + ' — ' + cust + '\nTo: ' + email +
-                 '\nAttachment: ' + qno + '.pdf\n\nThe customer is emailed automatically on confirm.')) return;
-
-    const today = fmtDate(new Date());
-    const statusCell = row.querySelector('.status-cell');
-    let flag = statusCell.querySelector('.sent-flag');
-    if (!flag) {
-      flag = document.createElement('div');
-      flag.className = 'sent-flag';
-      statusCell.appendChild(flag);
-    }
-    flag.textContent = '✉ Quote PDF sent ' + today + ' · ' + email;
-    btn.textContent = 'Resend to Customer';
-    alert('Quotation ' + qno + '.pdf emailed to ' + email + ' on ' + today + '.\n\n(UI preview — no backend)');
+    return confirm('Email the approved quotation PDF?\n\n' + qno + ' — ' + cust + '\nTo: ' + email +
+                   '\nAttachment: ' + qno + '.pdf\n\nThe customer is emailed automatically on confirm.');
   }
 </script>
 {% endblock %}

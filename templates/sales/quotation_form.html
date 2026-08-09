@@ -177,6 +177,173 @@
     margin-top: 24px;
   }
 
+  /* ---- Line items heading row ---- */
+  .items-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-top: 24px;
+  }
+  .items-head .section-title { flex: 1; min-width: 220px; margin-bottom: 14px; }
+  .manage-link {
+    font-size: 11px; font-weight: 600; color: var(--blue);
+    text-decoration: none; white-space: nowrap; padding-bottom: 10px;
+  }
+  .manage-link:hover { text-decoration: underline; }
+
+  /* ---- Card heading row that carries a manage link ---- */
+  .sec-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .sec-head .section-title { flex: 1; min-width: 220px; margin-bottom: 14px; }
+
+  /* ---- Customer type-ahead (same interaction language as the item code one) ---- */
+  .cu-field { position: relative; }
+  .cu-field label .opt {
+    font-weight: 500; text-transform: none; letter-spacing: 0;
+    color: var(--ink-soft);
+  }
+  .cu-wrap { position: relative; }
+  .cu-input { font-weight: 600; }
+
+  .cu-suggest {
+    display: none; position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+    background: var(--card); border: 1.3px solid var(--steel); border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(19,36,53,.18); z-index: 70;
+    max-height: 258px; overflow-y: auto;
+  }
+  .cu-suggest.show { display: block; }
+  .cu-suggest .cu-opt {
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line);
+  }
+  .cu-suggest .cu-opt:last-child { border-bottom: none; }
+  .cu-suggest .cu-opt:hover,
+  .cu-suggest .cu-opt.hi { background: var(--blue-bg); }
+  .cu-suggest .cu-opt .o-name { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .cu-suggest .cu-opt .o-meta { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+  .cu-suggest .cu-opt .o-meta b { font-family: 'IBM Plex Mono'; font-weight: 500; color: var(--steel); }
+  .cu-suggest .cu-none {
+    padding: 10px 12px; font-size: 11.5px; color: var(--ink-soft); font-style: italic;
+  }
+
+  .cu-status {
+    font-size: 11.5px; margin-top: 6px; line-height: 1.5;
+    padding: 6px 9px; border-radius: 0 var(--radius) var(--radius) 0;
+    display: none;
+  }
+  .cu-status.show { display: block; }
+  .cu-status.ok    { color: var(--green); background: var(--green-bg); border-left: 3px solid var(--green); font-weight: 600; }
+  .cu-status.new   { color: var(--amber); background: var(--amber-bg); border-left: 3px solid var(--amber); font-weight: 600; }
+  .cu-status.muted { color: var(--ink-soft); background: var(--gray-bg); border-left: 3px solid var(--line); font-style: italic; }
+  .cu-status .s-meta { font-weight: 400; font-family: 'IBM Plex Mono'; font-size: 11px; }
+
+  .mono-val { font-family: 'IBM Plex Mono'; font-weight: 600; }
+
+  /* ---- Item code type-ahead ---- */
+  .ic-field { position: relative; }
+  .ic-field label .opt {
+    font-weight: 500; text-transform: none; letter-spacing: 0;
+    color: var(--ink-soft);
+  }
+  .ic-wrap { position: relative; }
+  .ic-input { font-family: 'IBM Plex Mono'; font-weight: 600; letter-spacing: .01em; }
+  .ic-input:disabled { background: #f4f5f7; color: var(--ink-soft); cursor: not-allowed; }
+
+  .ic-suggest {
+    display: none; position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+    background: var(--card); border: 1.3px solid var(--steel); border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(19,36,53,.18); z-index: 60;
+    max-height: 258px; overflow-y: auto;
+  }
+  .ic-suggest.show { display: block; }
+  .ic-suggest .ic-opt {
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line);
+  }
+  .ic-suggest .ic-opt:last-child { border-bottom: none; }
+  .ic-suggest .ic-opt:hover,
+  .ic-suggest .ic-opt.hi { background: var(--blue-bg); }
+  .ic-suggest .ic-opt .o-code {
+    font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12.5px; color: var(--steel);
+  }
+  .ic-suggest .ic-opt .o-desc { font-size: 12px; color: var(--ink); margin-left: 8px; }
+  .ic-suggest .ic-opt .o-spec { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+  .ic-suggest .ic-opt .o-spec b { font-family: 'IBM Plex Mono'; font-weight: 500; color: var(--steel); }
+  .ic-suggest .ic-opt.inactive .o-code { color: var(--gray); }
+  .ic-suggest .ic-opt .o-inactive {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    background: var(--gray-bg); color: var(--gray); padding: 2px 6px; border-radius: 3px; margin-left: 6px;
+  }
+  .ic-suggest .ic-opt .o-pending {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    background: var(--amber-bg); color: var(--amber); padding: 2px 6px; border-radius: 3px; margin-left: 6px;
+  }
+  .ic-suggest .ic-opt .o-rate {
+    font-family: 'IBM Plex Mono'; font-size: 10.5px; font-weight: 700;
+    color: var(--green); margin-left: 6px;
+  }
+  .ic-suggest .ic-opt .o-rate.none { color: var(--amber); font-weight: 600; }
+  .ic-suggest .ic-none {
+    padding: 10px 12px; font-size: 11.5px; color: var(--ink-soft); font-style: italic;
+  }
+
+  .ic-status {
+    font-size: 11.5px; margin-top: 6px; line-height: 1.5;
+    padding: 6px 9px; border-radius: 0 var(--radius) var(--radius) 0;
+    display: none;
+  }
+  .ic-status.show { display: block; }
+  .ic-status.ok    { color: var(--green); background: var(--green-bg); border-left: 3px solid var(--green); font-weight: 600; }
+  .ic-status.new   { color: var(--amber); background: var(--amber-bg); border-left: 3px solid var(--amber); font-weight: 600; }
+  .ic-status.warn  { color: var(--red);   background: var(--red-bg);   border-left: 3px solid var(--red);   font-weight: 600; }
+  .ic-status.muted { color: var(--ink-soft); background: var(--gray-bg); border-left: 3px solid var(--line); font-style: italic; }
+  .ic-status .s-meta { font-weight: 400; font-family: 'IBM Plex Mono'; font-size: 11px; }
+
+  /* auto-fill flash */
+  .spec-flash { animation: specFlash 1.3s ease-out; }
+  @keyframes specFlash {
+    0%   { background: var(--green-bg); border-color: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
+    70%  { background: var(--green-bg); border-color: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
+    100% { background: #fff; border-color: var(--line); box-shadow: none; }
+  }
+
+  /* ---- Approved-rate chip that sits under the first tier's Rate/Unit ---- */
+  .rate-chip {
+    margin-top: 5px; font-size: 9.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .03em; line-height: 1.35;
+    padding: 3px 7px; border-radius: 3px; display: inline-block;
+  }
+  .rate-chip.ok   { background: var(--green-bg); color: var(--green); }
+  .rate-chip.warn { background: var(--amber-bg); color: var(--amber); }
+
+  /* ---- Per-line-item approval flag ---- */
+  .item-flag {
+    font-size: 11.5px; line-height: 1.5; font-weight: 600;
+    padding: 7px 10px; margin-bottom: 14px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--amber-bg); color: var(--amber);
+    border-left: 3px solid var(--amber);
+  }
+  .item-flag b { font-family: 'IBM Plex Mono'; }
+
+  /* ---- "needs approval" banner above the line items ---- */
+  .approval-banner {
+    display: none; margin: 0 0 16px;
+    background: var(--amber-bg); border: 1px solid var(--amber);
+    border-left: 4px solid var(--amber); border-radius: var(--radius);
+    padding: 11px 14px;
+  }
+  .approval-banner.show { display: block; }
+  .approval-banner .ab-title {
+    font-size: 12.5px; font-weight: 700; color: var(--amber);
+  }
+  .approval-banner .ab-list {
+    display: block; margin-top: 6px; font-family: 'IBM Plex Mono';
+    font-size: 11px; color: var(--ink-soft); line-height: 1.65;
+  }
+  .approval-banner .ab-foot {
+    display: block; margin-top: 6px; font-size: 11px;
+    color: var(--ink-soft); font-style: italic;
+  }
+
   /* ---- Add item button ---- */
   .btn-add-item {
     width: 100%; padding: 14px; background: none;
@@ -209,13 +376,21 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>New Quotation</h1>
-    <div class="breadcrumb">Sales → My Quotations → New Quotation</div>
+    <h1>{% if quotation %}Edit Quotation {{ quotation.number }} v{{ quotation.version }}{% else %}New Quotation{% endif %}</h1>
+    <div class="breadcrumb">Sales → My Quotations → {% if quotation %}{{ quotation.number }}{% else %}New Quotation{% endif %}</div>
   </div>
 </div>
 
-<form method="post" id="quotationForm">
+{% if not editable %}
+<div class="card" style="border-left:4px solid var(--amber);">
+  <b>{{ quotation.get_status_display }}</b> — this quotation is read-only. Only a Draft or a
+  Rejected quotation can be edited.
+</div>
+{% endif %}
+
+<form method="post" id="quotationForm" enctype="multipart/form-data">
   {% csrf_token %}
+  {{ item_formset.management_form }}
 
   <!-- ======== HEADER ======== -->
   <div class="card">
@@ -223,69 +398,75 @@
     <div class="form-grid">
       <div class="field">
         <label>Quotation No.</label>
-        <input type="text" value="QTN-0418" readonly style="background:#f4f5f7; color:var(--ink-soft);">
+        <input type="text" value="{% if quotation %}{{ quotation.number }}{% else %}Allocated on save{% endif %}" readonly style="background:#f4f5f7; color:var(--ink-soft);">
       </div>
       <div class="field">
         <label>Date</label>
-        <input type="date" value="2026-08-09">
+        <input type="date" name="quote_date" value="{{ quote_date_value }}" required>
       </div>
       <div class="field">
         <label>Valid Until</label>
-        <input type="date" value="2026-09-08">
+        <input type="date" name="valid_until" value="{{ valid_until_value }}">
       </div>
       <div class="field">
         <label>Ref. / Enquiry No.</label>
-        <input type="text" placeholder="e.g. REF-001">
+        <input type="text" name="enquiry_ref" value="{{ form.enquiry_ref.value|default_if_none:'' }}" placeholder="e.g. REF-001">
       </div>
       <div class="field">
         <label>Currency</label>
-        <select>
-          <option>INR (₹)</option>
-          <option>USD ($)</option>
-          <option>EUR (€)</option>
+        <select name="currency">
+          <option value="INR" {% if form.currency.value == 'INR' %}selected{% endif %}>INR (₹)</option>
+          <option value="USD" {% if form.currency.value == 'USD' %}selected{% endif %}>USD ($)</option>
+          <option value="EUR" {% if form.currency.value == 'EUR' %}selected{% endif %}>EUR (€)</option>
         </select>
       </div>
       <div class="field">
         <label>Sales Person</label>
-        <input type="text" value="Arjun Patil" readonly style="background:#f4f5f7; color:var(--ink-soft);">
+        <input type="text" value="{% if quotation %}{{ quotation.salesperson.get_full_name|default:quotation.salesperson.username }}{% else %}{{ request.user.get_full_name|default:request.user.username }}{% endif %}" readonly style="background:#f4f5f7; color:var(--ink-soft);">
       </div>
     </div>
   </div>
 
   <!-- ======== CUSTOMER (BILL TO) ======== -->
   <div class="card">
-    <div class="section-title">Bill To (Customer)</div>
+    <div class="sec-head">
+      <div class="section-title">Bill To (Customer)</div>
+    </div>
     <div class="form-grid">
-      <div class="field full">
-        <label>Customer</label>
-        <select id="customerSelect">
-          <option value="">— Select customer —</option>
-          <option value="1" selected>Veeransh Fabricators</option>
-          <option value="2">Bharat Switchgear Co.</option>
-          <option value="3">Marigold Textiles</option>
-          <option value="4">Trident Pumps Ltd</option>
-          <option value="5">Orion Compressors</option>
-        </select>
+      <div class="field full cu-field" id="cuField">
+        <label>Customer <span class="opt">— pick from the master, or type a new name to add it on the spot</span></label>
+        <div class="cu-wrap">
+          <input type="text" id="customerInput" name="customer_name" class="cu-input" placeholder="Type a customer name…"
+                 autocomplete="off" value="{{ customer_name_value }}">
+          <div class="cu-suggest" id="customerSuggest"></div>
+        </div>
+        <!-- Hidden id keeps the customer-scoped item-code type-ahead working -->
+        <input type="hidden" id="customerSelect" name="customer" value="{{ customer_id_value }}">
+        <div class="cu-status" id="customerStatus"></div>
       </div>
       <div class="field">
         <label>Address</label>
-        <input type="text" value="Plot 42, MIDC Satpur, Nashik 422007, India" placeholder="Address">
+        <input type="text" id="billAddress" name="address" value="{{ bill_form.address.value|default_if_none:'' }}" placeholder="Address">
       </div>
       <div class="field">
         <label>GSTIN / Tax ID</label>
-        <input type="text" value="27AABCV1234F1Z5" placeholder="GSTIN">
+        <input type="text" id="billGstin" name="gstin" class="mono-val" value="{{ bill_form.gstin.value|default_if_none:'' }}" placeholder="GSTIN">
       </div>
       <div class="field">
         <label>Contact Person</label>
-        <input type="text" value="Mr. Rajesh Kulkarni" placeholder="Kind Attn.">
+        <input type="text" id="billContact" name="contact_person" value="{{ bill_form.contact_person.value|default_if_none:'' }}" placeholder="Kind Attn.">
       </div>
       <div class="field">
         <label>Phone</label>
-        <input type="text" value="+91 98765 43210" placeholder="Phone">
+        <input type="text" id="billPhone" name="phone" class="mono-val" value="{{ bill_form.phone.value|default_if_none:'' }}" placeholder="Phone">
       </div>
       <div class="field">
         <label>Email</label>
-        <input type="email" value="rajesh@veeransh.com" placeholder="Email">
+        <input type="email" id="billEmail" name="email" value="{{ bill_form.email.value|default_if_none:'' }}" placeholder="Email">
+      </div>
+      <div class="field">
+        <label>Credit Limit (₹)</label>
+        <input type="text" id="billCredit" name="credit_limit" class="mono-val" value="{{ bill_form.credit_limit.value|default_if_none:'' }}" placeholder="e.g. 5,00,000">
       </div>
     </div>
   </div>
@@ -296,34 +477,45 @@
     <div class="form-grid">
       <div class="field">
         <label>Payment Terms</label>
-        <input type="text" placeholder="e.g. 30% Advance, Balance against Docs" value="30% Advance, Balance against Docs">
+        <input type="text" name="payment_terms" placeholder="e.g. 30% Advance, Balance against Docs" value="{{ form.payment_terms.value|default_if_none:'' }}">
       </div>
       <div class="field">
         <label>Delivery Terms</label>
-        <select>
-          <option>Ex-Works</option>
-          <option>FOB</option>
-          <option>CIF</option>
+        <select name="delivery_terms">
+          {% for term in delivery_choices %}
+          <option value="{{ term }}" {% if form.delivery_terms.value == term %}selected{% endif %}>{{ term }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="field full">
         <label>Lead Time</label>
-        <input type="text" placeholder="e.g. 3-4 Weeks from PO + Artwork Approval" value="3-4 Weeks from PO + Artwork Approval">
+        <input type="text" name="lead_time" placeholder="e.g. 3-4 Weeks from PO + Artwork Approval" value="{{ form.lead_time.value|default_if_none:'' }}">
       </div>
     </div>
   </div>
 
   <!-- ======== LINE ITEMS ======== -->
-  <div class="section-title" style="margin-top:24px;">Line Items</div>
+  <div class="items-head">
+    <div class="section-title">Line Items</div>
+  </div>
+
+  <!-- Live count of item codes on this quotation that the Sales Manager still has to approve -->
+  <div class="approval-banner" id="approvalBanner"></div>
 
   <div id="itemsContainer">
+  {% for row in item_rows %}
+    {% if row.is_template %}<template id="emptyItemTemplate">{% endif %}
+    <div class="item-card" data-item="{{ row.number }}" data-form-index="{{ row.index }}">
+      {{ row.form.id }}
+      <input type="hidden" class="item-delete" name="{{ row.form.DELETE.html_name }}" value="">
+      <input type="hidden" class="item-description" name="{{ row.form.description.html_name }}" value="{{ row.form.description.value|default_if_none:'' }}">
+      <input type="hidden" class="item-artwork" name="{{ row.form.artwork_ref.html_name }}" value="{{ row.form.artwork_ref.value|default_if_none:'' }}">
+      <input type="hidden" class="item-quantity" name="{{ row.form.quantity.html_name }}" value="{{ row.form.quantity.value|default_if_none:'' }}">
 
-    <!-- ---- ITEM 1 ---- -->
-    <div class="item-card" data-item="1">
       <div class="item-header">
         <div>
-          <h3>Item 1 | Chemical Etched Nameplate</h3>
-          <div class="artwork-ref">Artwork Ref: DWG-001</div>
+          <h3>Item {{ row.number }} | {{ row.form.description.value|default_if_none:""|default:"Chemical Etched Nameplate" }}</h3>
+          <div class="artwork-ref">Artwork Ref: {{ row.form.artwork_ref.value|default_if_none:""|default:"—" }}</div>
         </div>
         <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕ Remove</button>
       </div>
@@ -331,45 +523,41 @@
       <div class="spec-grid">
         <div class="field">
           <label>Material</label>
-          <select>
-            <option>SS 304</option>
-            <option>Brass</option>
-            <option>Aluminium</option>
-            <option>SS 316</option>
+          <select class="spec-material" name="{{ row.form.material.html_name }}">
+            {% for m in materials %}<option {% if row.form.material.value == m.name %}selected{% endif %}>{{ m.name }}</option>{% endfor %}
           </select>
         </div>
         <div class="field">
           <label>Size (mm) — L × W</label>
-          <input type="text" placeholder="e.g. 150 × 110" value="150 × 110">
+          <input type="text" class="spec-size" name="{{ row.form.size.html_name }}" placeholder="e.g. 150 × 110" value="{{ row.form.size.value|default_if_none:'' }}">
         </div>
         <div class="field">
           <label>Thickness (mm)</label>
-          <select>
-            <option>0.5</option>
-            <option>1.0</option>
-            <option>1.5</option>
-            <option>2.0</option>
+          <select class="spec-thickness" name="{{ row.form.thickness.html_name }}">
+            {% for t in thicknesses %}<option {% if row.form.thickness.value == t.label %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
           </select>
         </div>
         <div class="field">
           <label>Finish / Fill</label>
-          <select>
-            <option>Black Epoxy Filled</option>
-            <option>Anodized</option>
-            <option>Laminated, Clear Coat</option>
-            <option>Natural Finish</option>
+          <select class="spec-finish" name="{{ row.form.finish.html_name }}">
+            {% for f in finishes %}<option {% if row.form.finish.value == f.name %}selected{% endif %}>{{ f.name }}</option>{% endfor %}
           </select>
         </div>
       </div>
 
-      <div class="field">
-        <label>Artwork Ref / Description</label>
-        <input type="text" placeholder="e.g. DWG-001 or Description" value="DWG-001 — Rating Plate">
+      <div class="field ic-field">
+        <label>Item Code <span class="opt">— from this customer's master, or type a new one</span></label>
+        <div class="ic-wrap">
+          <input type="text" class="ic-input" name="{{ row.form.item_code_text.html_name }}" placeholder="Type an item code…" autocomplete="off" value="{{ row.form.item_code_text.value|default_if_none:'' }}">
+          <div class="ic-suggest"></div>
+        </div>
+        <div class="ic-status"></div>
       </div>
 
       <!-- Batch-wise pricing tiers -->
       <div class="tier-section">
         <div class="tier-label">Batch-wise Pricing (Slab)</div>
+        {{ row.tiers.management_form }}
         <table class="tiers">
           <thead>
             <tr>
@@ -380,42 +568,24 @@
             </tr>
           </thead>
           <tbody>
+            {% for tf in row.tiers.forms %}
             <tr>
               <td>
+                {{ tf.id }}
                 <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="0" value="0" style="width:48%;" min="0">
+                  <input type="number" name="{{ tf.qty_from.html_name }}" value="{{ tf.qty_from.value|default_if_none:'' }}" placeholder="0" style="width:48%;" min="0">
                   <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="100" value="100" style="width:48%;" min="0">
+                  <input type="number" name="{{ tf.qty_to.html_name }}" value="{{ tf.qty_to.value|default_if_none:'' }}" placeholder="100" style="width:48%;" min="0">
                 </div>
               </td>
-              <td><input type="number" step="0.01" placeholder="0.00" value="2.40" class="tier-rate"></td>
-              <td><div class="est-amount">240.00</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-            </tr>
-            <tr>
+              <td><input type="number" step="0.01" name="{{ tf.rate_per_unit.html_name }}" value="{{ tf.rate_per_unit.value|default_if_none:'' }}" placeholder="0.00" class="tier-rate"></td>
+              <td><div class="est-amount">{% if tf.instance.pk %}{{ tf.instance.estimated_amount|floatformat:2 }}{% else %}0.00{% endif %}</div></td>
               <td>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="101" value="101" style="width:48%;" min="0">
-                  <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="200" value="200" style="width:48%;" min="0">
-                </div>
+                <input type="hidden" class="tier-delete" name="{{ tf.DELETE.html_name }}" value="">
+                <button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button>
               </td>
-              <td><input type="number" step="0.01" placeholder="0.00" value="2.00" class="tier-rate"></td>
-              <td><div class="est-amount">400.00</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
             </tr>
-            <tr>
-              <td>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="201" value="201" style="width:48%;" min="0">
-                  <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="500" value="500" style="width:48%;" min="0">
-                </div>
-              </td>
-              <td><input type="number" step="0.01" placeholder="0.00" value="1.80" class="tier-rate"></td>
-              <td><div class="est-amount">900.00</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-            </tr>
+            {% endfor %}
           </tbody>
         </table>
         <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
@@ -423,118 +593,34 @@
 
       <div class="tooling-row">
         <label>Tooling / Screen Charges (one-time)</label>
-        <input type="number" step="0.01" placeholder="0.00" value="">
+        <input type="number" step="0.01" name="{{ row.form.tooling_charge.html_name }}" placeholder="0.00" value="{{ row.form.tooling_charge.value|default_if_none:'' }}">
       </div>
     </div>
-
-    <!-- ---- ITEM 2 ---- -->
-    <div class="item-card" data-item="2">
-      <div class="item-header">
-        <div>
-          <h3>Item 2 | Chemical Etched Nameplate</h3>
-          <div class="artwork-ref">Artwork Ref: DWG-002</div>
-        </div>
-        <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕ Remove</button>
-      </div>
-
-      <div class="spec-grid">
-        <div class="field">
-          <label>Material</label>
-          <select>
-            <option selected>SS 304</option>
-            <option>Brass</option>
-            <option>Aluminium</option>
-            <option>SS 316</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Size (mm) — L × W</label>
-          <input type="text" placeholder="e.g. 100 × 60" value="">
-        </div>
-        <div class="field">
-          <label>Thickness (mm)</label>
-          <select>
-            <option>0.5</option>
-            <option selected>1.0</option>
-            <option>1.5</option>
-            <option>2.0</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Finish / Fill</label>
-          <select>
-            <option>Black Epoxy Filled</option>
-            <option>Anodized</option>
-            <option selected>Laminated, Clear Coat</option>
-            <option>Natural Finish</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Artwork Ref / Description</label>
-        <input type="text" placeholder="e.g. DWG-002 or Description" value="DWG-002 — Data Plate">
-      </div>
-
-      <div class="tier-section">
-        <div class="tier-label">Batch-wise Pricing (Slab)</div>
-        <table class="tiers">
-          <thead>
-            <tr>
-              <th style="width:28%">Batch Quantity (Nos.)</th>
-              <th style="width:22%">Rate / Unit</th>
-              <th style="width:28%">Est. Amount</th>
-              <th style="width:5%"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="0" value="0" style="width:48%;" min="0">
-                  <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="100" value="100" style="width:48%;" min="0">
-                </div>
-              </td>
-              <td><input type="number" step="0.01" placeholder="0.00" value="3.10" class="tier-rate"></td>
-              <td><div class="est-amount">310.00</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-            </tr>
-            <tr>
-              <td>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="101" value="101" style="width:48%;" min="0">
-                  <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="250" value="250" style="width:48%;" min="0">
-                </div>
-              </td>
-              <td><input type="number" step="0.01" placeholder="0.00" value="2.65" class="tier-rate"></td>
-              <td><div class="est-amount">662.50</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-            </tr>
-            <tr>
-              <td>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="251" value="251" style="width:48%;" min="0">
-                  <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="500" value="500" style="width:48%;" min="0">
-                </div>
-              </td>
-              <td><input type="number" step="0.01" placeholder="0.00" value="2.30" class="tier-rate"></td>
-              <td><div class="est-amount">1,150.00</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-            </tr>
-          </tbody>
-        </table>
-        <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
-      </div>
-
-      <div class="tooling-row">
-        <label>Tooling / Screen Charges (one-time)</label>
-        <input type="number" step="0.01" placeholder="0.00" value="">
-      </div>
-    </div>
+    {% if row.is_template %}</template>{% endif %}
+  {% endfor %}
   </div>
+
+  <!-- One blank slab row, cloned by "+ Add pricing tier" -->
+  <template id="emptyTierTemplate">
+    {% with tf=blank_tiers.empty_form %}
+    <tr>
+      <td>
+        {{ tf.id }}
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" name="{{ tf.qty_from.html_name }}" placeholder="0" style="width:48%;" min="0">
+          <span style="color:var(--ink-soft);">–</span>
+          <input type="number" name="{{ tf.qty_to.html_name }}" placeholder="0" style="width:48%;" min="0">
+        </div>
+      </td>
+      <td><input type="number" step="0.01" name="{{ tf.rate_per_unit.html_name }}" placeholder="0.00" class="tier-rate"></td>
+      <td><div class="est-amount">0.00</div></td>
+      <td>
+        <input type="hidden" class="tier-delete" name="{{ tf.DELETE.html_name }}" value="">
+        <button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button>
+      </td>
+    </tr>
+    {% endwith %}
+  </template>
 
   <button type="button" class="btn-add-item" onclick="addItem()">+ Add Another Item</button>
 
@@ -543,18 +629,18 @@
     <div class="section-title">Additional Charges</div>
     <div class="charges-grid">
       <div class="charge-label">Tooling / Screen Charges (one-time, per artwork)</div>
-      <input type="number" step="0.01" placeholder="0.00" id="chargeTooling" class="calc-charge">
+      <input type="number" step="0.01" placeholder="0.00" id="chargeTooling" name="tooling_charges" class="calc-charge" value="{{ form.tooling_charges.value|default_if_none:'' }}">
 
       <div class="charge-label">Packing &amp; Forwarding</div>
-      <input type="number" step="0.01" placeholder="0.00" id="chargePF" class="calc-charge">
+      <input type="number" step="0.01" placeholder="0.00" id="chargePF" name="packing_forwarding" class="calc-charge" value="{{ form.packing_forwarding.value|default_if_none:'' }}">
 
       <div class="charge-label">Freight / Shipping Charges</div>
-      <input type="number" step="0.01" placeholder="0.00" id="chargeFreight" class="calc-charge">
+      <input type="number" step="0.01" placeholder="0.00" id="chargeFreight" name="freight" class="calc-charge" value="{{ form.freight.value|default_if_none:'' }}">
       <div class="charge-note-full">Estimate only — freight may be billed at actuals / as per agreed Incoterm.</div>
 
       <div class="charge-label">GST %</div>
       <div class="pct-wrap">
-        <input type="number" step="0.01" min="0" placeholder="0" value="18" id="gstPctCharges" class="calc-charge">
+        <input type="number" step="0.01" min="0" placeholder="0" value="{{ form.gst_percent.value|default_if_none:'18' }}" id="gstPctCharges" name="gst_percent" class="calc-charge">
         <span class="pct-sign">%</span>
       </div>
       <div class="charge-note-full">Any further taxes / duties applicable at destination are extra, at actuals.</div>
@@ -562,6 +648,7 @@
   </div>
 
   <!-- ======== TOTALS ======== -->
+  <!-- Rendered from the model properties; the JS below keeps them live as you type. -->
   <div class="card">
     <div class="section-title">Totals</div>
     <div class="totals-wrap">
@@ -572,7 +659,7 @@
             Sub Total
             <span class="t-hint">Sum of highest batch slab per line item</span>
           </div>
-          <div class="t-value" id="sumSubTotal">₹0.00</div>
+          <div class="t-value" id="sumSubTotal">₹{{ quotation.sub_total|default:"0.00"|floatformat:2 }}</div>
         </div>
 
         <div class="totals-row">
@@ -580,31 +667,31 @@
             Tooling / Screen Charges
             <span class="t-hint">Includes per-item tooling entered above</span>
           </div>
-          <div class="t-value" id="sumTooling">₹0.00</div>
+          <div class="t-value" id="sumTooling">₹{{ quotation.tooling_charges|default:"0.00"|floatformat:2 }}</div>
         </div>
 
         <div class="totals-row">
           <div class="t-label">Packing &amp; Forwarding</div>
-          <div class="t-value" id="sumPF">₹0.00</div>
+          <div class="t-value" id="sumPF">₹{{ quotation.packing_forwarding|default:"0.00"|floatformat:2 }}</div>
         </div>
 
         <div class="totals-row">
           <div class="t-label">Freight</div>
-          <div class="t-value" id="sumFreight">₹0.00</div>
+          <div class="t-value" id="sumFreight">₹{{ quotation.freight|default:"0.00"|floatformat:2 }}</div>
         </div>
 
         <div class="totals-row gst-row">
           <div class="t-label">
             <span>GST</span>
-            <input type="number" step="0.01" min="0" value="18" id="gstPctTotals" class="calc-charge">
+            <input type="number" step="0.01" min="0" value="{{ form.gst_percent.value|default_if_none:'18' }}" id="gstPctTotals" class="calc-charge">
             <span style="font-family:'IBM Plex Mono'; color:var(--ink-soft);">%</span>
           </div>
-          <div class="t-value" id="sumGst">₹0.00</div>
+          <div class="t-value" id="sumGst">₹{{ quotation.gst_amount|default:"0.00"|floatformat:2 }}</div>
         </div>
 
         <div class="totals-row grand">
           <div class="t-label">Grand Total</div>
-          <div class="t-value" id="sumGrandTotal">₹0.00</div>
+          <div class="t-value" id="sumGrandTotal">₹{{ quotation.grand_total|default:"0.00"|floatformat:2 }}</div>
         </div>
 
         <div class="totals-foot">
@@ -634,16 +721,43 @@
   <!-- ======== ACTIONS ======== -->
   <div class="form-actions">
     <a href="{% url 'sales:dashboard' %}" class="btn btn-outline">Cancel</a>
-    <button type="button" class="btn btn-outline" onclick="alert('Draft saved (UI preview only)')">Save as Draft</button>
-    <button type="button" class="btn btn-primary" onclick="alert('Submitted for approval (UI preview only)')">Submit for Approval →</button>
+    {% if editable %}
+    <button type="submit" name="action" value="draft" class="btn btn-outline">Save as Draft</button>
+    <button type="submit" name="action" value="submit" class="btn btn-primary">Submit for Approval →</button>
+    {% endif %}
   </div>
 </form>
+
+{{ customer_master|json_script:"customer-master-data" }}
+{{ item_code_master|json_script:"item-code-data" }}
+{{ customer_names|json_script:"customer-names-data" }}
 
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  let itemCount = 2;
+  /* =====================================================================
+     DJANGO FORMSET PLUMBING
+     The line items are an inline formset (prefix "items") and each item
+     carries a nested PriceTier formset (prefix "items-<n>-tiers"). Adding a
+     row means cloning the server-rendered empty form and bumping the matching
+     TOTAL_FORMS; removing a SAVED row ticks its DELETE box instead of pulling
+     it out of the DOM, so the formset indices stay intact.
+     ===================================================================== */
+  const ITEM_TOTAL = document.querySelector('input[name="items-TOTAL_FORMS"]');
+
+  // The tier template carries two placeholders: __prefix__ (which item) and,
+  // after this swap, __TIER__ (which slab).
+  const ITEM_TPL = document.getElementById('emptyItemTemplate').innerHTML;
+  const TIER_TPL = document.getElementById('emptyTierTemplate').innerHTML
+                     .replace(/-tiers-__prefix__/g, '-tiers-__TIER__');
+
+  let itemCount = document.querySelectorAll('#itemsContainer .item-card').length;
+
+  function tierTotalInput(card) {
+    return document.querySelector(
+      'input[name="items-' + card.dataset.formIndex + '-tiers-TOTAL_FORMS"]');
+  }
 
   // ---- Number helpers (Indian formatting) ----
   function fmt(n) {
@@ -686,9 +800,9 @@
   function recalcTotals() {
     let subTotal = 0;
 
-    document.querySelectorAll('#itemsContainer .item-card').forEach(card => {
+    document.querySelectorAll('#itemsContainer .item-card:not([hidden])').forEach(card => {
       let best = 0;
-      card.querySelectorAll('table.tiers tbody tr').forEach(row => {
+      card.querySelectorAll('table.tiers tbody tr:not([hidden])').forEach(row => {
         const inputs = row.querySelectorAll('input[type=number]');
         if (inputs.length >= 3) {
           const est = (parseFloat(inputs[1].value) || 0) * (parseFloat(inputs[2].value) || 0);
@@ -700,7 +814,7 @@
 
     // Tooling = additional-charges tooling + per-item tooling rows
     let tooling = val(document.getElementById('chargeTooling'));
-    document.querySelectorAll('#itemsContainer .tooling-row input').forEach(inp => {
+    document.querySelectorAll('#itemsContainer .item-card:not([hidden]) .tooling-row input').forEach(inp => {
       tooling += parseFloat(inp.value) || 0;
     });
 
@@ -722,143 +836,878 @@
   }
 
   // ---- Add pricing tier row ----
+  // Clones the empty PriceTier form and bumps this item's tier TOTAL_FORMS.
   function addTier(btn) {
+    const card  = btn.closest('.item-card');
     const tbody = btn.previousElementSibling.querySelector('tbody');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>
-        <div style="display:flex; gap:6px; align-items:center;">
-          <input type="number" placeholder="0" style="width:48%;" min="0">
-          <span style="color:var(--ink-soft);">–</span>
-          <input type="number" placeholder="0" style="width:48%;" min="0">
-        </div>
-      </td>
-      <td><input type="number" step="0.01" placeholder="0.00" class="tier-rate"></td>
-      <td><div class="est-amount">0.00</div></td>
-      <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-    `;
+    const total = tierTotalInput(card);
+    const index = total ? parseInt(total.value, 10) : tbody.rows.length;
+
+    const holder = document.createElement('tbody');
+    holder.innerHTML = TIER_TPL
+      .replace(/__prefix__/g, card.dataset.formIndex)
+      .replace(/__TIER__/g, index);
+    const tr = holder.querySelector('tr');
     tbody.appendChild(tr);
+    if (total) total.value = index + 1;
     recalcTotals();
   }
 
   // ---- Remove pricing tier row ----
+  // A saved slab is flagged for deletion; an unsaved one just goes away
+  // (leaving a gap in the indices is harmless — Django ignores blank forms).
   function removeTier(btn) {
     const row = btn.closest('tr');
     const tbody = row.closest('tbody');
-    if (tbody.rows.length > 1) {
+    if (tbody.querySelectorAll('tr:not([hidden])').length <= 1) return;
+
+    const pk = row.querySelector('input[name$="-id"]');
+    if (pk && pk.value) {
+      const flag = row.querySelector('.tier-delete');
+      if (flag) flag.value = 'on';
+      row.hidden = true;
+      row.querySelectorAll('input[type=number]').forEach(i => { i.value = ''; });
+    } else {
       row.remove();
-      recalcTotals();
     }
+    recalcTotals();
   }
 
   // ---- Remove item card ----
   function removeItem(btn) {
     const card = btn.closest('.item-card');
     const container = document.getElementById('itemsContainer');
-    if (container.children.length > 1) {
+    if (container.querySelectorAll('.item-card:not([hidden])').length <= 1) return;
+
+    const pk = card.querySelector('input[name="items-' + card.dataset.formIndex + '-id"]');
+    if (pk && pk.value) {
+      const flag = card.querySelector('.item-delete');
+      if (flag) flag.value = 'on';
+      card.hidden = true;
+      card.dataset.codeState = '';
+    } else {
       card.remove();
-      renumberItems();
-      recalcTotals();
     }
+    renumberItems();
+    recalcTotals();
   }
 
   // ---- Add new item card ----
+  // Clones the server-rendered empty item form (with its nested tier formset)
+  // and bumps items-TOTAL_FORMS so Django sees the extra line.
   function addItem() {
-    itemCount++;
     const container = document.getElementById('itemsContainer');
-    const div = document.createElement('div');
-    div.className = 'item-card';
-    div.dataset.item = itemCount;
-    div.innerHTML = `
-      <div class="item-header">
-        <div>
-          <h3>Item ${itemCount} | Chemical Etched Nameplate</h3>
-          <div class="artwork-ref">Artwork Ref: DWG-${String(itemCount).padStart(3,'0')}</div>
-        </div>
-        <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕ Remove</button>
-      </div>
+    const index = ITEM_TOTAL ? parseInt(ITEM_TOTAL.value, 10) : container.children.length;
 
-      <div class="spec-grid">
-        <div class="field">
-          <label>Material</label>
-          <select>
-            <option>SS 304</option><option>Brass</option><option>Aluminium</option><option>SS 316</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Size (mm) — L × W</label>
-          <input type="text" placeholder="e.g. 100 × 60">
-        </div>
-        <div class="field">
-          <label>Thickness (mm)</label>
-          <select>
-            <option>0.5</option><option>1.0</option><option>1.5</option><option>2.0</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Finish / Fill</label>
-          <select>
-            <option>Black Epoxy Filled</option><option>Anodized</option><option>Laminated, Clear Coat</option><option>Natural Finish</option>
-          </select>
-        </div>
-      </div>
+    const holder = document.createElement('div');
+    holder.innerHTML = ITEM_TPL.replace(/__prefix__/g, index);
+    const div = holder.querySelector('.item-card');
+    div.dataset.formIndex = index;
 
-      <div class="field">
-        <label>Artwork Ref / Description</label>
-        <input type="text" placeholder="e.g. DWG-${String(itemCount).padStart(3,'0')} or Description">
-      </div>
-
-      <div class="tier-section">
-        <div class="tier-label">Batch-wise Pricing (Slab)</div>
-        <table class="tiers">
-          <thead>
-            <tr>
-              <th style="width:28%">Batch Quantity (Nos.)</th>
-              <th style="width:22%">Rate / Unit</th>
-              <th style="width:28%">Est. Amount</th>
-              <th style="width:5%"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div style="display:flex; gap:6px; align-items:center;">
-                  <input type="number" placeholder="0" value="0" style="width:48%;" min="0">
-                  <span style="color:var(--ink-soft);">–</span>
-                  <input type="number" placeholder="100" style="width:48%;" min="0">
-                </div>
-              </td>
-              <td><input type="number" step="0.01" placeholder="0.00" class="tier-rate"></td>
-              <td><div class="est-amount">0.00</div></td>
-              <td><button type="button" class="btn-remove-tier" onclick="removeTier(this)">✕</button></td>
-            </tr>
-          </tbody>
-        </table>
-        <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
-      </div>
-
-      <div class="tooling-row">
-        <label>Tooling / Screen Charges (one-time)</label>
-        <input type="number" step="0.01" placeholder="0.00">
-      </div>
-    `;
     container.appendChild(div);
+    if (ITEM_TOTAL) ITEM_TOTAL.value = index + 1;
+    itemCount++;
+
+    renumberItems();
+    icScopeField(div.querySelector('.ic-field'), true);
     recalcTotals();
   }
 
   // ---- Renumber items after removal ----
   function renumberItems() {
-    document.querySelectorAll('.item-card').forEach((card, i) => {
+    document.querySelectorAll('#itemsContainer .item-card:not([hidden])').forEach((card, i) => {
       const num = i + 1;
       card.dataset.item = num;
       const h3 = card.querySelector('.item-header h3');
-      if (h3) h3.textContent = `Item ${num} | Chemical Etched Nameplate`;
-      const ref = card.querySelector('.artwork-ref');
-      if (ref) ref.textContent = `Artwork Ref: DWG-${String(num).padStart(3,'0')}`;
+      if (h3) h3.textContent = `Item ${num} | ${(h3.textContent.split('|')[1] || ' Chemical Etched Nameplate').trim()}`;
+    });
+    qaRefreshBanner();   // the banner names line items by number
+  }
+
+  /* =====================================================================
+     ITEM CODE TYPE-AHEAD — customer-scoped, auto-fills the spec grid
+     Keyed by the <option value> of #customerSelect.
+     ===================================================================== */
+
+  var CUSTOMER_NAMES = JSON.parse(document.getElementById("customer-names-data").textContent);
+
+  // The customer-scoped Item Code Master & Approved Rate Register, straight
+  // from masters.ItemCode:
+  //   approved: true  -> rate is LOCKED, auto-fills into the first pricing tier
+  //   approved: false -> submitted on `pendingQtn`, no approved rate yet
+  var ITEM_CODES = JSON.parse(document.getElementById("item-code-data").textContent);
+
+  function icCustomerId() {
+    var sel = document.getElementById('customerSelect');
+    return sel ? sel.value : '';
+  }
+  function icCustomerName() {
+    return CUSTOMER_NAMES[icCustomerId()] || '';
+  }
+  function icPossessive(name) {
+    if (!name) return 'this customer’s';
+    return /s$/i.test(name) ? name + '’' : name + '’s';
+  }
+  function icList() {
+    return ITEM_CODES[icCustomerId()] || [];
+  }
+  function icFind(code) {
+    var needle = (code || '').trim().toLowerCase();
+    if (!needle) return null;
+    var rows = icList();
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].code.toLowerCase() === needle) return rows[i];
+    }
+    return null;
+  }
+  function icSpecText(rec) {
+    return rec.material + ' · ' + rec.thickness + 'mm · ' + rec.size + ' · ' + rec.finish;
+  }
+
+  // ---- Fill one spec control and flash it ----
+  function icSetSelect(sel, value) {
+    if (!sel) return;
+    var hit = -1;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].text.trim().toLowerCase() === String(value).trim().toLowerCase()) {
+        hit = i; break;
+      }
+    }
+    if (hit === -1) {
+      var opt = document.createElement('option');
+      opt.text = value;
+      sel.add(opt);
+      hit = sel.options.length - 1;
+    }
+    sel.selectedIndex = hit;
+  }
+  function icFlash(el) {
+    if (!el) return;
+    el.classList.remove('spec-flash');
+    void el.offsetWidth;               // force reflow so the animation replays
+    el.classList.add('spec-flash');
+    setTimeout(function () { el.classList.remove('spec-flash'); }, 1400);
+  }
+
+  // ---- Auto-fill the whole spec grid of a card from a master record ----
+  function icApplySpec(card, rec, flash) {
+    if (!card || !rec) return;
+    var mat  = card.querySelector('.spec-material');
+    var size = card.querySelector('.spec-size');
+    var thk  = card.querySelector('.spec-thickness');
+    var fin  = card.querySelector('.spec-finish');
+
+    icSetSelect(mat, rec.material);
+    if (size) size.value = rec.size;
+    icSetSelect(thk, rec.thickness);
+    icSetSelect(fin, rec.finish);
+
+    if (flash) { [mat, size, thk, fin].forEach(icFlash); }
+  }
+
+  /* =====================================================================
+     APPROVED-RATE PLUMBING
+     An APPROVED code drops its locked rate into the first pricing tier and
+     is chipped "Approved rate". Editing that rate flips the line to
+     "needs Sales Manager re-approval".
+     ===================================================================== */
+
+  function qaFirstRateInput(card) {
+    return card ? card.querySelector('table.tiers tbody tr .tier-rate') : null;
+  }
+
+  // Recompute one tier row's Est. Amount (same maths as the global input handler)
+  function qaSyncTierRow(row) {
+    if (!row) return;
+    var inputs = row.querySelectorAll('input[type=number]');
+    if (inputs.length < 3) return;
+    var est = row.querySelector('.est-amount');
+    if (est) {
+      est.textContent = fmt((parseFloat(inputs[1].value) || 0) * (parseFloat(inputs[2].value) || 0));
+    }
+  }
+
+  // Small chip that sits beside the tier's Rate/Unit
+  function qaSetRateChip(card, kind, text) {
+    var rateIn = qaFirstRateInput(card);
+    if (!rateIn) return;
+    var cell = rateIn.closest('td');
+    if (!cell) return;
+    var chip = cell.querySelector('.rate-chip');
+    if (!kind) { if (chip) chip.remove(); return; }
+    if (!chip) {
+      chip = document.createElement('div');
+      cell.appendChild(chip);
+    }
+    chip.className = 'rate-chip ' + kind;
+    chip.textContent = text;
+  }
+
+  // Amber flag surfaced on the line item itself
+  function qaSetFlag(card, html) {
+    if (!card) return;
+    var flag = card.querySelector('.item-flag');
+    if (!html) { if (flag) flag.remove(); return; }
+    if (!flag) {
+      flag = document.createElement('div');
+      flag.className = 'item-flag';
+      var header = card.querySelector('.item-header');
+      if (header && header.nextSibling) {
+        card.insertBefore(flag, header.nextSibling);
+      } else {
+        card.appendChild(flag);
+      }
+    }
+    flag.innerHTML = html;
+  }
+
+  // Per-card approval state: '' | approved | pending | new | revised
+  function qaSetState(card, state, label) {
+    if (!card) return;
+    card.dataset.codeState = state || '';
+    card.dataset.codeLabel = label || '';
+    qaRefreshBanner();
+  }
+
+  function qaClearApproved(card) {
+    if (!card) return;
+    delete card.dataset.approvedRate;
+    delete card.dataset.approvedCode;
+    qaSetRateChip(card, null);
+    qaSetFlag(card, null);
+  }
+
+  // Push an approved rate into the first tier
+  function qaApplyRate(card, rec, flash) {
+    var rateIn = qaFirstRateInput(card);
+    if (!rateIn) return;
+    rateIn.value = rec.rate.toFixed(2);
+    qaSyncTierRow(rateIn.closest('tr'));
+    if (flash) icFlash(rateIn);
+    card.dataset.approvedRate = rec.rate.toFixed(2);
+    card.dataset.approvedCode = rec.code;
+    qaSetRateChip(card, 'ok', 'Approved rate');
+    qaSetFlag(card, null);
+    recalcTotals();
+  }
+
+  // Rule 4 — changing a locked rate sends the code back for re-approval
+  function qaCheckRateEdit(rateIn) {
+    var card = rateIn.closest('.item-card');
+    if (!card || !card.dataset.approvedRate) return;
+    if (qaFirstRateInput(card) !== rateIn) return;      // only the locked tier matters
+
+    var approved = parseFloat(card.dataset.approvedRate) || 0;
+    var code     = card.dataset.approvedCode || 'This code';
+    var now      = parseFloat(rateIn.value);
+
+    if (!isNaN(now) && Math.abs(now - approved) < 0.005) {
+      qaSetRateChip(card, 'ok', 'Approved rate');
+      qaSetFlag(card, null);
+      qaSetState(card, 'approved', '');
+    } else {
+      qaSetRateChip(card, 'warn', 'Rate revised — needs Sales Manager re-approval');
+      qaSetFlag(card,
+        '⚠ <b>' + code + '</b> — approved rate ' + money(approved) + ' changed to ' +
+        money(isNaN(now) ? 0 : now) +
+        '. This item code goes back for <b>Sales Manager re-approval</b> with this quotation.');
+      qaSetState(card, 'revised',
+        code + ' — rate revised ' + money(approved) + ' → ' + money(isNaN(now) ? 0 : now));
+    }
+  }
+
+  // ---- Live banner above the line items ----
+  function qaRefreshBanner() {
+    var banner = document.getElementById('approvalBanner');
+    if (!banner) return;
+
+    var labels = [];
+    document.querySelectorAll('#itemsContainer .item-card').forEach(function (c) {
+      var st = c.dataset.codeState || '';
+      if (st === 'new' || st === 'pending' || st === 'revised') {
+        labels.push('Item ' + (c.dataset.item || '?') + ': ' + (c.dataset.codeLabel || ''));
+      }
+    });
+
+    if (!labels.length) {
+      banner.className = 'approval-banner';
+      banner.innerHTML = '';
+      return;
+    }
+
+    banner.className = 'approval-banner show';
+    banner.innerHTML = '';
+
+    var title = document.createElement('div');
+    title.className = 'ab-title';
+    title.textContent = '⚠ ' + labels.length + ' item code' + (labels.length === 1 ? '' : 's') +
+      ' on this quotation need' + (labels.length === 1 ? 's' : '') + ' Sales Manager approval.';
+    banner.appendChild(title);
+
+    var list = document.createElement('span');
+    list.className = 'ab-list';
+    labels.forEach(function (l, i) {
+      if (i) list.appendChild(document.createElement('br'));
+      list.appendChild(document.createTextNode('• ' + l));
+    });
+    banner.appendChild(list);
+
+    var foot = document.createElement('span');
+    foot.className = 'ab-foot';
+    foot.textContent = 'Their rates lock into the customer’s master only once the Sales Manager approves this quotation.';
+    banner.appendChild(foot);
+  }
+
+  // ---- Status line under the field ----
+  function icSetStatus(field, kind, html) {
+    var box = field.querySelector('.ic-status');
+    if (!box) return;
+    if (!kind) { box.className = 'ic-status'; box.innerHTML = ''; return; }
+    box.className = 'ic-status show ' + kind;
+    box.innerHTML = html;
+  }
+
+  // ---- "That code belongs to another customer" warning ----
+  // Re-rendered (not frozen) so it always names the CURRENT customer, even while
+  // the customer type-ahead is still being typed.
+  function icWarnStale(field) {
+    icSetStatus(field, 'warn',
+      '⚠ ' + (field.dataset.clearedCode || 'That code') + ' belongs to another customer — cleared. ' +
+      'Pick a code from ' + icPossessive(icCustomerName()) + ' master.');
+  }
+
+  // ---- Evaluate the typed value: existing code / new code / empty ----
+  function icEvaluate(field, allowFlash) {
+    var input = field.querySelector('.ic-input');
+    var card  = field.closest('.item-card');
+    var value = (input.value || '').trim();
+    var custId = icCustomerId();
+
+    if (!custId) {
+      input.dataset.matched = '';
+      qaClearApproved(card);
+      qaSetState(card, '', '');
+      icSetStatus(field, 'muted', 'Select a customer first — item codes are scoped per customer.');
+      return;
+    }
+    if (!value) {
+      input.dataset.matched = '';
+      qaClearApproved(card);
+      qaSetState(card, '', '');
+      // A "belongs to another customer — cleared" warning stays up while the field
+      // is empty, so it survives the id going 1 -> (none) -> new -> 4 as the
+      // salesperson free-types the next customer name.
+      if (field.dataset.stickyWarn === '1') { icWarnStale(field); }
+      else { icSetStatus(field, '', ''); }
+      return;
+    }
+    field.dataset.stickyWarn = '';
+
+    var rec = icFind(value);
+    if (rec) {
+      var changed = (input.dataset.matched || '').toLowerCase() !== rec.code.toLowerCase();
+      input.dataset.matched = rec.code;
+
+      if (rec.approved) {
+        // ---- Rule 3: spec AND the locked rate come back automatically ----
+        icSetStatus(field, 'ok',
+          '✓ Approved code — ' + rec.desc +
+          ' <span class="s-meta">· approved rate ' + money(rec.rate) +
+          ' (via ' + rec.qtn + ', ' + rec.approvedOn + ')' +
+          ' · ' + rec.orders + ' previous order' + (rec.orders === 1 ? '' : 's') + '</span>' +
+          (rec.active ? '' : '<br><span class="s-meta">(marked inactive in the master — it will be reactivated on save)</span>'));
+
+        if (changed) {
+          icApplySpec(card, rec, allowFlash !== false);
+          qaApplyRate(card, rec, allowFlash !== false);
+          qaSetState(card, 'approved', '');
+        }
+      } else {
+        // ---- Rule 1/2: known code, still waiting on its first approval ----
+        icSetStatus(field, 'new',
+          '⏳ Awaiting approval — this code was submitted on ' + rec.pendingQtn +
+          ' and has no approved rate yet. Enter a rate; it will be approved with this quotation.' +
+          ' <span class="s-meta">· spec below is already on file</span>');
+
+        if (changed) { icApplySpec(card, rec, allowFlash !== false); }
+        qaClearApproved(card);
+        qaSetState(card, 'pending', rec.code + ' — awaiting approval on ' + rec.pendingQtn);
+      }
+    } else {
+      input.dataset.matched = '';
+      qaClearApproved(card);
+      icSetStatus(field, 'new',
+        '+ New item code — will be added to ' + icPossessive(icCustomerName()) +
+        ' master on save <span class="s-meta">· fill the spec above manually</span>' +
+        '<br><span class="s-meta">This code and its rate will be approved by the Sales Manager ' +
+        'along with this quotation.</span>');
+      qaSetState(card, 'new', value + ' — new code, rate to be approved');
+    }
+  }
+
+  // ---- Build / show the suggestion dropdown ----
+  function icRenderSuggest(field, forceAll) {
+    var input = field.querySelector('.ic-input');
+    var box   = field.querySelector('.ic-suggest');
+    var q     = (input.value || '').trim().toLowerCase();
+    box.innerHTML = '';
+
+    if (!icCustomerId()) { box.classList.remove('show'); return; }
+
+    var rows = icList().filter(function (r) {
+      if (!q || forceAll === true) return true;
+      return r.code.toLowerCase().indexOf(q) !== -1 ||
+             r.desc.toLowerCase().indexOf(q) !== -1;
+    });
+
+    if (!rows.length) {
+      var none = document.createElement('div');
+      none.className = 'ic-none';
+      none.textContent = icList().length
+        ? 'No match in ' + icPossessive(icCustomerName()) + ' master — it will be created as a new code.'
+        : icCustomerName() + ' has no item codes yet — whatever you type becomes their first one.';
+      box.appendChild(none);
+      box.classList.add('show');
+      return;
+    }
+
+    rows.forEach(function (r) {
+      var opt = document.createElement('div');
+      opt.className = 'ic-opt' + (r.active ? '' : ' inactive');
+      opt.dataset.code = r.code;
+
+      var head = document.createElement('div');
+      var c = document.createElement('span');
+      c.className = 'o-code';
+      c.textContent = r.code;
+      head.appendChild(c);
+
+      var d = document.createElement('span');
+      d.className = 'o-desc';
+      d.textContent = r.desc;
+      head.appendChild(d);
+
+      if (!r.active) {
+        var tag = document.createElement('span');
+        tag.className = 'o-inactive';
+        tag.textContent = 'Inactive';
+        head.appendChild(tag);
+      }
+
+      var rateTag = document.createElement('span');
+      if (r.approved) {
+        rateTag.className = 'o-rate';
+        rateTag.textContent = money(r.rate);
+      } else {
+        rateTag.className = 'o-rate none';
+        rateTag.textContent = 'rate pending';
+      }
+      head.appendChild(rateTag);
+
+      if (!r.approved) {
+        var ptag = document.createElement('span');
+        ptag.className = 'o-pending';
+        ptag.textContent = 'Pending approval';
+        head.appendChild(ptag);
+      }
+
+      var s = document.createElement('div');
+      s.className = 'o-spec';
+      s.textContent = icSpecText(r) + '  ·  ' +
+        (r.approved
+          ? (r.orders + ' orders · last ' + r.last)
+          : ('submitted on ' + r.pendingQtn + ' · no approved rate yet'));
+
+      opt.appendChild(head);
+      opt.appendChild(s);
+      box.appendChild(opt);
+    });
+
+    box.classList.add('show');
+  }
+
+  function icCloseAll(except) {
+    document.querySelectorAll('#itemsContainer .ic-suggest.show').forEach(function (b) {
+      if (b !== except) b.classList.remove('show');
     });
   }
 
-  // ---- Initial paint of the totals block ----
-  document.addEventListener('DOMContentLoaded', recalcTotals);
+  // ---- Re-scope a field to the currently selected customer ----
+  function icScopeField(field, silent) {
+    if (!field) return;
+    var input = field.querySelector('.ic-input');
+    var box   = field.querySelector('.ic-suggest');
+    if (!input) return;
+    box.classList.remove('show');
+
+    var custId = icCustomerId();
+    if (!custId) {
+      input.disabled = true;
+      input.placeholder = 'Select a customer first';
+      // NOTE: dataset.matched is deliberately kept — the customer type-ahead
+      // momentarily passes through "no customer" while the name is being retyped,
+      // and the stale-code check below still has to fire afterwards.
+      icSetStatus(field, 'muted', 'Select a customer first — item codes are scoped per customer.');
+      return;
+    }
+
+    input.disabled = false;
+    input.placeholder = 'Type an item code…';
+
+    var typed  = (input.value || '').trim();
+    var wasFor = input.dataset.matched || '';
+
+    // A code that was picked from the OLD customer's master is not valid here.
+    if (typed && wasFor && !icFind(typed)) {
+      input.value = '';
+      input.dataset.matched = '';
+      field.dataset.stickyWarn = '1';
+      field.dataset.clearedCode = typed;
+      var staleCard = field.closest('.item-card');
+      qaClearApproved(staleCard);
+      qaSetState(staleCard, '', '');
+      icWarnStale(field);
+      return;
+    }
+    icEvaluate(field, silent !== true);
+  }
+
+  function icScopeAll(silent) {
+    document.querySelectorAll('#itemsContainer .ic-field').forEach(function (f) {
+      icScopeField(f, silent);
+    });
+  }
+
+  // ---- Event delegation on the items container (works for added items) ----
+  var itemsContainer = document.getElementById('itemsContainer');
+
+  itemsContainer.addEventListener('input', function (e) {
+    var input = e.target.closest('.ic-input');
+    if (input) {
+      var field = input.closest('.ic-field');
+      icRenderSuggest(field);
+      icCloseAll(field.querySelector('.ic-suggest'));
+      icEvaluate(field, true);
+      return;
+    }
+    // Rule 4 — the salesperson edited a locked, approved rate
+    var rateIn = e.target.closest('.tier-rate');
+    if (rateIn) { qaCheckRateEdit(rateIn); }
+  });
+
+  itemsContainer.addEventListener('focusin', function (e) {
+    var input = e.target.closest('.ic-input');
+    if (!input || input.disabled) return;
+    var field = input.closest('.ic-field');
+    var typed = (input.value || '').trim();
+    // empty, or already an exact code -> offer the customer's whole master
+    icRenderSuggest(field, !typed || !!icFind(typed));
+    icCloseAll(field.querySelector('.ic-suggest'));
+  });
+
+  // mousedown (not click) so the pick lands before any blur handling
+  itemsContainer.addEventListener('mousedown', function (e) {
+    var opt = e.target.closest('.ic-opt');
+    if (!opt) return;
+    e.preventDefault();
+    var field = opt.closest('.ic-field');
+    var input = field.querySelector('.ic-input');
+    input.value = opt.dataset.code;
+    input.dataset.matched = '';          // force the spec auto-fill + flash
+    field.querySelector('.ic-suggest').classList.remove('show');
+    icEvaluate(field, true);
+    input.focus();
+  });
+
+  itemsContainer.addEventListener('keydown', function (e) {
+    var input = e.target.closest('.ic-input');
+    if (!input) return;
+    var field = input.closest('.ic-field');
+    var box   = field.querySelector('.ic-suggest');
+    var opts  = Array.prototype.slice.call(box.querySelectorAll('.ic-opt'));
+
+    if (e.key === 'Escape') { box.classList.remove('show'); return; }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!box.classList.contains('show')) { icRenderSuggest(field, true); }
+      opts = Array.prototype.slice.call(box.querySelectorAll('.ic-opt'));
+      if (!opts.length) return;
+      e.preventDefault();
+      var cur = opts.indexOf(box.querySelector('.ic-opt.hi'));
+      var next = e.key === 'ArrowDown'
+        ? (cur + 1) % opts.length
+        : (cur <= 0 ? opts.length - 1 : cur - 1);
+      opts.forEach(function (o) { o.classList.remove('hi'); });
+      opts[next].classList.add('hi');
+      opts[next].scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      var hi = box.querySelector('.ic-opt.hi');
+      e.preventDefault();                       // never submit the form from here
+      if (hi && box.classList.contains('show')) {
+        input.value = hi.dataset.code;
+        input.dataset.matched = '';
+        box.classList.remove('show');
+        icEvaluate(field, true);
+      } else {
+        box.classList.remove('show');
+        icEvaluate(field, true);
+      }
+    }
+  });
+
+  // Close any open dropdown when clicking elsewhere
+  document.addEventListener('click', function (e) {
+    document.querySelectorAll('#itemsContainer .ic-suggest.show').forEach(function (b) {
+      if (!b.parentElement.contains(e.target)) b.classList.remove('show');
+    });
+  });
+
+  // ---- Changing the customer re-scopes every line item immediately ----
+  // #customerSelect is now a HIDDEN INPUT holding the customer id. The customer
+  // type-ahead below fires a 'change' event on it whenever the id changes.
+  var custSelect = document.getElementById('customerSelect');
+  if (custSelect) {
+    custSelect.addEventListener('change', function () { icScopeAll(false); });
+  }
+
+  /* =====================================================================
+     CUSTOMER TYPE-AHEAD — master lookup + add-on-the-spot
+     Writes the chosen id into the hidden #customerSelect and fires 'change',
+     so the customer-scoped item-code type-ahead above re-scopes itself.
+     ===================================================================== */
+
+  var NEW_CUSTOMER_ID = 'new';
+
+  // Serialised from masters.Customer by the view (json_script above).
+  var CUSTOMER_MASTER = JSON.parse(document.getElementById("customer-master-data").textContent);
+
+  var cuInput   = document.getElementById('customerInput');
+  var cuSuggest = document.getElementById('customerSuggest');
+  var cuStatus  = document.getElementById('customerStatus');
+  var cuHidden  = document.getElementById('customerSelect');
+
+  var BILL_FIELDS = [
+    ['billAddress', 'address'],
+    ['billGstin',   'gstin'],
+    ['billContact', 'contact'],
+    ['billPhone',   'phone'],
+    ['billEmail',   'email'],
+    ['billCredit',  'credit']
+  ];
+
+  function cuFind(name) {
+    var needle = (name || '').trim().toLowerCase();
+    if (!needle) return null;
+    for (var i = 0; i < CUSTOMER_MASTER.length; i++) {
+      if (CUSTOMER_MASTER[i].name.toLowerCase() === needle) return CUSTOMER_MASTER[i];
+    }
+    return null;
+  }
+
+  function cuSetStatus(kind, html) {
+    if (!cuStatus) return;
+    if (!kind) { cuStatus.className = 'cu-status'; cuStatus.innerHTML = ''; return; }
+    cuStatus.className = 'cu-status show ' + kind;
+    cuStatus.innerHTML = html;
+  }
+
+  // ---- Bill To auto-fill (THE BUG FIX) ----
+  function cuFillBill(rec, flash) {
+    BILL_FIELDS.forEach(function (pair) {
+      var el = document.getElementById(pair[0]);
+      if (!el) return;
+      el.value = rec[pair[1]] || '';
+      if (flash) icFlash(el);          // same green flash as the item-code autofill
+    });
+  }
+  function cuClearBill() {
+    BILL_FIELDS.forEach(function (pair) {
+      var el = document.getElementById(pair[0]);
+      if (el) el.value = '';
+    });
+  }
+
+  // ---- Push the selected id into the hidden input + notify the item-code code ----
+  function cuSetCustomer(id, name) {
+    if (!cuHidden) return;
+    var prev = cuHidden.value;
+    if (id === NEW_CUSTOMER_ID) {
+      CUSTOMER_NAMES[NEW_CUSTOMER_ID] = name || '';   // so messages name the new customer
+    }
+    cuHidden.value = id;
+    if (prev !== id) {
+      cuHidden.dispatchEvent(new Event('change'));    // -> icScopeAll(false)
+    } else if (id === NEW_CUSTOMER_ID) {
+      cuRefreshItemMessages();                        // name changed, id did not
+    }
+  }
+
+  // Re-word the item-code messages (without clearing anything) while the
+  // salesperson is still typing a brand-new customer name.
+  function cuRefreshItemMessages() {
+    document.querySelectorAll('#itemsContainer .ic-field').forEach(function (f) {
+      icEvaluate(f, false);
+    });
+  }
+
+  function cuQuotesText(n) {
+    if (!n) return 'no previous quotations';
+    return n + ' previous quotation' + (n === 1 ? '' : 's');
+  }
+
+  // ---- Evaluate what is typed: exact master hit / new customer / empty ----
+  function cuEvaluate(flash, force) {
+    if (!cuInput) return;
+    var typed = (cuInput.value || '').trim();
+
+    if (!typed) {
+      cuSetStatus('muted', 'Pick a customer from the master, or type a new name to create one.');
+      cuSetCustomer('', '');
+      return;
+    }
+
+    var rec = cuFind(typed);
+    if (rec) {
+      var changed = cuHidden.value !== rec.id;
+      cuSetStatus('ok',
+        '✓ Existing customer — ' + rec.city +
+        ' <span class="s-meta">· ' + cuQuotesText(rec.quotes) +
+        ' · credit limit ₹' + rec.credit + '</span>');
+      cuSetCustomer(rec.id, rec.name);
+      if (changed || force === true) cuFillBill(rec, flash !== false);
+    } else {
+      var wasNew = cuHidden.value === NEW_CUSTOMER_ID;
+      cuSetStatus('new',
+        '+ New customer — will be added to the customer master on save' +
+        ' <span class="s-meta">· fill the Bill To details below</span>');
+      if (!wasNew) cuClearBill();
+      cuSetCustomer(NEW_CUSTOMER_ID, typed);
+    }
+  }
+
+  // ---- Suggestion dropdown ----
+  function cuRenderSuggest(forceAll) {
+    if (!cuSuggest) return;
+    var q = (cuInput.value || '').trim().toLowerCase();
+    cuSuggest.innerHTML = '';
+
+    var rows = CUSTOMER_MASTER.filter(function (c) {
+      if (!q || forceAll === true) return true;
+      return c.name.toLowerCase().indexOf(q) !== -1 ||
+             c.city.toLowerCase().indexOf(q) !== -1 ||
+             c.gstin.toLowerCase().indexOf(q) !== -1;
+    });
+
+    if (!rows.length) {
+      var none = document.createElement('div');
+      none.className = 'cu-none';
+      none.textContent = 'No customer matches “' + (cuInput.value || '').trim() +
+        '” — it will be added to the customer master on save.';
+      cuSuggest.appendChild(none);
+      cuSuggest.classList.add('show');
+      return;
+    }
+
+    rows.forEach(function (c) {
+      var opt = document.createElement('div');
+      opt.className = 'cu-opt';
+      opt.dataset.name = c.name;
+
+      var n = document.createElement('div');
+      n.className = 'o-name';
+      n.textContent = c.name;
+
+      var m = document.createElement('div');
+      m.className = 'o-meta';
+      var g = document.createElement('b');
+      g.textContent = c.gstin;
+      m.appendChild(document.createTextNode(c.city + '  ·  '));
+      m.appendChild(g);
+      m.appendChild(document.createTextNode('  ·  ' + cuQuotesText(c.quotes)));
+
+      opt.appendChild(n);
+      opt.appendChild(m);
+      cuSuggest.appendChild(opt);
+    });
+
+    cuSuggest.classList.add('show');
+  }
+
+  function cuClose() { if (cuSuggest) cuSuggest.classList.remove('show'); }
+
+  function cuPick(name) {
+    cuInput.value = name;
+    cuClose();
+    cuEvaluate(true, true);       // force the fill + flash even if the id is unchanged
+    cuInput.focus();
+  }
+
+  if (cuInput) {
+    cuInput.addEventListener('input', function () {
+      cuRenderSuggest();
+      cuEvaluate(true, false);
+    });
+
+    cuInput.addEventListener('focus', function () {
+      var typed = (cuInput.value || '').trim();
+      cuRenderSuggest(!typed || !!cuFind(typed));
+    });
+
+    // mousedown (not click) so the pick lands before blur
+    cuSuggest.addEventListener('mousedown', function (e) {
+      var opt = e.target.closest('.cu-opt');
+      if (!opt) return;
+      e.preventDefault();
+      cuPick(opt.dataset.name);
+    });
+
+    cuInput.addEventListener('keydown', function (e) {
+      var opts = Array.prototype.slice.call(cuSuggest.querySelectorAll('.cu-opt'));
+
+      if (e.key === 'Escape') { cuClose(); return; }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!cuSuggest.classList.contains('show')) { cuRenderSuggest(true); }
+        opts = Array.prototype.slice.call(cuSuggest.querySelectorAll('.cu-opt'));
+        if (!opts.length) return;
+        e.preventDefault();
+        var cur  = opts.indexOf(cuSuggest.querySelector('.cu-opt.hi'));
+        var next = e.key === 'ArrowDown'
+          ? (cur + 1) % opts.length
+          : (cur <= 0 ? opts.length - 1 : cur - 1);
+        opts.forEach(function (o) { o.classList.remove('hi'); });
+        opts[next].classList.add('hi');
+        opts[next].scrollIntoView({ block: 'nearest' });
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();                       // never submit the form from here
+        var hi = cuSuggest.querySelector('.cu-opt.hi');
+        if (hi && cuSuggest.classList.contains('show')) {
+          cuPick(hi.dataset.name);
+        } else {
+          cuClose();
+          cuEvaluate(true, false);
+        }
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!cuSuggest.parentElement.contains(e.target)) cuClose();
+    });
+  }
+
+  // ---- Initial paint of the totals block + customer + item code fields ----
+  document.addEventListener('DOMContentLoaded', function () {
+    recalcTotals();
+    cuEvaluate(false, false);   // paints the green "existing customer" line, no flash
+    icScopeAll(true);           // silent: no flash on first paint
+    qaRefreshBanner();          // and the "needs approval" banner
+    recalcTotals();             // approved-rate autofill may have moved the Grand Total
+  });
 </script>
 {% endblock %}

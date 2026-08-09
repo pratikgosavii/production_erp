@@ -6,8 +6,8 @@
 
 {% block topbar_right %}
 <div class="user-info">
-  <span class="role-tag">Sales Manager</span>
-  <span class="name">Rahul Deshmukh</span>
+  <span class="role-tag">{{ role_label }}</span>
+  <span class="name">{{ user_name }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -16,7 +16,7 @@
 <style>
   /* Summary strip */
   .summary-strip {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
     background: var(--line); border-bottom: 1px solid var(--line); margin: -24px -28px 24px;
   }
   .summary-strip .cell {
@@ -33,6 +33,51 @@
   .summary-strip .cell.high .n { color: var(--red); }
   .summary-strip .cell.resub .n { color: var(--blue); }
   .summary-strip .cell.avg .n { color: var(--steel); font-size: 19px; }
+  .summary-strip .cell.codes .n { color: var(--amber); }
+
+  /* ---- Item-code approval flagging ---- */
+  .code-badge {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: 3px; display: inline-block; white-space: nowrap;
+  }
+  .code-badge.new     { background: var(--amber-bg); color: var(--amber); }
+  .code-badge.revised { background: var(--amber-bg); color: var(--amber); }
+  .code-badge.ok      { background: var(--green-bg); color: var(--green); }
+  .ic-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; color: var(--steel); }
+
+  /* Short note that sits directly above the Approve button */
+  .approve-note {
+    font-size: 10.5px; line-height: 1.5; font-weight: 600;
+    background: var(--amber-bg); color: var(--amber);
+    border-left: 3px solid var(--amber); border-radius: 0 3px 3px 0;
+    padding: 7px 9px; margin-bottom: 8px;
+  }
+
+  /* Panel inside the detail row listing exactly what gets locked in */
+  .code-panel {
+    border: 1px solid var(--amber); border-radius: 3px;
+    background: var(--amber-bg); padding: 12px 14px; margin-bottom: 14px;
+  }
+  .code-panel .cp-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--amber); margin-bottom: 9px;
+  }
+  .code-panel table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .code-panel th {
+    text-align: left; padding: 6px 10px; font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft); font-weight: 600;
+    background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .code-panel td { padding: 7px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .code-panel tr:last-child td { border-bottom: none; }
+  .code-panel .cp-rate { font-family: 'IBM Plex Mono'; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .code-panel .cp-old {
+    font-family: 'IBM Plex Mono'; color: var(--ink-soft);
+    text-decoration: line-through; font-weight: 400;
+  }
+  .code-panel .cp-foot {
+    font-size: 10.5px; color: var(--amber); font-style: italic; margin-top: 9px; line-height: 1.5;
+  }
 
   /* Page header */
   .page-head {
@@ -48,7 +93,9 @@
   .chip {
     padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
     font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer;
+    text-decoration: none; display: inline-block;
   }
+  .chip:hover { text-decoration: none; }
   .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
 
   /* Table */
@@ -202,19 +249,28 @@
 {% block content %}
 <!-- Summary Strip -->
 <div class="summary-strip">
-  <div class="cell pending"><div class="n">4</div><div class="l">Pending approval</div></div>
-  <div class="cell high"><div class="n">1</div><div class="l">High value (>₹50K)</div></div>
-  <div class="cell resub"><div class="n">2</div><div class="l">Resubmitted (v2+)</div></div>
-  <div class="cell avg"><div class="n">2.1 days</div><div class="l">Avg. days pending</div></div>
+  <div class="cell pending"><div class="n">{{ count_all }}</div><div class="l">Pending approval</div></div>
+  <div class="cell high"><div class="n">{{ count_high }}</div><div class="l">High value (&gt;₹50K)</div></div>
+  <div class="cell resub"><div class="n">{{ count_resubmitted }}</div><div class="l">Resubmitted (v2+)</div></div>
+  <div class="cell codes"><div class="n">{{ count_codes }}</div><div class="l">Carrying unapproved item codes</div></div>
+  <div class="cell avg"><div class="n">{{ avg_days }} days</div><div class="l">Avg. days pending</div></div>
 </div>
 
 <div class="page-head">
   <h1>Quotation Approval Queue</h1>
   <div class="toolbar">
-    <input type="text" placeholder="Search customer / quotation no...">
-    <span class="chip active">All (4)</span>
-    <span class="chip">High Value (1)</span>
-    <span class="chip">Resubmitted (2)</span>
+    <form method="get" action="{% url 'sales:manager_approvals' %}" style="display:contents">
+      <input type="text" name="q" value="{{ search }}" placeholder="Search customer / quotation no...">
+      <input type="hidden" name="filter" value="{{ active_filter }}">
+    </form>
+    <a href="?filter=all{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'all' %}active{% endif %}">All ({{ count_all }})</a>
+    <a href="?filter=high{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'high' %}active{% endif %}">High Value ({{ count_high }})</a>
+    <a href="?filter=resubmitted{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'resubmitted' %}active{% endif %}">Resubmitted ({{ count_resubmitted }})</a>
+    <a href="?filter=codes{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'codes' %}active{% endif %}">Unapproved item codes ({{ count_codes }})</a>
   </div>
 </div>
 
@@ -225,341 +281,187 @@
       <th style="width:9%">QTN No.</th>
       <th style="width:13%">Customer</th>
       <th style="width:8%">Sales Person</th>
-      <th style="width:13%">Material / Spec</th>
-      <th style="width:6%">Qty</th>
+      <th style="width:11%">Material / Spec</th>
+      <th style="width:5%">Qty</th>
       <th style="width:9%">Rate / Unit</th>
-      <th style="width:10%">Grand Total</th>
-      <th style="width:8%">Submitted</th>
-      <th style="width:7%">Pending</th>
-      <th style="width:17%">Action</th>
+      <th style="width:9%">Grand Total</th>
+      <th style="width:7%">Submitted</th>
+      <th style="width:6%">Pending</th>
+      <th style="width:23%">Action</th>
     </tr>
   </thead>
   <tbody>
-
-    <!-- Row 1: Resubmitted v2 -->
-    <tr id="row-0417">
+  {% for q in quotations %}
+    <tr id="row-{{ q.pk }}">
       <td>
-        <div class="qno">QTN-0417<div class="ver">v2 (resubmitted)</div></div>
+        <div class="qno">{{ q.number }}<div class="ver">v{{ q.version }}{% if q.supersedes %} (resubmitted){% endif %}</div></div>
       </td>
       <td>
-        <div class="cust">Veeransh Fabricators<div class="sub">New Customer</div></div>
+        <div class="cust">{{ q.customer.name }}<div class="sub">{{ q.get_order_type_display }} Customer</div></div>
       </td>
-      <td style="font-size:12px;">Arjun P.</td>
-      <td>SS304 · 2mm · 150×110mm</td>
-      <td>7 Nos</td>
+      <td style="font-size:12px;">{{ q.salesperson.short_name }}</td>
+      <td>{{ q.spec_display }}</td>
+      <td>{{ q.total_qty }} Nos</td>
       <td>
-        <span class="rate">₹145.00</span>
-        <span class="rate-sub">slab ₹120–145</span>
+        <span class="rate">₹{{ q.headline_rate|floatformat:2 }}</span>
+        {% if q.slab_low and q.slab_high and q.slab_low != q.slab_high %}
+        <span class="rate-sub">slab ₹{{ q.slab_low|floatformat:0 }}–{{ q.slab_high|floatformat:0 }}</span>
+        {% endif %}
       </td>
-      <td><span class="amt">₹9,676</span></td>
-      <td style="font-size:11.5px;">05 Aug 2026</td>
+      <td><span class="amt">₹{{ q.amount_display }}</span></td>
+      <td style="font-size:11.5px;">{{ q.submitted_at|date:'d M Y'|default:'—' }}</td>
       <td>
-        <span class="days-pending warn">3d</span>
+        <span class="days-pending {% if q.pending_days >= 3 %}warn{% else %}ok{% endif %}">{{ q.pending_days }}d</span>
         <span class="days-label">pending</span>
       </td>
       <td>
+        {% if q.code_rows %}
+        <div class="approve-note">
+          ⚠ Approving this quotation also
+          {% if q.new_codes %}approves <b>{{ q.new_codes }} new item code{{ q.new_codes|pluralize }}</b>{% endif %}
+          {% if q.new_codes and q.revised_codes %} and {% endif %}
+          {% if q.revised_codes %}locks a <b>revised rate</b> for {{ q.revised_codes }} item code{{ q.revised_codes|pluralize }}{% endif %}
+          into {{ q.customer.name }}'s master.
+        </div>
+        {% endif %}
+
         <div class="action-group">
-          <button class="btn-approve" onclick="approveQuote('QTN-0417')">✓ Approve</button>
-          <button class="btn-reject" onclick="toggleReject('0417')">✕ Reject</button>
-          <button class="btn-revise" onclick="toggleRevise('0417')">↺ Request Revision</button>
+          <form method="post" action="{% url 'sales:quotation_approve' q.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-approve"
+                    onclick="return confirm('Approve {{ q.number }} — {{ q.customer.name }}?{% if q.code_rows %}\n\nThis also locks {{ q.code_rows|length }} item code rate(s) into the customer master.{% endif %}')">✓ Approve</button>
+          </form>
+          <button type="button" class="btn-reject" onclick="toggleReject('{{ q.pk }}')">✕ Reject</button>
+          <button type="button" class="btn-revise" onclick="toggleRevise('{{ q.pk }}')">↺ Request Revision</button>
         </div>
-        <button class="btn-view-details" onclick="toggleDetail('0417')">View line items ▾</button>
-        <div class="reject-form" id="reject-0417">
+        <button type="button" class="btn-view-details" onclick="toggleDetail('{{ q.pk }}')">View line items ▾</button>
+
+        <form method="post" action="{% url 'sales:quotation_reject' q.pk %}" class="reject-form" id="reject-{{ q.pk }}">
+          {% csrf_token %}
           <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
-          <textarea placeholder="e.g. Margin too low — revise rate to ₹XX per unit"></textarea>
+          <textarea name="comment" required placeholder="e.g. Margin too low — revise rate to ₹XX per unit"></textarea>
           <div class="rf-actions">
-            <button class="btn-confirm-reject">Reject & Send Back</button>
-            <button class="btn-cancel-reject" onclick="toggleReject('0417')">Cancel</button>
+            <button type="submit" class="btn-confirm-reject">Reject &amp; Send Back</button>
+            <button type="button" class="btn-cancel-reject" onclick="toggleReject('{{ q.pk }}')">Cancel</button>
           </div>
-        </div>
-        <div class="revise-form" id="revise-0417">
+        </form>
+
+        <form method="post" action="{% url 'sales:quotation_request_revision' q.pk %}" class="revise-form" id="revise-{{ q.pk }}">
+          {% csrf_token %}
           <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
-          <textarea placeholder="e.g. Split tooling as a separate line and re-confirm the 101–500 slab rate"></textarea>
+          <textarea name="comment" required placeholder="Describe the changes needed before this can be approved..."></textarea>
           <div class="rf-actions">
-            <button class="btn-confirm-revise">Send Back for Revision</button>
-            <button class="btn-cancel-revise" onclick="toggleRevise('0417')">Cancel</button>
+            <button type="submit" class="btn-confirm-revise">Send Back for Revision</button>
+            <button type="button" class="btn-cancel-revise" onclick="toggleRevise('{{ q.pk }}')">Cancel</button>
           </div>
-        </div>
+        </form>
       </td>
     </tr>
 
-    <!-- Detail row for 0417 -->
-    <tr class="row-detail" id="detail-0417">
+    <!-- Detail row -->
+    <tr class="row-detail" id="detail-{{ q.pk }}">
       <td colspan="10">
         <div class="detail-inner">
           <div class="detail-grid">
-            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
-            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">50% Advance</div></div>
-            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">Ex-Works</div></div>
-            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">10-12 Days</div></div>
+            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">{{ q.currency }}</div></div>
+            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">{{ q.payment_terms|default:"—" }}</div></div>
+            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">{{ q.delivery_terms|default:"—" }}</div></div>
+            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">{{ q.lead_time|default:"—" }}</div></div>
           </div>
+
           <div class="line-items-preview">
             <table>
               <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Description</th>
-                  <th>Material</th>
-                  <th>Size</th>
-                  <th>Qty Tier</th>
-                  <th>Rate/Unit</th>
-                  <th>Tooling</th>
-                </tr>
+                <tr><th>#</th><th>Item Code</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
               </thead>
               <tbody>
+                {% for item in q.line_items %}
                 <tr>
-                  <td>1</td>
-                  <td style="font-weight:600;">Nameplate — SS Etched</td>
-                  <td>SS304, 2mm</td>
-                  <td>150 × 110 mm</td>
-                  <td>1–100: ₹145<br>101–500: ₹120</td>
-                  <td>₹145.00</td>
-                  <td>₹2,500</td>
+                  <td>{{ item.position }}</td>
+                  <td>
+                    {% if item.item_code %}
+                      <span class="ic-code">{{ item.item_code.code }}</span><br>
+                      {% if item.needs_code_approval %}
+                        {% if item.item_code.approved_rate %}
+                          <span class="code-badge revised">Rate revised</span>
+                        {% else %}
+                          <span class="code-badge new">New — pending approval</span>
+                        {% endif %}
+                      {% else %}
+                        <span class="code-badge ok">Approved rate</span>
+                      {% endif %}
+                    {% else %}
+                      <span class="ic-code">—</span>
+                    {% endif %}
+                  </td>
+                  <td style="font-weight:600;">{{ item.description|default:"—" }}</td>
+                  <td>{{ item.material.name|default:"—" }}{% if item.thickness %}, {{ item.thickness.name }}{% endif %}</td>
+                  <td>{{ item.size|default:"—" }}</td>
+                  <td>
+                    {% for tier in item.tiers.all %}
+                      {{ tier.qty_from }}–{{ tier.qty_to|default:"∞" }}: ₹{{ tier.rate_per_unit|floatformat:0 }}{% if not forloop.last %}<br>{% endif %}
+                    {% empty %}—{% endfor %}
+                  </td>
+                  <td>₹{{ item.effective_rate|floatformat:2 }}</td>
+                  <td>₹{{ item.tooling_charge|floatformat:0 }}</td>
                 </tr>
+                {% empty %}
+                <tr><td colspan="8" style="font-style:italic; color:var(--ink-soft);">No line items on this quotation.</td></tr>
+                {% endfor %}
               </tbody>
             </table>
           </div>
+
+          {% if q.code_rows %}
+          <div class="code-panel">
+            <div class="cp-title">Item codes this approval will lock in — {{ q.customer.name }}</div>
+            <table>
+              <thead>
+                <tr><th>Item Code</th><th>Specification</th><th>State</th><th>Rate to be locked</th></tr>
+              </thead>
+              <tbody>
+                {% for row in q.code_rows %}
+                <tr>
+                  <td><span class="ic-code">{{ row.code }}</span></td>
+                  <td>{{ row.spec }}</td>
+                  <td>
+                    {% if row.is_new %}<span class="code-badge new">New code</span>
+                    {% else %}<span class="code-badge revised">Rate revised</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if row.is_new %}
+                      <span class="cp-rate">₹{{ row.new_rate|floatformat:2 }}</span>
+                    {% else %}
+                      <span class="cp-old">₹{{ row.old_rate|floatformat:2 }}</span>
+                      <span class="cp-rate"> → ₹{{ row.new_rate|floatformat:2 }}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <div class="cp-foot">
+              Approving {{ q.number }} writes these rates into {{ q.customer.name }}'s item-code master.
+              They auto-fill on every future quotation until someone revises them.
+            </div>
+          </div>
+          {% endif %}
+
+          {% if q.supersedes and q.supersedes.manager_comment %}
           <div style="font-size:11px; color:var(--ink-soft); font-style:italic;">
-            Previously rejected (v1): "Margin too low — revise rate" — resubmitted with revised pricing.
+            Previously rejected (v{{ q.supersedes.version }}): "{{ q.supersedes.manager_comment }}" — resubmitted as v{{ q.version }}.
           </div>
+          {% endif %}
         </div>
       </td>
     </tr>
-
-    <!-- Row 2: New high-value -->
-    <tr id="row-0421">
-      <td>
-        <div class="qno">QTN-0421<div class="ver">v1</div></div>
-      </td>
-      <td>
-        <div class="cust">Orion Compressors<div class="sub">New Customer</div></div>
-      </td>
-      <td style="font-size:12px;">Imran S.</td>
-      <td>Aluminium · 1mm · 80×50mm</td>
-      <td>250 Nos</td>
-      <td>
-        <span class="rate">₹78.00</span>
-        <span class="rate-sub">slab ₹65–95</span>
-      </td>
-      <td><span class="amt">₹1,08,000</span></td>
-      <td style="font-size:11.5px;">04 Aug 2026</td>
-      <td>
-        <span class="days-pending warn">4d</span>
-        <span class="days-label">pending</span>
-      </td>
-      <td>
-        <div class="action-group">
-          <button class="btn-approve" onclick="approveQuote('QTN-0421')">✓ Approve</button>
-          <button class="btn-reject" onclick="toggleReject('0421')">✕ Reject</button>
-          <button class="btn-revise" onclick="toggleRevise('0421')">↺ Request Revision</button>
-        </div>
-        <button class="btn-view-details" onclick="toggleDetail('0421')">View line items ▾</button>
-        <div class="reject-form" id="reject-0421">
-          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
-          <textarea placeholder="e.g. Check with procurement if aluminium rate is current"></textarea>
-          <div class="rf-actions">
-            <button class="btn-confirm-reject">Reject & Send Back</button>
-            <button class="btn-cancel-reject" onclick="toggleReject('0421')">Cancel</button>
-          </div>
-        </div>
-        <div class="revise-form" id="revise-0421">
-          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
-          <textarea placeholder="e.g. Re-confirm current aluminium rate and add validity date before I approve"></textarea>
-          <div class="rf-actions">
-            <button class="btn-confirm-revise">Send Back for Revision</button>
-            <button class="btn-cancel-revise" onclick="toggleRevise('0421')">Cancel</button>
-          </div>
-        </div>
+  {% empty %}
+    <tr>
+      <td colspan="10" style="padding:28px 12px; text-align:center; color:var(--ink-soft); font-style:italic;">
+        Nothing waiting for approval.
       </td>
     </tr>
-    <tr class="row-detail" id="detail-0421">
-      <td colspan="10">
-        <div class="detail-inner">
-          <div class="detail-grid">
-            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
-            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">100% Advance</div></div>
-            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">Ex-Works</div></div>
-            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">15 Days</div></div>
-          </div>
-          <div class="line-items-preview">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>1</td>
-                  <td style="font-weight:600;">Panel ID Tag — Etched Aluminium</td>
-                  <td>Aluminium, 1mm</td>
-                  <td>80 × 50 mm</td>
-                  <td>1–100: ₹95<br>101–250: ₹78<br>251–500: ₹65</td>
-                  <td>₹78.00</td>
-                  <td>₹3,500</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </td>
-    </tr>
-
-    <!-- Row 3: Resubmitted v2 -->
-    <tr id="row-0419">
-      <td>
-        <div class="qno">QTN-0419<div class="ver">v2 (resubmitted)</div></div>
-      </td>
-      <td>
-        <div class="cust">Bharat Switchgear Co.<div class="sub">Repeat Customer</div></div>
-      </td>
-      <td style="font-size:12px;">Imran S.</td>
-      <td>Aluminium · 1mm · 100×60mm</td>
-      <td>100 Nos</td>
-      <td>
-        <span class="rate">₹95.00</span>
-        <span class="rate-sub">slab ₹95–120</span>
-      </td>
-      <td><span class="amt">₹63,000</span></td>
-      <td style="font-size:11.5px;">03 Aug 2026</td>
-      <td>
-        <span class="days-pending ok">1d</span>
-        <span class="days-label">pending</span>
-      </td>
-      <td>
-        <div class="action-group">
-          <button class="btn-approve" onclick="approveQuote('QTN-0419')">✓ Approve</button>
-          <button class="btn-reject" onclick="toggleReject('0419')">✕ Reject</button>
-          <button class="btn-revise" onclick="toggleRevise('0419')">↺ Request Revision</button>
-        </div>
-        <button class="btn-view-details" onclick="toggleDetail('0419')">View line items ▾</button>
-        <div class="reject-form" id="reject-0419">
-          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
-          <textarea placeholder="Enter reason for rejection..."></textarea>
-          <div class="rf-actions">
-            <button class="btn-confirm-reject">Reject & Send Back</button>
-            <button class="btn-cancel-reject" onclick="toggleReject('0419')">Cancel</button>
-          </div>
-        </div>
-        <div class="revise-form" id="revise-0419">
-          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
-          <textarea placeholder="Describe the changes needed before this can be approved..."></textarea>
-          <div class="rf-actions">
-            <button class="btn-confirm-revise">Send Back for Revision</button>
-            <button class="btn-cancel-revise" onclick="toggleRevise('0419')">Cancel</button>
-          </div>
-        </div>
-      </td>
-    </tr>
-    <tr class="row-detail" id="detail-0419">
-      <td colspan="10">
-        <div class="detail-inner">
-          <div class="detail-grid">
-            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
-            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">30 Days Credit</div></div>
-            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">Ex-Works</div></div>
-            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">12 Days</div></div>
-          </div>
-          <div class="line-items-preview">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>1</td>
-                  <td style="font-weight:600;">Panel Plate — Etched Aluminium</td>
-                  <td>Aluminium, 1mm</td>
-                  <td>100 × 60 mm</td>
-                  <td>1–50: ₹120<br>51–200: ₹95</td>
-                  <td>₹95.00</td>
-                  <td>₹2,000</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div style="font-size:11px; color:var(--ink-soft); font-style:italic;">
-            Previously rejected (v1): "Add tooling charges separately" — fixed in v2.
-          </div>
-        </div>
-      </td>
-    </tr>
-
-    <!-- Row 4 -->
-    <tr id="row-0422">
-      <td>
-        <div class="qno">QTN-0422<div class="ver">v1</div></div>
-      </td>
-      <td>
-        <div class="cust">Zenith Controls<div class="sub">New Customer</div></div>
-      </td>
-      <td style="font-size:12px;">Sneha R.</td>
-      <td>Brass · 1.5mm · 200×80mm</td>
-      <td>120 Nos</td>
-      <td>
-        <span class="rate">₹360.00</span>
-        <span class="rate-sub">slab ₹360–420</span>
-      </td>
-      <td><span class="amt">₹45,600</span></td>
-      <td style="font-size:11.5px;">06 Aug 2026</td>
-      <td>
-        <span class="days-pending ok">2d</span>
-        <span class="days-label">pending</span>
-      </td>
-      <td>
-        <div class="action-group">
-          <button class="btn-approve" onclick="approveQuote('QTN-0422')">✓ Approve</button>
-          <button class="btn-reject" onclick="toggleReject('0422')">✕ Reject</button>
-          <button class="btn-revise" onclick="toggleRevise('0422')">↺ Request Revision</button>
-        </div>
-        <button class="btn-view-details" onclick="toggleDetail('0422')">View line items ▾</button>
-        <div class="reject-form" id="reject-0422">
-          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--red); display:block; margin-bottom:6px;">Rejection reason</label>
-          <textarea placeholder="Enter reason for rejection..."></textarea>
-          <div class="rf-actions">
-            <button class="btn-confirm-reject">Reject & Send Back</button>
-            <button class="btn-cancel-reject" onclick="toggleReject('0422')">Cancel</button>
-          </div>
-        </div>
-        <div class="revise-form" id="revise-0422">
-          <label style="font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">What needs revising?</label>
-          <textarea placeholder="Describe the changes needed before this can be approved..."></textarea>
-          <div class="rf-actions">
-            <button class="btn-confirm-revise">Send Back for Revision</button>
-            <button class="btn-cancel-revise" onclick="toggleRevise('0422')">Cancel</button>
-          </div>
-        </div>
-      </td>
-    </tr>
-    <tr class="row-detail" id="detail-0422">
-      <td colspan="10">
-        <div class="detail-inner">
-          <div class="detail-grid">
-            <div class="dg-item"><div class="dg-label">Currency</div><div class="dg-value">INR</div></div>
-            <div class="dg-item"><div class="dg-label">Payment Terms</div><div class="dg-value">50% Advance</div></div>
-            <div class="dg-item"><div class="dg-label">Delivery</div><div class="dg-value">FOB</div></div>
-            <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">14 Days</div></div>
-          </div>
-          <div class="line-items-preview">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>1</td>
-                  <td style="font-weight:600;">Control Box Label — Etched Brass</td>
-                  <td>Brass, 1.5mm</td>
-                  <td>200 × 80 mm</td>
-                  <td>1–50: ₹420<br>51–150: ₹360</td>
-                  <td>₹360.00</td>
-                  <td>₹4,000</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </td>
-    </tr>
-
+  {% endfor %}
   </tbody>
 </table>
 </div>
@@ -595,17 +497,8 @@
     form.classList.toggle('open');
   }
 
-  // Approve placeholder
-  function approveQuote(qtn) {
-    alert('✓ ' + qtn + ' approved! (placeholder — backend not wired yet)');
-  }
-
-  // Filter chips
-  document.querySelectorAll('.toolbar .chip').forEach(chip => {
-    chip.addEventListener('click', function() {
-      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
+  // Approve / Reject / Request Revision are real POSTs to sales/urls.py — the
+  // queue is re-read from the database on the redirect. The filter chips are
+  // querystring links, so there is nothing left to toggle client-side.
 </script>
 {% endblock %}

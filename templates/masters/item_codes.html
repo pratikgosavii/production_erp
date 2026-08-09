@@ -1,0 +1,666 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Item Code Master — Masters{% endblock %}
+{% block topbar_sub %}Masters — Item Codes &amp; Approved Rates{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Admin</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ---- Summary strip ---- */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    background: var(--line); border-bottom: 1px solid var(--line);
+    margin: -24px -28px 24px;
+  }
+  .summary-strip .cell { background: var(--card); padding: 14px 20px; }
+  .summary-strip .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary-strip .cell .l {
+    font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase;
+    letter-spacing: .04em; margin-top: 6px;
+  }
+  .summary-strip .cell.active-c .n { color: var(--green); }
+  .summary-strip .cell.inactive-c .n { color: var(--gray); }
+  .summary-strip .cell.pend-c .n { color: var(--amber); }
+  .summary-strip .cell.cust-c .n { color: var(--blue); }
+
+  /* ---- Page head / toolbar ---- */
+  .page-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+  }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .page-head .breadcrumb { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] {
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12.5px; width: 210px; font-family: 'IBM Plex Sans';
+  }
+  .toolbar input[type=text]:focus,
+  .toolbar select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); }
+  .toolbar select {
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12px; background: #fff; font-family: 'IBM Plex Sans';
+  }
+  .chip {
+    padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer;
+    user-select: none;
+  }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btn-add {
+    background: var(--navy); color: #fff; border: none; padding: 8px 16px;
+    border-radius: 3px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    font-family: 'IBM Plex Sans';
+  }
+  .btn-add:hover { background: var(--navy-2); }
+
+  .result-line { font-size: 11px; color: var(--ink-soft); margin: 0 0 8px; font-style: italic; }
+  .result-line b { font-family: 'IBM Plex Mono'; font-style: normal; color: var(--ink); }
+
+  /* ---- Master table ---- */
+  table.ic { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  table.ic thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.ic tbody tr { border-top: 1px solid var(--line); }
+  table.ic tbody tr:hover { background: #fafbfc; }
+  table.ic td { padding: 11px 12px; vertical-align: middle; }
+  table.ic tbody tr.is-inactive td:not(.actions) { opacity: .62; }
+  /* subtle amber tint so unapproved rows stand out */
+  table.ic tbody tr.is-pending td { background: var(--amber-bg); }
+
+  .code {
+    font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12px; color: var(--steel);
+  }
+  .cust-name { font-weight: 600; color: var(--ink); }
+  .desc { color: var(--ink); font-size: 11.5px; margin-bottom: 3px; }
+  .spec { font-size: 11px; color: var(--ink-soft); }
+  .spec b { font-family: 'IBM Plex Mono'; font-weight: 500; color: var(--steel); }
+  .last-ord { font-size: 11px; color: var(--ink-soft); font-family: 'IBM Plex Mono'; }
+
+  .rate { font-family: 'IBM Plex Mono'; font-size: 12.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .rate.none { color: var(--ink-soft); font-weight: 400; }
+  .rate-note {
+    display: block; font-family: 'IBM Plex Mono'; font-size: 10px;
+    font-weight: 400; color: var(--amber); margin-top: 3px; white-space: nowrap;
+  }
+
+  .qtn-chip {
+    font-family: 'IBM Plex Mono'; font-size: 10.5px; font-weight: 600;
+    padding: 3px 9px; border-radius: 20px; display: inline-block; white-space: nowrap;
+    background: var(--blue-bg); color: var(--blue);
+  }
+  .qtn-chip.wait   { background: var(--amber-bg); color: var(--amber); }
+  .qtn-chip.direct { background: var(--gray-bg); color: var(--gray); }
+  .app-date { font-family: 'IBM Plex Mono'; font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
+
+  .pill {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px;
+    white-space: nowrap;
+  }
+  .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .pill.active   { background: var(--green-bg); color: var(--green); }
+  .pill.active::before { background: var(--green); }
+  .pill.inactive { background: var(--gray-bg); color: var(--gray); }
+  .pill.inactive::before { background: var(--gray); }
+  .pill.pending  { background: var(--amber-bg); color: var(--amber); }
+  .pill.pending::before { background: var(--amber); }
+
+  td.actions { text-align: right; }
+  .btn-row {
+    font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+    cursor: pointer; font-family: 'IBM Plex Sans'; margin-left: 6px; margin-top: 3px;
+    white-space: nowrap;
+  }
+  .btn-row:hover { border-color: var(--steel); color: var(--ink); }
+  .btn-row.deact { border-color: var(--amber); color: var(--amber); }
+  .btn-row.deact:hover { background: var(--amber-bg); }
+  .btn-row.act { border-color: var(--green); color: var(--green); }
+  .btn-row.act:hover { background: var(--green-bg); }
+  .btn-row.revise { border-color: var(--blue); color: var(--blue); }
+  .btn-row.revise:hover { background: var(--blue-bg); }
+
+  /* ---- Empty state ---- */
+  tr.empty-row td {
+    padding: 34px 20px; text-align: center; color: var(--ink-soft); font-size: 12.5px;
+    background: #fafbfc;
+  }
+  tr.empty-row .empty-title { font-weight: 600; color: var(--ink); font-size: 13px; margin-bottom: 5px; }
+  tr.empty-row .empty-hint { font-size: 11.5px; font-style: italic; }
+
+  /* ---- Modals ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--card); border-radius: 8px; width: 520px; max-width: 92vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-box.narrow { width: 440px; }
+  .modal-box .modal-head {
+    background: var(--navy); color: #fff; padding: 15px 20px; font-size: 14px; font-weight: 700;
+  }
+  .modal-box .modal-head .sub {
+    display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+    opacity: .78; font-family: 'IBM Plex Mono';
+  }
+  .modal-box .modal-body { padding: 18px 20px 4px; max-height: 66vh; overflow-y: auto; }
+  .modal-box .modal-body .field { margin-bottom: 14px; }
+  .modal-box .modal-body .field input,
+  .modal-box .modal-body .field select { padding: 8px 11px; font-size: 12.5px; }
+  .modal-box .modal-body .field input.mono-in { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .modal-box .modal-body textarea {
+    width: 100%; padding: 8px 11px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: 'IBM Plex Sans'; font-size: 12.5px; resize: vertical; min-height: 62px;
+  }
+  .modal-box .modal-body textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .req { color: var(--red); }
+  .field-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+  .field-hint.err { color: var(--red); font-weight: 600; }
+  .field-hint.hidden { display: none; }
+  .toggle-row { display: flex; align-items: center; gap: 9px; padding: 4px 0 2px; }
+  .toggle-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--green); margin: 0; }
+  .toggle-row label {
+    margin: 0; font-size: 12.5px; font-weight: 500; color: var(--ink);
+    text-transform: none; letter-spacing: 0; cursor: pointer;
+  }
+  .modal-foot {
+    display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px;
+    border-top: 1px solid var(--line); background: #fafbfc;
+  }
+
+  .note-box {
+    font-size: 11.5px; line-height: 1.5; padding: 9px 11px; margin-bottom: 14px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .note-box.warn  { background: var(--amber-bg); color: var(--amber); border-left: 3px solid var(--amber); }
+  .note-box.ok    { background: var(--green-bg); color: var(--green); border-left: 3px solid var(--green); }
+  .note-box b { font-family: 'IBM Plex Mono'; }
+
+  .cur-rate {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    background: var(--paper); border: var(--border); border-radius: var(--radius);
+    padding: 10px 12px; margin-bottom: 14px;
+  }
+  .cur-rate .cr-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+  .cur-rate .cr-value { font-family: 'IBM Plex Mono'; font-size: 16px; font-weight: 700; color: var(--ink); }
+  .cur-rate .cr-meta { font-family: 'IBM Plex Mono'; font-size: 10.5px; color: var(--ink-soft); }
+
+  tr.just-added td { animation: rowFlash 1.4s ease-out; }
+  @keyframes rowFlash {
+    0%   { background: var(--green-bg); }
+    100% { background: transparent; }
+  }
+  tr.just-pended td { animation: rowFlashAmber 1.6s ease-out; }
+  @keyframes rowFlashAmber {
+    0%   { background: var(--amber-bg); }
+    60%  { background: var(--amber-bg); }
+    100% { background: transparent; }
+  }
+
+  .flash { padding: 10px 14px; font-size: 11.5px; line-height: 1.55; margin-bottom: 12px; border-radius: 0 var(--radius) var(--radius) 0; }
+  .flash.success { background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green); }
+  .flash.error   { background: var(--red-bg);   border-left: 3px solid var(--red);   color: var(--red); }
+  .inline-form { display: inline; margin: 0; }
+  a.chip { text-decoration: none; display: inline-block; }
+  a.chip:hover { text-decoration: none; }
+
+  @media (max-width: 1100px) {
+    .summary-strip { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .summary-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Admin — Masters</div>
+  <a href="{% url 'masters:customers' %}" class="nav-item">
+    <span class="icon">🏢</span> Customers
+  </a>
+  <a href="{% url 'masters:item_codes' %}" class="nav-item active">
+    <span class="icon">🏷️</span> Item Codes
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% for message in messages %}
+  <div class="flash {{ message.tags }}">{{ message }}</div>
+{% endfor %}
+
+<!-- ======== SUMMARY ======== -->
+<div class="summary-strip">
+  <div class="cell"><div class="n" id="statTotal">{{ summary.total }}</div><div class="l">Total item codes</div></div>
+  <div class="cell active-c"><div class="n" id="statActive">{{ summary.active }}</div><div class="l">Active</div></div>
+  <div class="cell inactive-c"><div class="n" id="statInactive">{{ summary.inactive }}</div><div class="l">Inactive</div></div>
+  <div class="cell pend-c"><div class="n" id="statPending">{{ summary.pending }}</div><div class="l">Pending approval</div></div>
+  <div class="cell cust-c"><div class="n" id="statCustomers">{{ summary.customers }}</div><div class="l">Customers covered</div></div>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>Item Code Master &amp; Approved Rate Register</h1>
+    <div class="breadcrumb">
+      Masters → Item Codes — codes are scoped per customer; a rate is locked only once the Sales Manager approves the quotation it came in on
+    </div>
+  </div>
+  <form method="get" class="toolbar">
+    <input type="text" id="searchBox" name="q" value="{{ q }}" placeholder="Search code or description...">
+    <select id="customerFilter" name="customer" onchange="this.form.submit()">
+      <option value="">All customers</option>
+      {% for c in customers %}
+      <option value="{{ c.pk }}" {% if customer_id == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="status" value="{{ status }}">
+    <button type="submit" class="chip">Search</button>
+    <a class="chip {% if not status %}active{% endif %}" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if customer_id %}customer={{ customer_id }}{% endif %}">All</a>
+    <a class="chip {% if status == 'active' %}active{% endif %}" href="?status=active{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if customer_id %}&amp;customer={{ customer_id }}{% endif %}">Active</a>
+    <a class="chip {% if status == 'inactive' %}active{% endif %}" href="?status=inactive{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if customer_id %}&amp;customer={{ customer_id }}{% endif %}">Inactive</a>
+    <a class="chip {% if status == 'pending' %}active{% endif %}" href="?status=pending{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if customer_id %}&amp;customer={{ customer_id }}{% endif %}">Pending approval</a>
+    <button type="button" class="btn-add" id="btnOpenAdd">+ Add Item Code</button>
+  </form>
+</div>
+
+<div class="result-line" id="resultLine">
+  Showing <b>{{ shown_count }}</b> of <b>{{ total_count }}</b> item codes{% if selected_customer %} — <b>{{ selected_customer.name }}</b>{% endif %}
+</div>
+
+<div style="overflow-x:auto;">
+<table class="ic" id="icTable">
+  <thead>
+    <tr>
+      <th style="width:10%">Item Code</th>
+      <th style="width:13%">Customer</th>
+      <th style="width:21%">Specification</th>
+      <th style="width:9%">Rate / Unit</th>
+      <th style="width:10%">Approved Via</th>
+      <th style="width:9%">Approved Date</th>
+      <th style="width:9%">Last Ordered</th>
+      <th style="width:9%">Status</th>
+      <th style="width:10%"></th>
+    </tr>
+  </thead>
+  <tbody id="icBody">
+
+    {% for ic in codes %}
+    <tr data-id="{{ ic.pk }}" data-cust="{{ ic.customer_id }}" data-code="{{ ic.code }}"
+        data-desc="{{ ic.description }}" data-rate="{{ ic.approved_rate|default_if_none:'' }}"
+        data-material="{{ ic.material_id|default_if_none:'' }}" data-thickness="{{ ic.thickness_id|default_if_none:'' }}"
+        data-size="{{ ic.size }}" data-finish="{{ ic.finish_id|default_if_none:'' }}"
+        data-active="{% if ic.is_active %}1{% else %}0{% endif %}"
+        data-approval="{% if ic.is_approved %}approved{% else %}pending{% endif %}"
+        class="{% if not ic.is_active %}is-inactive{% endif %} {% if not ic.is_approved %}is-pending{% endif %}">
+      <td class="code">{{ ic.code }}</td>
+      <td class="cust-name">{{ ic.customer.name }}</td>
+      <td>
+        <div class="desc">{{ ic.description|default:"—" }}</div>
+        <div class="spec">{{ ic.spec_line|default:"—" }}</div>
+      </td>
+      <td class="c-rate">
+        {% if ic.is_approved and ic.approved_rate is not None %}
+          <span class="rate">Rs.{{ ic.approved_rate|floatformat:2 }}</span>
+        {% else %}
+          <span class="rate none">&mdash;</span>
+          {% if ic.proposed_rate is not None %}
+            <span class="rate-note">proposed Rs.{{ ic.proposed_rate|floatformat:2 }}</span>
+          {% endif %}
+        {% endif %}
+      </td>
+      <td class="c-qtn">
+        {% if ic.is_approved %}
+          {% if ic.approval_source == 'ADMIN' %}
+            <span class="qtn-chip direct">Direct (Admin)</span>
+          {% else %}
+            <span class="qtn-chip">{{ ic.approved_via|default:"via quotation" }}</span>
+          {% endif %}
+        {% else %}
+          <span class="qtn-chip wait">{% if ic.proposed_rate is not None %}awaiting re-approval{% else %}awaiting approval{% endif %}</span>
+        {% endif %}
+      </td>
+      <td class="c-appdate"><span class="app-date">{{ ic.approved_on|date:"d M Y"|default:"—" }}</span></td>
+      <td class="last-ord">{{ ic.last_ordered|date:"d M Y"|default:"—" }}</td>
+      <td class="c-status">
+        {% if not ic.is_approved %}<span class="pill pending">Pending Approval</span>
+        {% elif ic.is_active %}<span class="pill active">Active</span>
+        {% else %}<span class="pill inactive">Inactive</span>{% endif %}
+      </td>
+      <td class="actions">
+        {% if ic.is_approved and ic.approved_rate is not None %}
+        <button type="button" class="btn-row revise btn-revise">Revise Rate</button>
+        {% endif %}
+        <button type="button" class="btn-row btn-edit">Edit</button>
+        <form method="post" class="inline-form" action="{% url 'masters:item_code_toggle' ic.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="back" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn-row {% if ic.is_active %}deact{% else %}act{% endif %} btn-toggle">{% if ic.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr class="empty-row" id="emptyRow">
+      <td colspan="9">
+        <div class="empty-title" id="emptyTitle">
+          {% if status == 'pending' %}Nothing is waiting on approval
+          {% elif selected_customer %}No item codes for {{ selected_customer.name }} yet
+          {% elif q or status %}No item codes match this filter
+          {% else %}No item codes yet{% endif %}
+        </div>
+        <div class="empty-hint" id="emptyHint">
+          {% if status == 'pending' %}Every item code in the register has an approved, locked rate.
+          {% elif q or status or selected_customer %}Try clearing the search box, the status chip or the customer dropdown.
+          {% else %}Codes get created automatically the first time a salesperson types a new one on a quotation —
+          they stay <b>pending approval</b> until the Sales Manager approves that quotation.{% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+
+  </tbody>
+</table>
+</div>
+
+<!-- ======== ADD ITEM CODE MODAL ======== -->
+<div class="modal-overlay" id="addModal">
+  <form class="modal-box" method="post" action="{% url 'masters:item_code_save' %}">
+    {% csrf_token %}
+    <input type="hidden" name="back" value="{{ request.get_full_path }}">
+    <input type="hidden" name="item" id="mItem" value="">
+    <div class="modal-head">
+      <span id="addTitle">Add Item Code</span>
+      <span class="sub">Item codes are unique per customer</span>
+    </div>
+    <div class="modal-body">
+      <div class="note-box ok" id="addNote">
+        You are adding this code as <b>Admin</b>, so it is created <b>APPROVED</b> — the rate you
+        enter below is locked into the customer's master immediately and will auto-fill on the next
+        quotation. No Sales Manager approval is needed.
+      </div>
+
+      <div class="field">
+        <label>Customer <span class="req">*</span></label>
+        <select id="mCustomer" name="customer" required>
+          <option value="">— Select customer —</option>
+          {% for c in customers %}
+          <option value="{{ c.pk }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="field-hint">The same code string may exist for another customer — they stay separate records.</div>
+      </div>
+
+      <div class="field">
+        <label>Item Code <span class="req">*</span></label>
+        <input type="text" id="mCode" name="code" class="mono-in" placeholder="e.g. VF-NP-150" autocomplete="off" required>
+        <div class="field-hint err hidden" id="mCodeErr">Customer, Item Code and Rate / Unit are required.</div>
+      </div>
+
+      <div class="field">
+        <label>Description</label>
+        <input type="text" id="mDesc" name="description" placeholder="e.g. Rating Plate 150x110">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Material</label>
+          <select id="mMaterial" name="material">
+            <option value="">—</option>
+            {% for m in materials %}<option value="{{ m.pk }}">{{ m.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Thickness</label>
+          <select id="mThickness" name="thickness">
+            <option value="">—</option>
+            {% for t in thicknesses %}<option value="{{ t.pk }}">{{ t.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Size (mm) — L x W</label>
+          <input type="text" id="mSize" name="size" placeholder="e.g. 150 x 110">
+        </div>
+        <div class="field">
+          <label>Finish / Fill</label>
+          <select id="mFinish" name="finish">
+            <option value="">—</option>
+            {% for f in finishes %}<option value="{{ f.pk }}">{{ f.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field" id="mRateField">
+        <label>Rate / Unit (Rs.) <span class="req">*</span></label>
+        <input type="number" id="mRate" name="rate" class="mono-in" min="0" step="0.01" placeholder="e.g. 380.00">
+        <div class="field-hint" id="mRateHint">
+          Locked in as the <b>approved rate</b> for this customer + code and auto-filled on every
+          future quotation until someone revises it.
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Status</label>
+        <div class="toggle-row">
+          <input type="checkbox" id="mActive" name="is_active" value="on" checked>
+          <label for="mActive">Active — available for selection on new quotations</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-outline" id="btnCancelAdd">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="btnSaveAdd">Save as Approved Code</button>
+    </div>
+  </form>
+</div>
+
+<!-- ======== REVISE RATE MODAL ======== -->
+<div class="modal-overlay" id="reviseModal">
+  <form class="modal-box narrow" method="post" action="{% url 'masters:item_code_revise' %}">
+    {% csrf_token %}
+    <input type="hidden" name="back" value="{{ request.get_full_path }}">
+    <input type="hidden" name="item" id="rvItem" value="">
+    <div class="modal-head">
+      Revise Approved Rate
+      <span class="sub" id="rvSub">—</span>
+    </div>
+    <div class="modal-body">
+      <div class="cur-rate">
+        <div>
+          <div class="cr-label">Current approved rate</div>
+          <div class="cr-meta" id="rvMeta">—</div>
+        </div>
+        <div class="cr-value" id="rvCurrent">—</div>
+      </div>
+
+      <div class="field">
+        <label>New Rate / Unit (Rs.) <span class="req">*</span></label>
+        <input type="number" id="rvRate" name="rate" class="mono-in" min="0" step="0.01" placeholder="e.g. 1450.00" required>
+        <div class="field-hint err hidden" id="rvErr">Enter a new rate that differs from the current one.</div>
+      </div>
+
+      <div class="field">
+        <label>Reason for revision <span class="req">*</span></label>
+        <textarea id="rvReason" name="reason" required placeholder="e.g. SS 304 sheet price up 9% since June — rate re-worked with production"></textarea>
+        <div class="field-hint err hidden" id="rvReasonErr">A reason is required — the Sales Manager sees it when approving.</div>
+      </div>
+
+      <div class="note-box warn">
+        Revising sends this code back to <b>PENDING APPROVAL</b>. The old rate stops auto-filling and
+        the new rate applies <b>only after the Sales Manager approves</b> the quotation it next
+        appears on.
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-outline" id="btnCancelRevise">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="btnSaveRevise">Send for Re-approval</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  // Filtering, the summary strip and every row action are server-side now.
+  // What is left here is purely modal plumbing: open the right dialog with the
+  // row's real values pre-filled, then let the form POST.
+
+  var body     = document.getElementById('icBody');
+  var modal    = document.getElementById('addModal');
+  var rvModal  = document.getElementById('reviseModal');
+
+  function inr(n) {
+    return 'Rs.' + (Number(n) || 0).toLocaleString('en-IN', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function setSelect(id, value) {
+    var el = document.getElementById(id);
+    if (el) { el.value = value || ''; }
+  }
+
+  /* ---------------- Add / Edit ---------------- */
+  function openModal(row) {
+    var d = row ? row.dataset : {};
+    document.getElementById('mItem').value     = d.id || '';
+    document.getElementById('addTitle').textContent = row ? 'Edit Item Code' : 'Add Item Code';
+    setSelect('mCustomer', d.cust);
+    document.getElementById('mCode').value     = d.code || '';
+    document.getElementById('mDesc').value     = d.desc || '';
+    setSelect('mMaterial', d.material);
+    setSelect('mThickness', d.thickness);
+    document.getElementById('mSize').value     = d.size || '';
+    setSelect('mFinish', d.finish);
+    document.getElementById('mActive').checked = row ? (d.active === '1') : true;
+
+    // A rate is only set on creation. Changing an approved rate goes through
+    // Revise Rate, so the live rate keeps working until it is re-approved.
+    var rate = document.getElementById('mRate');
+    var hint = document.getElementById('mRateHint');
+    if (row) {
+      rate.value = '';
+      rate.disabled = true;
+      rate.required = false;
+      hint.innerHTML = 'Rate is not editable here — use <b>Revise Rate</b> on the row.';
+      document.getElementById('btnSaveAdd').textContent = 'Save Changes';
+      document.getElementById('addNote').style.display = 'none';
+    } else {
+      rate.value = '';
+      rate.disabled = false;
+      rate.required = true;
+      hint.innerHTML = 'Locked in as the <b>approved rate</b> for this customer + code and ' +
+                       'auto-filled on every future quotation until someone revises it.';
+      document.getElementById('btnSaveAdd').textContent = 'Save as Approved Code';
+      document.getElementById('addNote').style.display = '';
+    }
+    document.getElementById('mCodeErr').classList.add('hidden');
+    modal.classList.add('show');
+    setTimeout(function () { document.getElementById('mCode').focus(); }, 40);
+  }
+  function closeModal() { modal.classList.remove('show'); }
+
+  document.getElementById('btnOpenAdd').addEventListener('click', function () { openModal(null); });
+  document.getElementById('btnCancelAdd').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+  modal.querySelector('form, .modal-box').addEventListener('submit', function (e) {
+    var cust = document.getElementById('mCustomer').value;
+    var code = (document.getElementById('mCode').value || '').trim();
+    var rateEl = document.getElementById('mRate');
+    var err  = document.getElementById('mCodeErr');
+    var needsRate = !rateEl.disabled;
+    if (!cust || !code || (needsRate && !(parseFloat(rateEl.value) > 0))) {
+      e.preventDefault();
+      err.textContent = 'Customer, Item Code and Rate / Unit are required.';
+      err.classList.remove('hidden');
+    }
+  });
+
+  /* ---------------- Revise Rate ---------------- */
+  var rvRateIn    = document.getElementById('rvRate');
+  var rvReason    = document.getElementById('rvReason');
+  var rvErr       = document.getElementById('rvErr');
+  var rvReasonErr = document.getElementById('rvReasonErr');
+  var rvCurrentRate = 0;
+
+  function openRevise(row) {
+    if (!row || row.dataset.approval !== 'approved') { return; }
+    rvCurrentRate = parseFloat(row.dataset.rate) || 0;
+    document.getElementById('rvItem').value = row.dataset.id;
+    document.getElementById('rvSub').textContent =
+      row.dataset.code + '  ·  ' + row.querySelector('.cust-name').textContent.trim();
+    document.getElementById('rvCurrent').textContent = inr(rvCurrentRate);
+    var chip = row.querySelector('.c-qtn .qtn-chip');
+    var date = row.querySelector('.c-appdate .app-date');
+    document.getElementById('rvMeta').textContent =
+      'approved via ' + (chip ? chip.textContent.trim() : '—') + ' · ' +
+      (date ? date.textContent.trim() : '—');
+    rvRateIn.value = '';
+    rvReason.value = '';
+    rvErr.classList.add('hidden');
+    rvReasonErr.classList.add('hidden');
+    rvModal.classList.add('show');
+    setTimeout(function () { rvRateIn.focus(); }, 40);
+  }
+  function closeRevise() { rvModal.classList.remove('show'); }
+
+  document.getElementById('btnCancelRevise').addEventListener('click', closeRevise);
+  rvModal.addEventListener('click', function (e) { if (e.target === rvModal) closeRevise(); });
+
+  rvModal.querySelector('form, .modal-box').addEventListener('submit', function (e) {
+    var newRate = parseFloat(rvRateIn.value);
+    var reason  = (rvReason.value || '').trim();
+    if (!(newRate > 0) || Math.abs(newRate - rvCurrentRate) < 0.005) {
+      e.preventDefault();
+      rvErr.classList.remove('hidden');
+      return;
+    }
+    rvErr.classList.add('hidden');
+    if (!reason) {
+      e.preventDefault();
+      rvReasonErr.classList.remove('hidden');
+      return;
+    }
+    rvReasonErr.classList.add('hidden');
+  });
+
+  /* ---------------- Row actions ---------------- */
+  if (body) {
+    body.addEventListener('click', function (e) {
+      var revise = e.target.closest('.btn-revise');
+      if (revise) { openRevise(revise.closest('tr')); return; }
+      var edit = e.target.closest('.btn-edit');
+      if (edit) { openModal(edit.closest('tr')); }
+      // Activate / Deactivate is a real POST form and needs no handler.
+    });
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') { return; }
+    if (rvModal.classList.contains('show')) { closeRevise(); return; }
+    if (modal.classList.contains('show')) { closeModal(); }
+  });
+})();
+</script>
+{% endblock %}

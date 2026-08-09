@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Design</span>
-  <span class="name">Meera D.</span>
+  <span class="name">{{ user.short_name }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -29,16 +29,61 @@
   .jc-head {
     display: flex; justify-content: space-between; align-items: flex-start;
     margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line);
+    gap: 10px; flex-wrap: wrap;
   }
   .jc-no { font-family: 'IBM Plex Mono'; font-size: 19px; font-weight: 700; }
   .jc-so { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
   .status-pill {
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
     padding: 6px 14px; border-radius: 20px; background: var(--blue-bg); color: var(--blue);
+    white-space: nowrap;
   }
   .order-type-tag {
     font-size: 10px; font-weight: 700; text-transform: uppercase;
     padding: 3px 9px; border-radius: 20px; background: var(--gray-bg); color: var(--gray); margin-left: 8px;
+  }
+
+  /* ---- Item selector: every item code on this order --------------------- */
+  .item-picker { margin-bottom: 2px; }
+  .item-picker .pk-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 10px; margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .item-picker .pk-head .st {
+    font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase;
+    letter-spacing: .03em; font-weight: 700;
+  }
+  .item-picker .pk-head .hint { font-size: 10.5px; color: var(--ink-soft); }
+  .item-tabs {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    max-height: 190px; overflow-y: auto;
+  }
+  .item-tab {
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid var(--line); border-radius: 20px; background: #fff;
+    padding: 5px 6px 5px 11px; font-size: 11.5px; color: var(--ink);
+    text-decoration: none; line-height: 1.3;
+  }
+  .item-tab:hover { text-decoration: none; border-color: var(--steel); }
+  .item-tab .pos { font-family: 'IBM Plex Mono'; color: var(--ink-soft); font-size: 10.5px; }
+  .item-tab .code { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .item-tab.active {
+    background: var(--navy); border-color: var(--navy); color: #fff;
+  }
+  .item-tab.active .pos { color: #b9c6d2; }
+
+  .st-chip {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: 20px; white-space: nowrap;
+  }
+  .st-chip.nodrawing { background: var(--red-bg); color: var(--red); }
+  .st-chip.drawn { background: var(--blue-bg); color: var(--blue); }
+  .st-chip.approved { background: var(--green-bg); color: var(--green); }
+  .st-chip.ready { background: var(--green); color: #fff; }
+
+  .empty-state {
+    border: 1px dashed var(--line); border-radius: 3px; padding: 26px;
+    text-align: center; background: #fafbfc; color: var(--ink-soft); font-size: 12.5px;
   }
 
   /* Spec grid */
@@ -75,6 +120,9 @@
     font-size: 11.5px; font-weight: 700; text-transform: uppercase;
     letter-spacing: .04em; color: var(--ink); margin-bottom: 2px;
   }
+  .section-title .for {
+    font-family: 'IBM Plex Mono'; color: var(--blue); text-transform: none; letter-spacing: 0;
+  }
   .section-sub { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 14px; }
 
   /* Drawing preview */
@@ -82,9 +130,11 @@
     border: 1px dashed var(--line); border-radius: 3px; padding: 26px;
     text-align: center; background: #fafbfc; margin-bottom: 10px;
   }
+  .drawing-preview.missing { border-color: #e2a9a2; background: var(--red-bg); }
   .drawing-preview .ficon { font-size: 26px; margin-bottom: 8px; }
   .drawing-preview .fname { font-size: 12.5px; font-weight: 600; }
   .drawing-preview .frev { font-family: 'IBM Plex Mono'; font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+  .drawing-preview.missing .fname { color: var(--red); }
 
   /* Revision history */
   .rev-history { font-size: 11px; color: var(--ink-soft); border-top: 1px solid var(--line); }
@@ -151,6 +201,31 @@
     letter-spacing: .03em; margin-bottom: 8px; font-weight: 700;
   }
 
+  /* Forward to production summary */
+  .fwd-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line);
+    border: 1px solid var(--line); margin-bottom: 10px; }
+  .fwd-counts .c { background: #fff; padding: 10px 12px; }
+  .fwd-counts .c .n { font-family: 'IBM Plex Mono'; font-size: 20px; font-weight: 600; line-height: 1; }
+  .fwd-counts .c.ok .n { color: var(--green); }
+  .fwd-counts .c.blocked .n { color: var(--amber); }
+  .fwd-counts .c .l { font-size: 10px; color: var(--ink-soft); text-transform: uppercase;
+    letter-spacing: .04em; margin-top: 5px; }
+
+  .fwd-list { font-size: 11.5px; }
+  .fwd-list .f {
+    display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid var(--line);
+  }
+  .fwd-list .f:last-child { border-bottom: none; }
+  .fwd-list .f .fc { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .fwd-list .f .fr { color: var(--ink-soft); font-size: 10.5px; text-align: right; }
+  .fwd-list .f.ok .fr { color: var(--green); font-weight: 600; }
+  .fwd-note {
+    background: var(--blue-bg); border-radius: 3px; padding: 9px 11px;
+    font-size: 11px; color: var(--blue); line-height: 1.5; margin-top: 10px;
+  }
+  .fwd-note b { font-weight: 700; }
+
   /* Design query thread */
   .q-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
   .q-pill {
@@ -205,6 +280,11 @@
   .btn-approve-design:disabled {
     background: var(--gray-bg); color: var(--gray); cursor: not-allowed;
   }
+  .gate-note {
+    font-size: 10.5px; color: var(--amber); background: var(--amber-bg);
+    border-radius: 3px; padding: 7px 10px; margin-top: 8px; line-height: 1.45;
+  }
+  .gate-note.done { color: var(--green); background: var(--green-bg); }
 </style>
 {% endblock %}
 
@@ -215,207 +295,370 @@
     <span class="icon">📋</span> Design Queue
   </a>
   <a class="nav-item active">
-    <span class="icon">📐</span> Job: {{ so_no }}
+    <span class="icon">📐</span> Job: {{ so_no }}{% if item %} · {{ item_code }}{% endif %}
   </a>
 </div>
 {% endblock %}
 
 {% block content %}
 <div class="breadcrumb-bar">
-  <a href="{% url 'design:queue' %}">Design Queue</a> → <b>{{ so_no }}</b>
+  <a href="{% url 'design:queue' %}">Design Queue</a> → <b>{{ so_no }}{% if item %} · {{ item_code }}{% endif %}</b>
 </div>
 
 <div class="detail-layout">
   <!-- LEFT COLUMN -->
   <div>
-    <!-- Job Header -->
+    <!-- Order header + item selector -->
     <div class="card">
       <div class="jc-head">
         <div>
-          <div class="jc-no">{{ so_no }} <span class="order-type-tag">New</span></div>
-          <div class="jc-so">Orion Compressors · Ref QTN-0421 · Due 14 Aug 2026</div>
+          <div class="jc-no">{{ order.number }} <span class="order-type-tag">{{ order.get_order_type_display }}</span></div>
+          <div class="jc-so">
+            {{ order.customer.name }} · Ref {{ order.quotation.number }} ·
+            Due {{ order.expected_delivery|date:"d M Y"|default:"not set" }}
+          </div>
         </div>
-        <span class="status-pill">In Progress</span>
+        <span class="status-pill">
+          {% if item %}
+            {% if item.design_approved %}Design Approved
+            {% elif query and query.status != 'CLOSED' %}Query Raised
+            {% elif item.design_started_at %}In Progress
+            {% else %}Not Started{% endif %}
+          {% else %}No Items{% endif %}
+        </span>
       </div>
 
-      <div class="spec-grid">
-        <div class="s"><div class="l">Material</div><div class="v">Aluminium</div></div>
-        <div class="s"><div class="l">Thickness</div><div class="v">1mm</div></div>
-        <div class="s"><div class="l">Part Size</div><div class="v">80 × 50 mm</div></div>
-        <div class="s"><div class="l">Qty Required</div><div class="v">250 Nos</div></div>
-        <div class="s"><div class="l">Finish</div><div class="v txt">Anodized, Black Fill</div></div>
-        <div class="s designer">
-          <div class="l">Holes <span class="by">Design</span></div>
-          <input type="text" class="dv" id="fldHoles" value="2 × Ø3mm" placeholder="e.g. 4 × Ø4.5mm">
+      <div class="item-picker">
+        <div class="pk-head">
+          <div class="st">Item codes on this order ({{ items_total }})</div>
+          <div class="hint">One drawing is owed per item code — pick one to work on it.</div>
         </div>
-        <div class="s designer wide">
-          <div class="l">Drilling Detail <span class="by">Design</span></div>
-          <input type="text" class="dv" id="fldDrilling" value="Corner pitch 68 × 38 mm, deburr both faces"
-                 placeholder="Hole pitch / centres, countersink, deburring notes...">
+        <div class="item-tabs">
+          {% for r in item_rows %}
+          <a class="item-tab {% if r.selected %}active{% endif %}"
+             href="{% url 'design:job_detail' order.number %}?item={{ r.pk }}">
+            <span class="pos">{{ r.position }}.</span><span class="code">{{ r.code }}</span>
+            <span class="st-chip {{ r.state_class }}">{{ r.state_label }}</span>
+          </a>
+          {% empty %}
+          <div class="empty-state" style="width:100%;">
+            This sales order has no item codes on it, so there is nothing for Design to draw.
+          </div>
+          {% endfor %}
         </div>
-      </div>
-      <div class="spec-note">
-        Read-only fields come from quotation QTN-0421. Fields marked <i>Design</i> are entered here by the designer
-        while preparing the drawing.
       </div>
     </div>
 
-    <!-- Drawing -->
+    {% if item %}
+    <!-- Spec for the selected item -->
     <div class="card">
-      <div class="section-title">Drawing</div>
-      <div class="section-sub">All revisions are retained — older ones stay viewable. The newest is the current revision.</div>
-      <div class="drawing-preview">
+      <div class="section-title">Specification — <span class="for">{{ item_code }}</span></div>
+      <div class="section-sub">Item {{ item.position }} of {{ items_total }} on {{ order.number }}.</div>
+      <form method="post" action="{% url 'design:save_spec' order.number %}">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <div class="spec-grid">
+          <div class="s"><div class="l">Material</div><div class="v">{{ item.material.name|default:"—" }}</div></div>
+          <div class="s"><div class="l">Thickness</div><div class="v">{{ item.thickness.name|default:"—" }}</div></div>
+          <div class="s"><div class="l">Part Size</div><div class="v">{{ item.quotation_item.size|default:"—" }}</div></div>
+          <div class="s"><div class="l">Qty Required</div><div class="v">{{ item.quantity }} Nos</div></div>
+          <div class="s"><div class="l">Finish</div><div class="v txt">{{ item.quotation_item.finish.name|default:"—" }}</div></div>
+          <div class="s designer">
+            <div class="l">Holes <span class="by">Design</span></div>
+            <input type="text" class="dv" id="fldHoles" name="holes" value="{{ item.holes }}" placeholder="e.g. 4 × Ø4.5mm">
+          </div>
+          <div class="s designer wide">
+            <div class="l">Drilling Detail <span class="by">Design</span></div>
+            <input type="text" class="dv" id="fldDrilling" name="drilling_detail" value="{{ item.drilling_detail }}"
+                   placeholder="Hole pitch / centres, countersink, deburring notes...">
+          </div>
+        </div>
+        <div class="spec-note">
+          Read-only fields come from quotation {{ order.quotation.number }}. Fields marked <i>Design</i> are entered here by the designer
+          while preparing this item's drawing.
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary btn-sm">Save Design Fields</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Drawing for the selected item -->
+    <div class="card">
+      <div class="section-title">Drawing — <span class="for">{{ item_code }}</span></div>
+      <div class="section-sub">
+        The PO carries no drawing. Design uploads one drawing per item code; every revision is retained,
+        and revision numbers run independently for each item.
+      </div>
+      <div class="drawing-preview {% if not current_revision %}missing{% endif %}">
         <div class="ficon">📐</div>
-        <div class="fname" id="curDrawingName">Panel_ID_Tag_v2.pdf</div>
-        <div class="frev" id="curDrawingRev">Rev 02 — Current</div>
+        <div class="fname" id="curDrawingName">
+          {{ current_revision.file.name|cut:"drawings/"|default:"No drawing uploaded for this item yet" }}
+        </div>
+        <div class="frev" id="curDrawingRev">
+          {% if current_revision %}{{ current_revision.label }} — Current{% else %}No revisions{% endif %}
+        </div>
       </div>
       <div class="rev-history" id="revHistory">
-        <div class="r current">
+        {% for rev in revisions %}
+        <div class="r {% if rev.is_current %}current{% else %}superseded{% endif %}">
           <div>
-            <span class="rn">Rev 02</span><span class="rev-tag cur">Current</span>
-            <div class="rmeta">Panel_ID_Tag_v2.pdf · Uploaded by Meera D. (Design) · 05 Aug 2026, 11:20 AM</div>
+            <span class="rn">{{ rev.label }}</span>
+            <span class="rev-tag {% if rev.is_current %}cur{% else %}old{% endif %}">{% if rev.is_current %}Current{% else %}Superseded{% endif %}</span>
+            <div class="rmeta">
+              {{ rev.file.name|cut:"drawings/"|default:"(no file attached)" }} ·
+              {% if rev.uploaded_by %}Uploaded by {{ rev.uploaded_by.short_name }}{% if rev.source %} ({{ rev.source }}){% endif %}{% else %}{{ rev.source|default:"Source not recorded" }}{% endif %} ·
+              {{ rev.created_at|date:"d M Y, h:i A" }}{% if rev.note %} · {{ rev.note }}{% endif %}
+            </div>
           </div>
-          <button type="button" class="rview">View</button>
+          {% if rev.file %}<a class="rview" href="{{ rev.file.url }}" target="_blank">View</a>{% endif %}
         </div>
-        <div class="r superseded">
-          <div>
-            <span class="rn">Rev 01</span><span class="rev-tag old">Superseded</span>
-            <div class="rmeta">Panel_ID_Tag_v1r1.pdf · Uploaded by Imran S. (Sales) · 02 Aug 2026, 04:05 PM</div>
-          </div>
-          <button type="button" class="rview">View</button>
-        </div>
-        <div class="r superseded">
-          <div>
-            <span class="rn">Rev 00</span><span class="rev-tag old">Superseded</span>
-            <div class="rmeta">Panel_ID_Tag_v1.pdf · Original received with PO · 31 Jul 2026, 10:02 AM</div>
-          </div>
-          <button type="button" class="rview">View</button>
-        </div>
+        {% empty %}
+        <div class="r"><div><span class="rn">—</span><div class="rmeta">No revisions on record for this item yet.</div></div></div>
+        {% endfor %}
       </div>
-      <div class="btn-row">
-        <button class="btn btn-outline btn-sm">Open Drawing</button>
-        <button class="btn btn-outline btn-sm">Download</button>
-        <button class="btn btn-primary btn-sm" id="btnUploadRev">Upload New Revision</button>
-        <input type="file" id="revFile" accept=".pdf,.dxf,.dwg" style="display:none;">
-      </div>
+      <form method="post" action="{% url 'design:upload_revision' order.number %}"
+            enctype="multipart/form-data" id="revForm">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <div class="btn-row">
+          {% if current_revision.file %}
+          <a class="btn btn-outline btn-sm" href="{{ current_revision.file.url }}" target="_blank">Open Drawing</a>
+          <a class="btn btn-outline btn-sm" href="{{ current_revision.file.url }}" download>Download</a>
+          {% endif %}
+          <button type="button" class="btn btn-primary btn-sm" id="btnUploadRev">
+            {% if current_revision %}Upload New Revision{% else %}Upload Drawing{% endif %}
+          </button>
+          <input type="file" id="revFile" name="file" accept=".pdf,.dxf,.dwg,.png,.jpg" style="display:none;">
+        </div>
+      </form>
     </div>
 
-    <!-- Raw material selection -->
+    <!-- Raw material selection for the selected item -->
     <div class="card">
-      <div class="section-title">Raw Material — Select Sheet / Offcut</div>
-      <div class="section-sub">Stores inventory filtered to Aluminium · 1mm. Pick the sheet or offcut to use for this job.</div>
+      <div class="section-title">Raw Material — <span class="for">{{ item_code }}</span></div>
+      <div class="section-sub">
+        Stores inventory filtered to {{ item.material.name|default:"—" }} · {{ item.thickness.name|default:"—" }},
+        showing sheets and offcuts that are <b>Available</b>.
+        Reserving holds one for this item — <b>issuing it is a separate, later step done by Stores</b>,
+        and that is what actually releases the item to production.
+      </div>
 
       <div class="mat-filter">
-        <select><option>Material: Aluminium</option></select>
-        <select><option>Thickness: 1mm</option></select>
+        <select><option>Material: {{ item.material.name|default:"—" }}</option></select>
+        <select><option>Thickness: {{ item.thickness.name|default:"—" }}</option></select>
       </div>
 
-      <div class="sheet-option selected" onclick="selectSheet(this)">
-        <input type="radio" name="sheet" checked>
+      {% if reservation %}
+      <div class="sheet-option selected">
+        <input type="radio" checked disabled>
         <div>
-          <span class="uid">SHT-0805</span><span class="kind sheet">Sheet</span>
-          <div class="meta">8 × 4 ft · Rack C-1 · Received 30 Jul 2026</div>
+          <span class="uid">{{ reservation.sheet.uid }}</span>
+          <span class="kind {% if reservation.sheet.is_offcut %}offcut{% else %}sheet{% endif %}">{% if reservation.sheet.is_offcut %}Offcut{% else %}Sheet{% endif %}</span>
+          <div class="meta">
+            {{ reservation.sheet.size_display|default:"—" }} · {{ reservation.sheet.rack.name|default:"—" }} ·
+            Reserved {{ reservation.reserved_at|date:"d M Y" }} by {{ reservation.reserved_by.short_name|default:"—" }}
+          </div>
         </div>
-        <span class="stat">Available</span>
+        <span class="stat {% if not reservation.issued_at %}held{% endif %}">
+          {% if reservation.issued_at %}Issued by Stores{% else %}Reserved — awaiting Stores{% endif %}
+        </span>
       </div>
-
-      <div class="sheet-option" onclick="selectSheet(this)">
-        <input type="radio" name="sheet">
-        <div>
-          <span class="uid">OFF-0176</span><span class="kind offcut">Offcut</span>
-          <div class="meta">24 × 18 in · Rack A-4 · From SHT-0740</div>
+      {% else %}
+      <form method="post" action="{% url 'design:reserve_sheet' order.number %}">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        {% for sheet in sheets %}
+        <div class="sheet-option {% if forloop.first %}selected{% endif %}" onclick="selectSheet(this)">
+          <input type="radio" name="sheet" value="{{ sheet.pk }}" {% if forloop.first %}checked{% endif %}>
+          <div>
+            <span class="uid">{{ sheet.uid }}</span>
+            <span class="kind {% if sheet.is_offcut %}offcut{% else %}sheet{% endif %}">{% if sheet.is_offcut %}Offcut{% else %}Sheet{% endif %}</span>
+            <div class="meta">
+              {{ sheet.size_display|default:"—" }} · {{ sheet.rack.name|default:"No rack" }} · {{ sheet.origin }}
+            </div>
+          </div>
+          <span class="stat">{{ sheet.get_status_display }}</span>
         </div>
-        <span class="stat">Available</span>
-      </div>
-
-      <div class="sheet-option" onclick="selectSheet(this)">
-        <input type="radio" name="sheet">
-        <div>
-          <span class="uid">OFF-0163</span><span class="kind offcut">Offcut</span>
-          <div class="meta">16 × 12 in · Rack A-3 · From SHT-0722</div>
+        {% empty %}
+        <div class="sheet-option">
+          <input type="radio" disabled>
+          <div>
+            <span class="uid">—</span>
+            <div class="meta">No available sheet or offcut matches this item's material and thickness.</div>
+          </div>
+          <span class="stat held">None</span>
         </div>
-        <span class="stat">Available</span>
-      </div>
+        {% endfor %}
 
-      <div class="btn-row" style="margin-top:14px;">
-        <button class="btn btn-primary" id="btnReserve">Reserve SHT-0805</button>
-        <button class="btn btn-outline">Request New Sheet Instead</button>
+        <div class="btn-row" style="margin-top:14px;">
+          <button type="submit" class="btn btn-primary" id="btnReserve" {% if not sheets %}disabled{% endif %}>Reserve Selected Sheet</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="empty-state">
+        Nothing to design on {{ order.number }} — the order was booked without any item lines.
+        Ask Accounts to check the quotation it came from.
       </div>
     </div>
+    {% endif %}
   </div>
 
   <!-- RIGHT COLUMN (Sidebar) -->
   <div>
+    <!-- Forward to production -->
+    <div class="card side-block">
+      <div class="st">Forward to Production</div>
+      <div class="fwd-counts">
+        <div class="c ok"><div class="n">{{ ready_rows|length }}</div><div class="l">Items ready</div></div>
+        <div class="c blocked"><div class="n">{{ blocked_rows|length }}</div><div class="l">Still blocked</div></div>
+      </div>
+      <div class="fwd-list">
+        {% for r in ready_rows %}
+        <div class="f ok"><span class="fc">{{ r.code }}</span><span class="fr">In the production queue</span></div>
+        {% endfor %}
+        {% for r in blocked_rows %}
+        <div class="f"><span class="fc">{{ r.code }}</span><span class="fr">{{ r.reason|default:"Waiting" }}</span></div>
+        {% endfor %}
+        {% if not ready_rows and not blocked_rows %}
+        <div class="f"><span class="fr">No items on this order.</span></div>
+        {% endif %}
+      </div>
+      <div class="fwd-note">
+        Readiness is <b>derived</b>, not sent. An item appears in the Production Manager's Ready Queue by itself
+        the moment it has a current drawing, design approval and material <b>issued</b> by Stores — so there is
+        no "forward" button here and nothing to click. Items move one at a time; the rest of the order can wait.
+      </div>
+    </div>
+
     <!-- Query thread -->
     <div class="card side-block">
       <div class="q-head">
-        <div class="st" style="margin-bottom:0;">Design Query</div>
-        <span class="q-pill answered" id="qStatus">Answered</span>
+        <div class="st" style="margin-bottom:0;">Design Query{% if item %} — {{ item_code }}{% endif %}</div>
+        {% if query %}
+        <span class="q-pill {{ query.status|lower }}" id="qStatus">{{ query.get_status_display }}</span>
+        {% else %}
+        <span class="q-pill closed" id="qStatus">None</span>
+        {% endif %}
       </div>
 
       <div class="q-route">
-        Routed to: <b>Imran S.</b> — salesperson who raised <span class="qtn">QTN-0421</span>.
-        Replies come back to this thread.
+        Routed to: <b>{{ order.salesperson.short_name }}</b> — salesperson who raised
+        <span class="qtn">{{ order.quotation.number }}</span>. Replies come back to this thread.
       </div>
 
+      {% if query %}
       <div class="q-thread" id="qThread">
-        <div class="q-msg design">
+        {% for msg in query_messages %}
+        <div class="q-msg {% if msg.author_id == query.assigned_to_id %}sales{% else %}design{% endif %}">
           <div class="qh">
-            <div><span class="qa">Meera D.</span><span class="qr">Design</span></div>
-            <span class="qt">04 Aug, 03:12 PM</span>
+            <div>
+              <span class="qa">{{ msg.author.short_name }}</span>
+              <span class="qr">{% if msg.author_id == query.assigned_to_id %}Sales{% else %}Design{% endif %}</span>
+            </div>
+            <span class="qt">{{ msg.created_at|date:"d M, h:i A" }}</span>
           </div>
-          <div class="qb">Drawing shows text block overlapping the top-left mounting hole. Should the text shift down, or is the hole position flexible?</div>
+          <div class="qb">{{ msg.body|linebreaksbr }}</div>
         </div>
-        <div class="q-msg sales">
-          <div class="qh">
-            <div><span class="qa">Imran S.</span><span class="qr">Sales</span></div>
-            <span class="qt">04 Aug, 05:40 PM</span>
-          </div>
-          <div class="qb">Checked with Orion. Hole positions are fixed to their panel. Shift the text block 6mm down — they confirmed on call.</div>
-        </div>
-        <div class="q-msg design">
-          <div class="qh">
-            <div><span class="qa">Meera D.</span><span class="qr">Design</span></div>
-            <span class="qt">05 Aug, 09:15 AM</span>
-          </div>
-          <div class="qb">Noted. Text shifted 6mm down and re-uploaded as Rev 02. Please confirm this matches what the customer approved.</div>
-        </div>
+        {% empty %}
+        <div class="q-msg design"><div class="qb">No messages on this query yet.</div></div>
+        {% endfor %}
       </div>
 
-      <textarea class="query-input" id="qReply" placeholder="Reply to Imran S. ..."></textarea>
-      <div class="btn-row">
-        <button class="btn btn-primary btn-sm" id="btnSendQuery">Send Reply</button>
-        <button class="btn btn-outline btn-sm" id="btnCloseQuery">Close Query</button>
-      </div>
+      {% if query.status != 'CLOSED' and item %}
+      <form method="post" action="{% url 'design:reply_query' order.number query.pk %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <textarea class="query-input" id="qReply" name="body" required
+                  placeholder="Reply to {{ query.assigned_to.short_name }} ..."></textarea>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary btn-sm" id="btnSendQuery">Send Reply</button>
+        </div>
+      </form>
+      <form method="post" action="{% url 'design:close_query' order.number query.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <div class="btn-row">
+          <button type="submit" class="btn btn-outline btn-sm" id="btnCloseQuery">Close Query</button>
+        </div>
+      </form>
+      {% endif %}
+      {% endif %}
+
+      {% if item %}{% if not query or query.status == 'CLOSED' %}
+      <form method="post" action="{% url 'design:raise_query' order.number %}" {% if not query %}id="qThread"{% endif %}>
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <textarea class="query-input" name="subject" required style="min-height:auto;"
+                  placeholder="Subject — e.g. Text placement unclear near mounting hole"></textarea>
+        <textarea class="query-input" name="body" required style="margin-top:8px;"
+                  placeholder="Describe what needs clarifying..."></textarea>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary btn-sm">Raise Query on {{ item_code }}</button>
+        </div>
+      </form>
+      {% endif %}{% endif %}
     </div>
 
     <!-- Order info -->
     <div class="card side-block">
       <div class="st">Order Type &amp; History</div>
       <div class="info-rows">
-        <div class="row"><span>Order Type</span><span>New Customer</span></div>
-        <div class="row"><span>Prior Orders</span><span>None</span></div>
-        <div class="row"><span>Sales Person</span><span>Imran S.</span></div>
+        <div class="row"><span>Order Type</span><span>{{ order.get_order_type_display }}</span></div>
+        <div class="row"><span>Item Codes</span><span>{{ items_total }}</span></div>
+        <div class="row"><span>Prior Orders</span><span>{{ prior_orders|default:"None" }}</span></div>
+        <div class="row"><span>Sales Person</span><span>{{ order.salesperson.short_name }}</span></div>
       </div>
     </div>
+
+    <!-- Finalize -->
+    {% if item %}
+    <div class="card side-block">
+      <div class="st">Finalize — {{ item_code }}</div>
+      <div class="section-sub" style="margin-bottom:10px;">
+        An item can be approved only once it has its <b>own drawing</b> and a <b>reserved sheet</b>.
+        Approving this item does not touch the other items on {{ order.number }}.
+      </div>
+      <form method="post" action="{% url 'design:approve_design' order.number %}">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <button type="submit" class="btn-approve-design" id="btnApprove"
+                {% if not can_approve %}disabled{% endif %}>
+          {% if item.design_approved %}Design Approved{% else %}Mark Design Approved{% endif %}
+        </button>
+      </form>
+      {% if item.design_approved %}
+      <div class="gate-note done">
+        Approved{% if item.design_approved_by %} by {{ item.design_approved_by.short_name }}{% endif %}
+        {% if item.design_approved_at %}on {{ item.design_approved_at|date:"d M Y, h:i A" }}{% endif %}.
+        {% if item.material_issued %}Material issued — this item is in the production queue.
+        {% else %}Waiting for Stores to issue the reserved sheet.{% endif %}
+      </div>
+      {% elif approve_block_reason %}
+      <div class="gate-note">{{ approve_block_reason }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Activity log -->
     <div class="card side-block">
       <div class="st">Activity Log</div>
       <div class="log">
-        <div class="log-item"><div class="log-dot"></div><div><div class="la">Design Job created</div><div class="lt">04 Aug, 10:02 AM</div></div></div>
-        <div class="log-item"><div class="log-dot"></div><div><div class="la">Drawing opened by Meera D.</div><div class="lt">04 Aug, 02:15 PM</div></div></div>
-        <div class="log-item"><div class="log-dot"></div><div><div class="la">Query answered by Imran S. (Sales)</div><div class="lt">04 Aug, 05:40 PM</div></div></div>
-        <div class="log-item"><div class="log-dot"></div><div><div class="la">Material SHT-0805 selected</div><div class="lt">05 Aug, 09:40 AM</div></div></div>
-        <div class="log-item"><div class="log-dot"></div><div><div class="la">Rev 02 uploaded by Meera D.</div><div class="lt">05 Aug, 11:20 AM</div></div></div>
+        {% for entry in audit_entries %}
+        <div class="log-item">
+          <div class="log-dot"></div>
+          <div>
+            <div class="la">{{ entry.action }}{% if entry.actor %} — {{ entry.actor.short_name }}{% endif %}</div>
+            <div class="lt">{{ entry.created_at|date:"d M, h:i A" }}{% if entry.detail %} · {{ entry.detail }}{% endif %}</div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="log-item"><div class="log-dot"></div><div><div class="la">No activity recorded yet</div></div></div>
+        {% endfor %}
       </div>
-    </div>
-
-    <!-- Finalize -->
-    <div class="card side-block">
-      <div class="st">Finalize</div>
-      <div class="section-sub" style="margin-bottom:10px;">Reserve material before marking design approved — this locks the sheet from other jobs.</div>
-      <button class="btn-approve-design" id="btnApprove" disabled>Mark Design Approved → Send to Production Queue</button>
     </div>
   </div>
 </div>
@@ -423,108 +666,42 @@
 
 {% block extra_js %}
 <script>
+  /* Every state change on this screen is a POST to the server; the script
+     below only does the picking-a-radio affordance and the hidden file input.
+     Nothing here decides state — the page re-renders from the database, and
+     the approval gate is enforced in the view, not by the disabled button. */
+
   function selectSheet(el) {
-    document.querySelectorAll('.sheet-option').forEach(s => {
+    document.querySelectorAll('.sheet-option').forEach(function (s) {
+      var r = s.querySelector('input[type=radio]');
+      if (!r || r.disabled) { return; }
       s.classList.remove('selected');
-      s.querySelector('input[type=radio]').checked = false;
+      r.checked = false;
     });
+    var radio = el.querySelector('input[type=radio]');
+    if (!radio || radio.disabled) { return; }
     el.classList.add('selected');
-    el.querySelector('input[type=radio]').checked = true;
-    const uid = el.querySelector('.uid').textContent;
-    const btn = document.getElementById('btnReserve');
-    if (!btn.disabled) { btn.textContent = 'Reserve ' + uid; }
+    radio.checked = true;
+    var uid = el.querySelector('.uid').textContent.trim();
+    var btn = document.getElementById('btnReserve');
+    if (btn && !btn.disabled) { btn.textContent = 'Reserve ' + uid; }
   }
 
-  document.getElementById('btnReserve').addEventListener('click', function() {
-    const sel = document.querySelector('.sheet-option.selected .uid');
-    this.textContent = '✓ ' + (sel ? sel.textContent : 'Material') + ' Reserved';
-    this.disabled = true;
-    this.style.background = 'var(--green)';
-    this.style.color = '#fff';
-    document.getElementById('btnApprove').disabled = false;
-  });
+  /* ---- Drawing revisions: hidden file input posts the real form ---- */
+  var btnUploadRev = document.getElementById('btnUploadRev');
+  var revFile = document.getElementById('revFile');
+  if (btnUploadRev && revFile) {
+    btnUploadRev.addEventListener('click', function () { revFile.click(); });
+    revFile.addEventListener('change', function () {
+      if (this.files && this.files.length) { document.getElementById('revForm').submit(); }
+    });
+  }
 
-  document.getElementById('btnApprove').addEventListener('click', function() {
-    alert('✓ Design approved! Job sent to Production Queue. (placeholder — backend not wired yet)');
-  });
-
-  /* ---- Drawing revisions ---- */
-  var revCounter = 2;
-  document.getElementById('btnUploadRev').addEventListener('click', function() {
-    document.getElementById('revFile').click();
-  });
-
-  document.getElementById('revFile').addEventListener('change', function() {
-    if (!this.files || !this.files.length) { return; }
-    var fname = this.files[0].name;
-    revCounter += 1;
-    var revNo = 'Rev ' + String(revCounter).padStart(2, '0');
-    var hist = document.getElementById('revHistory');
-
-    // Demote the existing current revision
-    var cur = hist.querySelector('.r.current');
-    if (cur) {
-      cur.classList.remove('current');
-      cur.classList.add('superseded');
-      var tag = cur.querySelector('.rev-tag');
-      tag.classList.remove('cur');
-      tag.classList.add('old');
-      tag.textContent = 'Superseded';
-    }
-
-    var row = document.createElement('div');
-    row.className = 'r current';
-    row.innerHTML = '<div><span class="rn"></span><span class="rev-tag cur">Current</span>' +
-                    '<div class="rmeta"></div></div>' +
-                    '<button type="button" class="rview">View</button>';
-    row.querySelector('.rn').textContent = revNo;
-    row.querySelector('.rmeta').textContent = fname + ' · Uploaded by Meera D. (Design) · just now';
-    hist.insertBefore(row, hist.firstChild);
-
-    document.getElementById('curDrawingName').textContent = fname;
-    document.getElementById('curDrawingRev').textContent = revNo + ' — Current';
-    this.value = '';
-  });
-
-  document.getElementById('revHistory').addEventListener('click', function(e) {
-    if (e.target.classList.contains('rview')) {
-      var r = e.target.closest('.r');
-      alert('Opening ' + r.querySelector('.rn').textContent +
-            ' — old revisions stay viewable. (placeholder — backend not wired yet)');
-    }
-  });
-
-  /* ---- Query thread ---- */
-  document.getElementById('btnSendQuery').addEventListener('click', function() {
-    var box = document.getElementById('qReply');
-    var text = box.value.trim();
-    if (!text) { box.focus(); return; }
-
-    var thread = document.getElementById('qThread');
-    var msg = document.createElement('div');
-    msg.className = 'q-msg design';
-    msg.innerHTML = '<div class="qh"><div><span class="qa">Meera D.</span>' +
-                    '<span class="qr">Design</span></div><span class="qt"></span></div>' +
-                    '<div class="qb"></div>';
-    msg.querySelector('.qt').textContent = 'just now';
-    msg.querySelector('.qb').textContent = text;
-    thread.appendChild(msg);
-    thread.scrollTop = thread.scrollHeight;
-    box.value = '';
-
-    var pill = document.getElementById('qStatus');
-    pill.className = 'q-pill open';
-    pill.textContent = 'Open';
-  });
-
-  document.getElementById('btnCloseQuery').addEventListener('click', function() {
-    var pill = document.getElementById('qStatus');
-    pill.className = 'q-pill closed';
-    pill.textContent = 'Closed';
-    document.getElementById('qReply').disabled = true;
-    document.getElementById('btnSendQuery').disabled = true;
-    this.disabled = true;
-    this.textContent = 'Query Closed';
+  /* Label the reserve button with whichever sheet is pre-selected. */
+  document.addEventListener('DOMContentLoaded', function () {
+    var first = document.querySelector('.sheet-option.selected .uid');
+    var btn = document.getElementById('btnReserve');
+    if (first && btn && !btn.disabled) { btn.textContent = 'Reserve ' + first.textContent.trim(); }
   });
 </script>
 {% endblock %}

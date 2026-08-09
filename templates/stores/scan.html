@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Stores</span>
-  <span class="name">Deepak Salvi</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -189,12 +189,13 @@
         printed under the QR and open it directly.
       </div>
 
-      <form id="manual-form" novalidate>
+      <form id="manual-form" method="post" action="{% url 'stores:scan_open' %}" novalidate>
+        {% csrf_token %}
         <div class="field">
           <label for="manual-uid">Sheet No.</label>
-          <input type="text" id="manual-uid" value="SHT-0813" placeholder="SHT-0813"
+          <input type="text" id="manual-uid" name="uid" value="" placeholder="SHT-0101"
                  autocomplete="off" spellcheck="false">
-          <div class="m-err" id="manual-err" hidden></div>
+          <div class="m-err" id="manual-err" {% if not scan_error %}hidden{% endif %}>{{ scan_error }}</div>
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">
           Open Sheet
@@ -203,10 +204,11 @@
 
       <div class="recent">
         <div class="r-label">Recently scanned</div>
-        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'SHT-0813' %}">SHT-0813</a>
-        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'SHT-0812' %}">SHT-0812</a>
-        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'OFF-0212' %}">OFF-0212</a>
-        <a class="chip-uid" href="{% url 'stores:sheet_detail' 'SHT-0805' %}">SHT-0805</a>
+        {% for sheet in recent %}
+        <a class="chip-uid" href="{% url 'stores:sheet_detail' sheet.uid %}">{{ sheet.uid }}</a>
+        {% empty %}
+        <span class="p-sub">Nothing scanned yet — no sheets are in the register.</span>
+        {% endfor %}
       </div>
     </div>
 
@@ -231,35 +233,30 @@
 (function () {
   'use strict';
 
-  // Django builds the URL for a sample UID; we swap the UID at click time so the
-  // preview stays a pure front-end flow with no invented route names.
-  var SAMPLE_URL = "{% url 'stores:sheet_detail' 'SHT-0813' %}";
-
-  function urlFor(uid) {
-    return SAMPLE_URL.replace('SHT-0813', encodeURIComponent(uid));
-  }
-
   // ---------------- Manual fallback ----------------
+  // The form POSTs to the server, which is what actually resolves the UID and
+  // reports an unknown one. The checks here only catch obvious typos early.
   var form  = document.getElementById('manual-form');
   var input = document.getElementById('manual-uid');
   var mErr  = document.getElementById('manual-err');
 
   form.addEventListener('submit', function (e) {
-    e.preventDefault();
     var uid = (input.value || '').trim().toUpperCase();
 
     if (!uid) {
-      mErr.textContent = 'Enter a sheet number, e.g. SHT-0813.';
+      e.preventDefault();
+      mErr.textContent = 'Enter a sheet number, e.g. SHT-0101.';
       mErr.hidden = false;
       return;
     }
     if (!/^(SHT|OFF)-\d{3,5}$/.test(uid)) {
-      mErr.textContent = 'Expected format SHT-0813 or OFF-0212.';
+      e.preventDefault();
+      mErr.textContent = 'Expected format SHT-0101 or OFF-0102.';
       mErr.hidden = false;
       return;
     }
+    input.value = uid;
     mErr.hidden = true;
-    window.location.href = urlFor(uid);
   });
 
   input.addEventListener('input', function () { mErr.hidden = true; });

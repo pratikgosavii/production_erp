@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Customer Master — Masters{% endblock %}
+{% block topbar_sub %}Masters — Customers{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Admin</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ---- Summary strip ---- */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border-bottom: 1px solid var(--line);
+    margin: -24px -28px 24px;
+  }
+  .summary-strip .cell { background: var(--card); padding: 14px 20px; }
+  .summary-strip .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary-strip .cell .l {
+    font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase;
+    letter-spacing: .04em; margin-top: 6px;
+  }
+  .summary-strip .cell.active-c .n { color: var(--green); }
+  .summary-strip .cell.credit-c .n { color: var(--blue); }
+  .summary-strip .cell.quote-c .n  { color: var(--steel); }
+
+  /* ---- Page head / toolbar ---- */
+  .page-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+  }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .page-head .breadcrumb { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] {
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12.5px; width: 230px; font-family: 'IBM Plex Sans';
+  }
+  .toolbar input[type=text]:focus,
+  .toolbar select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); }
+  .toolbar select {
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12px; background: #fff; font-family: 'IBM Plex Sans';
+  }
+  .chip {
+    padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 11.5px; background: #fff; color: var(--ink-soft); cursor: pointer;
+    user-select: none;
+  }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btn-add {
+    background: var(--navy); color: #fff; border: none; padding: 8px 16px;
+    border-radius: 3px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    font-family: 'IBM Plex Sans';
+  }
+  .btn-add:hover { background: var(--navy-2); }
+
+  .result-line { font-size: 11px; color: var(--ink-soft); margin: 0 0 8px; font-style: italic; }
+  .result-line b { font-family: 'IBM Plex Mono'; font-style: normal; color: var(--ink); }
+
+  /* ---- Master table ---- */
+  table.cu { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  table.cu thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.cu tbody tr { border-top: 1px solid var(--line); }
+  table.cu tbody tr:hover { background: #fafbfc; }
+  table.cu td { padding: 11px 12px; vertical-align: middle; }
+
+  .cust-name { font-weight: 700; color: var(--ink); }
+  .cust-name .city {
+    display: block; font-size: 10.5px; font-weight: 500; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: .03em; margin-top: 3px;
+  }
+  .addr { color: var(--ink-soft); font-size: 11.5px; line-height: 1.5; }
+  .gstin { font-family: 'IBM Plex Mono'; font-size: 11.5px; font-weight: 600; color: var(--steel); }
+  .person { color: var(--ink); }
+  .phone { font-family: 'IBM Plex Mono'; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
+  .email { font-family: 'IBM Plex Mono'; font-size: 11.5px; color: var(--blue); word-break: break-all; }
+  .credit { font-family: 'IBM Plex Mono'; font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; }
+  .credit.zero { color: var(--ink-soft); font-weight: 400; }
+
+  .codes-link {
+    font-family: 'IBM Plex Mono'; font-size: 11.5px; font-weight: 600;
+    padding: 4px 10px; border-radius: 20px; background: var(--blue-bg);
+    color: var(--blue); text-decoration: none; display: inline-block; white-space: nowrap;
+  }
+  .codes-link:hover { text-decoration: underline; }
+  .codes-link.none { background: var(--gray-bg); color: var(--gray); font-weight: 400; }
+
+  td.actions { white-space: nowrap; text-align: right; }
+  .btn-row {
+    font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+    cursor: pointer; font-family: 'IBM Plex Sans'; margin-left: 6px;
+  }
+  .btn-row:hover { border-color: var(--steel); color: var(--ink); }
+
+  /* ---- Empty state ---- */
+  tr.empty-row td {
+    padding: 34px 20px; text-align: center; color: var(--ink-soft); font-size: 12.5px;
+    background: #fafbfc;
+  }
+  tr.empty-row .empty-title { font-weight: 600; color: var(--ink); font-size: 13px; margin-bottom: 5px; }
+  tr.empty-row .empty-hint { font-size: 11.5px; font-style: italic; }
+
+  /* ---- Add modal ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--card); border-radius: 8px; width: 560px; max-width: 92vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-box .modal-head {
+    background: var(--navy); color: #fff; padding: 15px 20px; font-size: 14px; font-weight: 700;
+  }
+  .modal-box .modal-head .sub {
+    display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+    opacity: .78; font-family: 'IBM Plex Mono';
+  }
+  .modal-box .modal-body { padding: 18px 20px 4px; max-height: 66vh; overflow-y: auto; }
+  .modal-box .modal-body .field { margin-bottom: 14px; }
+  .modal-box .modal-body .field input,
+  .modal-box .modal-body .field select { padding: 8px 11px; font-size: 12.5px; }
+  .modal-box .modal-body .field input.mono-in { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .req { color: var(--red); }
+  .field-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+  .field-hint.err { color: var(--red); font-weight: 600; }
+  .field-hint.hidden { display: none; }
+  .modal-foot {
+    display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px;
+    border-top: 1px solid var(--line); background: #fafbfc;
+  }
+
+  tr.just-added td { animation: rowFlash 1.4s ease-out; }
+  @keyframes rowFlash {
+    0%   { background: var(--green-bg); }
+    100% { background: transparent; }
+  }
+
+  .flash { padding: 10px 14px; font-size: 11.5px; line-height: 1.55; margin-bottom: 12px; border-radius: 0 var(--radius) var(--radius) 0; }
+  .flash.success { background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green); }
+  .flash.error   { background: var(--red-bg);   border-left: 3px solid var(--red);   color: var(--red); }
+  a.chip { text-decoration: none; display: inline-block; }
+  a.chip:hover { text-decoration: none; }
+
+  @media (max-width: 900px) {
+    .summary-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Admin — Masters</div>
+  <a href="{% url 'masters:customers' %}" class="nav-item active">
+    <span class="icon">🏢</span> Customers
+  </a>
+  <a href="{% url 'masters:item_codes' %}" class="nav-item">
+    <span class="icon">🏷️</span> Item Codes
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% for message in messages %}
+  <div class="flash {{ message.tags }}">{{ message }}</div>
+{% endfor %}
+
+<!-- ======== SUMMARY ======== -->
+<div class="summary-strip">
+  <div class="cell"><div class="n" id="statTotal">{{ summary.total }}</div><div class="l">Total customers</div></div>
+  <div class="cell active-c"><div class="n" id="statActive">{{ summary.active_year }}</div><div class="l">Active this year</div></div>
+  <div class="cell credit-c"><div class="n" id="statCredit">Rs.{{ summary.credit|floatformat:0 }}</div><div class="l">Total credit extended</div></div>
+  <div class="cell quote-c"><div class="n" id="statQuotes">{{ summary.quotations }}</div><div class="l">Quotations raised</div></div>
+</div>
+
+<div class="page-head">
+  <div>
+    <h1>Customer Master</h1>
+    <div class="breadcrumb">Masters → Customers — one record per billing entity; item codes hang off it</div>
+  </div>
+  <form method="get" class="toolbar">
+    <input type="text" id="searchBox" name="q" value="{{ q }}" placeholder="Search name, GSTIN, contact or email...">
+    <select id="cityFilter" name="city" onchange="this.form.submit()">
+      <option value="">All cities</option>
+      {% for c in cities %}
+      <option value="{{ c }}" {% if city == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="activity" value="{{ activity }}">
+    <button type="submit" class="chip">Search</button>
+    <a class="chip {% if not activity %}active{% endif %}" href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if city %}city={{ city|urlencode }}{% endif %}">All</a>
+    <a class="chip {% if activity == '1' %}active{% endif %}" href="?activity=1{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if city %}&amp;city={{ city|urlencode }}{% endif %}">Active this year</a>
+    <a class="chip {% if activity == '0' %}active{% endif %}" href="?activity=0{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if city %}&amp;city={{ city|urlencode }}{% endif %}">Dormant</a>
+    <button type="button" class="btn-add" id="btnOpenAdd">+ Add Customer</button>
+  </form>
+</div>
+
+<div class="result-line" id="resultLine">
+  Showing <b>{{ shown_count }}</b> of <b>{{ total_count }}</b> customers{% if city %} — <b>{{ city }}</b>{% endif %}
+</div>
+
+<div style="overflow-x:auto;">
+<table class="cu" id="cuTable">
+  <thead>
+    <tr>
+      <th style="width:14%">Customer</th>
+      <th style="width:18%">Address</th>
+      <th style="width:11%">GSTIN</th>
+      <th style="width:12%">Contact Person</th>
+      <th style="width:11%">Phone</th>
+      <th style="width:15%">Email</th>
+      <th style="width:9%; text-align:right;">Credit Limit</th>
+      <th style="width:6%">Item Codes</th>
+      <th style="width:4%"></th>
+    </tr>
+  </thead>
+  <tbody id="cuBody">
+
+    {% for c in customers %}
+    <tr data-id="{{ c.pk }}" data-name="{{ c.name }}" data-city="{{ c.city }}"
+        data-state="{{ c.state }}" data-pincode="{{ c.pincode }}"
+        data-credit="{{ c.credit_limit|floatformat:0 }}" data-codes="{{ c.code_count }}"
+        data-quotes="{{ c.quotation_count }}" data-active="{% if c.year_quotes %}1{% else %}0{% endif %}">
+      <td class="cust-name">{{ c.name }}<span class="city">{{ c.city|default:"—" }}</span></td>
+      <td class="addr">{{ c.address|default:"—" }}</td>
+      <td class="gstin">{{ c.gstin|default:"—" }}</td>
+      <td class="person">{{ c.contact_person|default:"—" }}</td>
+      <td class="phone">{{ c.phone|default:"—" }}</td>
+      <td class="email">{{ c.email|default:"—" }}</td>
+      <td class="credit {% if not c.credit_limit %}zero{% endif %}">
+        {% if c.credit_limit %}Rs.{{ c.credit_limit|floatformat:0 }}{% else %}—{% endif %}
+      </td>
+      <td>
+        <a class="codes-link {% if not c.code_count %}none{% endif %}"
+           href="{% url 'masters:item_codes' %}?customer={{ c.pk }}">
+          {% if c.code_count %}{{ c.code_count }} code{{ c.code_count|pluralize }}{% else %}no codes{% endif %}
+        </a>
+      </td>
+      <td class="actions"><button type="button" class="btn-row btn-edit">Edit</button></td>
+    </tr>
+    {% empty %}
+    <tr class="empty-row" id="emptyRow">
+      <td colspan="9">
+        <div class="empty-title" id="emptyTitle">
+          {% if city %}No customers in {{ city }} yet{% elif q or activity %}No customers match this filter{% else %}No customers yet{% endif %}
+        </div>
+        <div class="empty-hint" id="emptyHint">
+          {% if q or activity or city %}Try clearing the search box, the activity chip or the city dropdown.
+          {% else %}Customers are also created automatically the first time a salesperson types a new name
+          on a quotation — or add one here with “+ Add Customer”.{% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+
+  </tbody>
+</table>
+</div>
+
+<!-- ======== ADD / EDIT CUSTOMER MODAL ======== -->
+<div class="modal-overlay" id="addModal">
+  <form class="modal-box" method="post" action="{% url 'masters:customer_save' %}">
+    {% csrf_token %}
+    <input type="hidden" name="back" value="{{ request.get_full_path }}">
+    <input type="hidden" name="customer" id="mId" value="">
+    <div class="modal-head">
+      <span id="modalTitle">Add Customer</span>
+      <span class="sub">Customer name must be unique across the master</span>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Name <span class="req">*</span></label>
+        <input type="text" id="mName" name="name" placeholder="e.g. Veeransh Fabricators" autocomplete="off" required>
+        <div class="field-hint err hidden" id="mNameErr">Customer name is required.</div>
+      </div>
+
+      <div class="field">
+        <label>Address</label>
+        <input type="text" id="mAddress" name="address" placeholder="e.g. Plot 42, MIDC Satpur, Nashik 422007">
+        <div class="field-hint">The city is picked up from the last comma-separated part of the address unless you set it below.</div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>City</label>
+          <input type="text" id="mCity" name="city" placeholder="e.g. Nashik">
+        </div>
+        <div class="field">
+          <label>GSTIN / Tax ID</label>
+          <input type="text" id="mGstin" name="gstin" class="mono-in" placeholder="e.g. 27AABCV1234F1Z5" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Contact Person</label>
+          <input type="text" id="mContact" name="contact_person" placeholder="e.g. Mr. Rajesh Kulkarni">
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="text" id="mPhone" name="phone" class="mono-in" placeholder="e.g. +91 98765 43210">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="mEmail" name="email" class="mono-in" placeholder="e.g. rajesh@veeransh.com">
+        </div>
+        <div class="field">
+          <label>Credit Limit (Rs.)</label>
+          <input type="number" id="mCredit" name="credit_limit" class="mono-in" min="0" step="1000" placeholder="e.g. 500000">
+        </div>
+      </div>
+      <div class="field-hint">Quotations beyond the credit limit need manager approval.</div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-outline" id="btnCancelAdd">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="btnSaveAdd">Save Customer</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+
+  // Search, city filter and the activity chips are real querystring filters,
+  // and the summary strip is server-rendered. This script only opens the
+  // add/edit dialog with the row's real values and lets the form POST.
+
+  var body  = document.getElementById('cuBody');
+  var modal = document.getElementById('addModal');
+  var err   = document.getElementById('mNameErr');
+
+  var f = {
+    id:      document.getElementById('mId'),
+    name:    document.getElementById('mName'),
+    address: document.getElementById('mAddress'),
+    city:    document.getElementById('mCity'),
+    gstin:   document.getElementById('mGstin'),
+    contact: document.getElementById('mContact'),
+    phone:   document.getElementById('mPhone'),
+    email:   document.getElementById('mEmail'),
+    credit:  document.getElementById('mCredit')
+  };
+
+  function cell(row, sel) {
+    var el = row.querySelector(sel);
+    var txt = el ? el.textContent.trim() : '';
+    return txt === '—' ? '' : txt;
+  }
+
+  function openModal(row) {
+    document.getElementById('modalTitle').textContent = row ? 'Edit Customer' : 'Add Customer';
+    f.id.value      = row ? row.dataset.id : '';
+    f.name.value    = row ? row.dataset.name : '';
+    f.address.value = row ? cell(row, '.addr') : '';
+    f.city.value    = row ? (row.dataset.city || '') : '';
+    f.gstin.value   = row ? cell(row, '.gstin') : '';
+    f.contact.value = row ? cell(row, '.person') : '';
+    f.phone.value   = row ? cell(row, '.phone') : '';
+    f.email.value   = row ? cell(row, '.email') : '';
+    f.credit.value  = row ? (row.dataset.credit || '') : '';
+    err.classList.add('hidden');
+    modal.classList.add('show');
+    setTimeout(function () { f.name.focus(); }, 40);
+  }
+  function closeModal() { modal.classList.remove('show'); }
+
+  document.getElementById('btnOpenAdd').addEventListener('click', function () { openModal(null); });
+  document.getElementById('btnCancelAdd').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('show')) { closeModal(); }
+  });
+
+  // The duplicate-name guard lives on the server; this only catches a blank name.
+  modal.querySelector('form, .modal-box').addEventListener('submit', function (e) {
+    if (!(f.name.value || '').trim()) {
+      e.preventDefault();
+      err.textContent = 'Customer name is required.';
+      err.classList.remove('hidden');
+    }
+  });
+
+  if (body) {
+    body.addEventListener('click', function (e) {
+      var edit = e.target.closest('.btn-edit');
+      if (edit) { openModal(edit.closest('tr')); }
+    });
+  }
+})();
+</script>
+{% endblock %}

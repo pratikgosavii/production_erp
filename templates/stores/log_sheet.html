@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Stores</span>
-  <span class="name">Deepak Salvi</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -154,7 +154,7 @@
 
 <!-- Mode selector -->
 <div class="mode-tabs">
-  <div class="mode-card active" id="mode-a" data-mode="a" role="button" tabindex="0">
+  <div class="mode-card {% if mode != 'b' %}active{% endif %}" id="mode-a" data-mode="a" role="button" tabindex="0">
     <div class="mc-head">
       <span class="radio"></span>
       <span class="mc-title">Generate blank QR labels</span>
@@ -166,7 +166,7 @@
     </div>
   </div>
 
-  <div class="mode-card" id="mode-b" data-mode="b" role="button" tabindex="0">
+  <div class="mode-card {% if mode == 'b' %}active{% endif %}" id="mode-b" data-mode="b" role="button" tabindex="0">
     <div class="mc-head">
       <span class="radio"></span>
       <span class="mc-title">Log sheet with details now</span>
@@ -180,7 +180,10 @@
 </div>
 
 <!-- ============ MODE A ============ -->
-<form class="panel" id="panel-a" novalidate>
+<form class="panel" id="panel-a" method="post" action="{% url 'stores:log_sheet' %}" novalidate
+      {% if mode == 'b' %}hidden{% endif %}>
+  {% csrf_token %}
+  <input type="hidden" name="mode" value="a">
   <div class="panel-head"><h2>Blank QR label batch</h2></div>
   <div class="panel-sub">
     No master data needed. Each label gets a fresh sheet UID in the
@@ -194,19 +197,22 @@
     sheet at the rack and complete the details on the phone. Nothing sits untracked.
   </div>
 
-  <div class="err-box" id="err-a" hidden></div>
+  <div class="err-box" id="err-a" {% if not blank_form.errors %}hidden{% endif %}>
+    {% for field, errs in blank_form.errors.items %}{{ errs|join:" " }} {% endfor %}
+  </div>
 
   <div class="req-legend"><span class="req">*</span> Required</div>
 
   <div class="qty-row">
     <div class="field" id="fa-qty">
       <label for="a-qty">Quantity <span class="req">*</span></label>
-      <input type="number" id="a-qty" name="quantity" min="1" max="16" value="8" required>
-      <div class="hint">1 – 16 labels per sheet of stickers</div>
+      <input type="number" id="a-qty" name="quantity" min="1" max="{{ max_batch }}"
+             value="{{ blank_form.quantity.value|default:8 }}" required>
+      <div class="hint">1 – {{ max_batch }} labels per sheet of stickers</div>
     </div>
     <div class="field" style="flex:1; min-width:220px;">
       <label>Next available UID <span class="opt">(auto)</span></label>
-      <input type="text" class="mono" value="SHT-0813" readonly
+      <input type="text" class="mono" value="{{ next_uid_hint }}" readonly
              style="background:var(--gray-bg); color:var(--ink-soft);">
       <div class="hint">Reserved on generate — the series never reuses a number.</div>
     </div>
@@ -215,19 +221,24 @@
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Generate QR Labels</button>
     <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Cancel</a>
-    <span class="spacer-note">Opens the print sheet with <span class="mono" id="a-echo">8</span> labels.</span>
+    <span class="spacer-note">Opens the print sheet with <span class="mono" id="a-echo">{{ blank_form.quantity.value|default:8 }}</span> labels.</span>
   </div>
 </form>
 
 <!-- ============ MODE B ============ -->
-<form class="panel" id="panel-b" novalidate hidden>
+<form class="panel" id="panel-b" method="post" action="{% url 'stores:log_sheet' %}" novalidate
+      {% if mode != 'b' %}hidden{% endif %}>
+  {% csrf_token %}
+  <input type="hidden" name="mode" value="b">
   <div class="panel-head"><h2>Sheet details</h2></div>
   <div class="panel-sub">
     All dropdowns are pulled from Masters. Anything missing from a list has to be added in
     Masters first, so spellings stay consistent across the plant.
   </div>
 
-  <div class="err-box" id="err-b" hidden></div>
+  <div class="err-box" id="err-b" {% if not full_form.errors %}hidden{% endif %}>
+    {% for field, errs in full_form.errors.items %}{{ errs|join:" " }} {% endfor %}
+  </div>
 
   <div class="req-legend"><span class="req">*</span> Required — the rest can be completed later by scanning the label.</div>
 
@@ -236,12 +247,9 @@
       <label for="b-material">Material / Category <span class="req">*</span></label>
       <select id="b-material" name="material" required>
         <option value="">— Select material —</option>
-        <option>SS 304</option>
-        <option>SS 316</option>
-        <option>Brass</option>
-        <option>Aluminium</option>
-        <option>Mild Steel</option>
-        <option>Copper</option>
+        {% for m in materials %}
+        <option value="{{ m.pk }}" {% if full_form.material.value|stringformat:"s" == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
       </select>
     </div>
 
@@ -249,11 +257,9 @@
       <label for="b-thickness">Thickness <span class="req">*</span></label>
       <select id="b-thickness" name="thickness" required>
         <option value="">— Select thickness —</option>
-        <option>0.5 mm</option>
-        <option>1.0 mm</option>
-        <option>1.5 mm</option>
-        <option>2.0 mm</option>
-        <option>3.0 mm</option>
+        {% for t in thicknesses %}
+        <option value="{{ t.pk }}" {% if full_form.thickness.value|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
       </select>
     </div>
 
@@ -261,9 +267,9 @@
       <label for="b-grade">Grade <span class="req">*</span></label>
       <select id="b-grade" name="grade" required>
         <option value="">— Select grade —</option>
-        <option>Commercial</option>
-        <option>Prime</option>
-        <option>Secondary</option>
+        {% for g in grades %}
+        <option value="{{ g.pk }}" {% if full_form.grade.value|stringformat:"s" == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
       </select>
     </div>
 
@@ -271,10 +277,10 @@
       <label for="b-size">Size <span class="req">*</span></label>
       <select id="b-size" name="size" required>
         <option value="">— Select size —</option>
-        <option data-mm="2438 × 1219 mm">8 × 4 ft</option>
-        <option data-mm="1829 × 914 mm">6 × 3 ft</option>
-        <option data-mm="1219 × 610 mm">4 × 2 ft</option>
-        <option data-mm="3048 × 1219 mm">10 × 4 ft</option>
+        {% for s in sizes %}
+        <option value="{{ s.pk }}" data-mm="{{ s.length_mm }} × {{ s.width_mm }} mm"
+                {% if full_form.size.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
       </select>
       <div class="hint" id="size-mm">Metric equivalent shown once a size is picked.</div>
     </div>
@@ -283,25 +289,22 @@
       <label for="b-finish">Finish <span class="opt">(optional)</span></label>
       <select id="b-finish" name="finish">
         <option value="">— Select finish —</option>
-        <option>Mill Finish</option>
-        <option>Matt</option>
-        <option>Mirror</option>
-        <option>Brushed</option>
-        <option>Anodized</option>
+        {% for f in finishes %}
+        <option value="{{ f.pk }}" {% if full_form.finish.value|stringformat:"s" == f.pk|stringformat:"s" %}selected{% endif %}>{{ f.name }}</option>
+        {% endfor %}
         <option value="__other">Other (type)…</option>
       </select>
-      <input type="text" id="b-finish-other" placeholder="Type the finish name"
-             style="margin-top:8px;" hidden>
+      <input type="text" id="b-finish-other" name="finish_other" placeholder="Type the finish name"
+             value="{{ full_form.finish_other.value|default:'' }}" style="margin-top:8px;" hidden>
     </div>
 
     <div class="field">
       <label for="b-supplier">Supplier / Dealer <span class="req">*</span></label>
       <select id="b-supplier" name="supplier" required>
         <option value="">— Select supplier —</option>
-        <option>Mehta Metals</option>
-        <option>Shree Steel Traders</option>
-        <option>Balaji Metal Co.</option>
-        <option>Konkan Steel</option>
+        {% for s in suppliers %}
+        <option value="{{ s.pk }}" {% if full_form.supplier.value|stringformat:"s" == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
       </select>
     </div>
 
@@ -309,24 +312,23 @@
       <label for="b-rack">Rack / Shelf location <span class="req">*</span></label>
       <select id="b-rack" name="rack" required>
         <option value="">— Select location —</option>
-        <option>Rack A-1</option>
-        <option>Rack A-2</option>
-        <option>Rack B-2</option>
-        <option>Rack B-3</option>
-        <option>Rack C-1</option>
-        <option>Shop floor</option>
+        {% for r in racks %}
+        <option value="{{ r.pk }}" {% if full_form.rack.value|stringformat:"s" == r.pk|stringformat:"s" %}selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
       </select>
     </div>
 
     <div class="field">
       <label for="b-date">Date of Purchase <span class="req">*</span></label>
-      <input type="date" id="b-date" name="purchase_date" value="2026-08-09" required>
+      <input type="date" id="b-date" name="purchase_date"
+             value="{% if full_form.purchase_date.value %}{{ full_form.purchase_date.value }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" required>
     </div>
 
     <div class="field">
       <label for="b-qty">Quantity <span class="req">*</span></label>
-      <input type="number" id="b-qty" name="quantity" min="1" max="16" value="4" required>
-      <div class="hint">1 – 16 sheets. One QR label is printed per sheet.</div>
+      <input type="number" id="b-qty" name="quantity" min="1" max="{{ max_batch }}"
+             value="{{ full_form.quantity.value|default:4 }}" required>
+      <div class="hint">1 – {{ max_batch }} sheets. One QR label is printed per sheet.</div>
     </div>
   </div>
 
@@ -342,8 +344,6 @@
 <script>
 (function () {
   'use strict';
-
-  var LABELS_URL = "{% url 'stores:qr_labels' %}";
 
   var cards   = document.querySelectorAll('.mode-card');
   var panelA  = document.getElementById('panel-a');
@@ -387,7 +387,10 @@
     if (isOther) { other.focus(); } else { other.value = ''; }
   });
 
-  // --- Validation (static preview: no POST, just a client-side gate) ---
+  // Restore the "Other (type)" box if the server bounced the form back with it filled
+  if (other.value) { finish.value = '__other'; other.hidden = false; }
+
+  // --- Client-side gate. The real check is server-side; this only saves a round trip ---
   function validate(form, errBox) {
     var bad = [];
     form.querySelectorAll('.field').forEach(function (f) { f.classList.remove('invalid'); });
@@ -416,23 +419,13 @@
     return true;
   }
 
+  // Both panels POST for real; the handler only blocks an obviously bad form.
   panelA.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (validate(panelA, document.getElementById('err-a'))) {
-      window.location.href = LABELS_URL + '?mode=blank&qty=' + encodeURIComponent(aQty.value);
-    }
+    if (!validate(panelA, document.getElementById('err-a'))) { e.preventDefault(); }
   });
 
   panelB.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (validate(panelB, document.getElementById('err-b'))) {
-      var mat = document.getElementById('b-material').value;
-      var thk = document.getElementById('b-thickness').value;
-      var qty = document.getElementById('b-qty').value;
-      window.location.href = LABELS_URL + '?mode=full&qty=' + encodeURIComponent(qty) +
-                             '&material=' + encodeURIComponent(mat) +
-                             '&thickness=' + encodeURIComponent(thk);
-    }
+    if (!validate(panelB, document.getElementById('err-b'))) { e.preventDefault(); }
   });
 })();
 </script>

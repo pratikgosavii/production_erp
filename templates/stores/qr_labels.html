@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Stores</span>
-  <span class="name">Deepak Salvi</span>
+  <span class="name">{{ user.get_full_name|default:user.username }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -124,17 +124,17 @@
 </div>
 
 <div class="batch-bar">
-  <div class="bb">Batch<span id="bb-batch">BATCH-2026-0233</span></div>
-  <div class="bb">Labels<span id="bb-count">8</span></div>
-  <div class="bb">Mode<span id="bb-mode">Blank — fill on scan</span></div>
-  <div class="bb">Generated<span>09 Aug 2026</span></div>
-  <div class="bb">By<span>Deepak Salvi</span></div>
+  <div class="bb">Batch<span id="bb-batch">{{ batch|default:"—" }}</span></div>
+  <div class="bb">Labels<span id="bb-count">{{ labels|length }}</span></div>
+  <div class="bb">Mode<span id="bb-mode">{{ mode_label }}</span></div>
+  <div class="bb">Generated<span>{{ generated_on|date:"d M Y" }}</span></div>
+  <div class="bb">By<span>{{ generated_by }}</span></div>
 </div>
 
 <div class="improve-note">
   <b>These QRs encode a full scan URL, not a bare sheet number.</b>
   The old register printed just the integer, so pointing a phone camera at a label did
-  nothing. Each label below encodes <span class="mono">https://erp.local/stores/sheet/SHT-0813/</span> —
+  nothing. Each label below encodes <span class="mono">{{ request.scheme }}://{{ request.get_host }}{% if labels %}{{ labels.0.url }}{% else %}/stores/sheet/…/{% endif %}</span> —
   any stock phone camera opens the sheet form straight away, no app needed. The short path
   is printed under every label so it can also be typed in by hand.
 </div>
@@ -144,14 +144,15 @@
 <div class="label-sheet">
   <div class="label-grid" id="label-grid">
 
-    <div class="label" data-uid="SHT-0813" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0814" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0815" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0816" data-mat="SS 304 · 1.0 mm" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0817" data-mat="" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0818" data-mat="" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0819" data-mat="" data-date="09 Aug 2026"></div>
-    <div class="label" data-uid="SHT-0820" data-mat="" data-date="09 Aug 2026"></div>
+    {% for label in labels %}
+    <div class="label" data-uid="{{ label.uid }}" data-mat="{{ label.material }}"
+         data-date="{{ label.date|date:'d M Y' }}" data-url="{{ label.url }}"></div>
+    {% empty %}
+    <div class="no-print" style="grid-column:1/-1; padding:28px; text-align:center; color:var(--ink-soft); font-size:12.5px;">
+      No labels selected. Open this screen from <b>Log New Sheet</b>, or pass
+      <span class="mono">?batch=…</span> / <span class="mono">?ids=SHT-0101,SHT-0102</span>.
+    </div>
+    {% endfor %}
 
   </div>
 
@@ -289,45 +290,17 @@
   }
 
   // ------------------------------------------------------------------
-  // Render the labels
+  // Render the labels. Every value below comes from the server — the UID,
+  // the material line and the scan path the QR encodes.
   // ------------------------------------------------------------------
-  var params   = new URLSearchParams(window.location.search);
-  var mode     = params.get('mode') || '';
-  var qty      = parseInt(params.get('qty') || '0', 10);
-  var material = params.get('material') || '';
-  var thick    = params.get('thickness') || '';
-
+  var ORIGIN = window.location.protocol + '//' + window.location.host;
   var labels = Array.prototype.slice.call(document.querySelectorAll('#label-grid .label'));
 
-  // Batch bar reflects how we arrived here
-  var bbMode = document.getElementById('bb-mode');
-  if (mode === 'blank') {
-    bbMode.textContent = 'Blank — fill on scan';
-  } else if (mode === 'full') {
-    bbMode.textContent = 'Details logged';
-  } else {
-    bbMode.textContent = 'Mixed batch';
-  }
-
-  // Trim to the requested quantity (1-16); default keeps all 8 dummies
-  if (qty >= 1 && qty <= 16 && qty < labels.length) {
-    labels.slice(qty).forEach(function (el) { el.remove(); });
-    labels = labels.slice(0, qty);
-  }
-  document.getElementById('bb-count').textContent = labels.length;
-
   labels.forEach(function (el) {
-    var uid = el.dataset.uid;
-    var mat = el.dataset.mat || '';
-
-    if (mode === 'blank') {
-      mat = '';
-    } else if (mode === 'full' && material) {
-      mat = material + (thick ? ' · ' + thick : '');
-    }
-
-    var path = '/stores/sheet/' + uid + '/';
-    var encoded = 'https://erp.local' + path;
+    var uid  = el.dataset.uid;
+    var mat  = el.dataset.mat || '';
+    var path = el.dataset.url || '';
+    var encoded = ORIGIN + path;
 
     el.innerHTML =
       qrSvg(encoded) +

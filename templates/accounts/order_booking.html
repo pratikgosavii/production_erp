@@ -7,7 +7,7 @@
 {% block topbar_right %}
 <div class="user-info">
   <span class="role-tag">Accounts</span>
-  <span class="name">Priya Nair</span>
+  <span class="name">{{ request.user.short_name }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
 {% endblock %}
@@ -222,6 +222,17 @@
   .checklist { list-style: none; padding: 0; margin: 0 0 6px; }
   .checklist li { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 5px 0; color: var(--ink); }
   .checklist li input[type=checkbox] { accent-color: var(--green); width: 15px; height: 15px; }
+
+  /* --- added for the wired-up screen (server messages, links styled as chips
+         / buttons, empty state). Nothing above this line was changed. --- */
+  a.chip, a.chip:hover, a.btn-confirm, a.btn-confirm:hover { text-decoration: none; }
+  .action-cell form { margin: 0; }
+  .msg-strip { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .msg { font-size: 12px; line-height: 1.45; padding: 10px 14px; border-radius: 4px; border: 1px solid var(--line); }
+  .msg.success { background: var(--green-bg); color: var(--green); border-color: #bfe3d0; }
+  .msg.error { background: var(--red-bg); color: var(--red); border-color: #f0c9c4; }
+  .msg.warning, .msg.info, .msg.debug { background: var(--amber-bg); color: var(--amber); border-color: #efd9b4; }
+  .empty-row td { padding: 44px 12px; text-align: center; color: var(--gray); font-style: italic; }
 </style>
 {% endblock %}
 
@@ -235,27 +246,39 @@
 {% endblock %}
 
 {% block content %}
+{% if messages %}
+<div class="msg-strip">
+  {% for message in messages %}
+  <div class="msg {{ message.tags }}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Summary Strip -->
 <div class="summary-strip">
-  <div class="cell"><div class="n">42</div><div class="l">Open orders</div></div>
-  <div class="cell value"><div class="n">₹18.6L</div><div class="l">Booked (this month)</div></div>
-  <div class="cell ontrack"><div class="n">31</div><div class="l">On track</div></div>
-  <div class="cell held"><div class="n">7</div><div class="l">Held</div></div>
-  <div class="cell delayed"><div class="n">4</div><div class="l">Delayed</div></div>
-  <div class="cell"><div class="n">6</div><div class="l">New today</div></div>
+  <div class="cell"><div class="n">{{ summary.open_orders }}</div><div class="l">Open orders</div></div>
+  <div class="cell value"><div class="n">{{ summary.booked_value }}</div><div class="l">Booked (this month)</div></div>
+  <div class="cell ontrack"><div class="n">{{ summary.on_track }}</div><div class="l">On track</div></div>
+  <div class="cell held"><div class="n">{{ summary.held }}</div><div class="l">Held</div></div>
+  <div class="cell delayed"><div class="n">{{ summary.delayed }}</div><div class="l">Delayed</div></div>
+  <div class="cell"><div class="n">{{ summary.new_today }}</div><div class="l">New today</div></div>
 </div>
 
 <div class="page-head">
   <h1>All Orders</h1>
   <div class="toolbar">
-    <input type="text" placeholder="Search customer / QTN / SO / PO no...">
-    <span class="chip active">All (42)</span>
-    <span class="chip">Delayed (4)</span>
-    <span class="chip">Held (7)</span>
-    <span class="chip">On Hold (3)</span>
-    <span class="chip">Cancelled (2)</span>
-    <span class="chip">My Orders</span>
-    <span class="chip">Repeat Orders</span>
+    <form method="get" style="margin:0">
+      {% if active_filter != 'all' %}<input type="hidden" name="filter" value="{{ active_filter }}">{% endif %}
+      <input type="text" name="q" value="{{ search }}" placeholder="Search customer / QTN / SO / PO no...">
+    </form>
+    {% if search %}<a class="chip" href="?{% if active_filter != 'all' %}filter={{ active_filter }}{% endif %}">✕ Clear "{{ search }}"</a>{% endif %}
+    <a class="chip {% if active_filter == 'all' %}active{% endif %}" href="?{% if search %}q={{ search|urlencode }}{% endif %}">All ({{ counts.all }})</a>
+    <a class="chip {% if active_filter == 'delayed' %}active{% endif %}" href="?filter=delayed{% if search %}&q={{ search|urlencode }}{% endif %}">Delayed ({{ counts.delayed }})</a>
+    <a class="chip {% if active_filter == 'held' %}active{% endif %}" href="?filter=held{% if search %}&q={{ search|urlencode }}{% endif %}">Held ({{ counts.held }})</a>
+    <a class="chip {% if active_filter == 'onhold' %}active{% endif %}" href="?filter=onhold{% if search %}&q={{ search|urlencode }}{% endif %}">On Hold ({{ counts.onhold }})</a>
+    <a class="chip {% if active_filter == 'cancelled' %}active{% endif %}" href="?filter=cancelled{% if search %}&q={{ search|urlencode }}{% endif %}">Cancelled ({{ counts.cancelled }})</a>
+    <a class="chip {% if active_filter == 'mine' %}active{% endif %}" href="?filter=mine{% if search %}&q={{ search|urlencode }}{% endif %}">My Orders ({{ counts.mine }})</a>
+    <a class="chip {% if active_filter == 'repeat' %}active{% endif %}" href="?filter=repeat{% if search %}&q={{ search|urlencode }}{% endif %}">Repeat Orders ({{ counts.repeat }})</a>
   </div>
 </div>
 
@@ -288,273 +311,107 @@
     </tr>
   </thead>
   <tbody>
-
-    <!-- Row 1: On track, Production stage (4 of 7) -->
-    <tr>
+  {% for row in rows %}
+    <tr class="{{ row.row_class }}"{% if row.highlight %} style="background:#f0f7ff;"{% endif %}
+        data-ref="{{ row.number }}"
+        data-cust="{{ row.customer }}"
+        data-value="{{ row.value_display }}"
+        data-expected="{{ row.expected_delivery|date:'Y-m-d' }}"
+        data-book-url="{{ row.book_url }}"
+        data-reject-url="{{ row.reject_url }}"
+        data-hold-url="{{ row.hold_url }}"
+        data-cancel-url="{{ row.cancel_url }}">
       <td>
-        <div class="so-no">SO-1042</div>
-        <div style="color:var(--ink-soft); font-size:10.5px;">03 Aug 2026</div>
+        {% if row.kind == 'QTN' %}
+        <div class="so-no qtn" title="Quotation reference — Sales Order number is assigned on booking">{{ row.number }}</div>
+        {% else %}
+        <div class="so-no">{{ row.number }}</div>
+        {% endif %}
+        <div style="color:var(--ink-soft); font-size:10.5px;">{{ row.date|date:"d M Y" }}</div>
       </td>
       <td>
-        <div class="cust">Bharat Switchgear Co.<div class="sub">Repeat · Ref QTN-0419</div></div>
+        <div class="cust">{{ row.customer }}<div class="sub">{{ row.type_label }}{% if row.ref_qtn %} · Ref {{ row.ref_qtn }}{% endif %}</div></div>
       </td>
       <td>
         <div class="files">
-          <div class="file-chip po"><span class="ic">PO</span><span class="name">PO_4471.pdf</span></div>
-          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Panel_Plate_A</span><span class="rev">Rev01</span></div>
+          <div class="file-chip po"><span class="ic">PO</span><span class="name"{% if row.po.url %} title="{{ row.po.name }}"{% endif %}>{% if row.po.url %}<a href="{{ row.po.url }}">{{ row.po.name }}</a>{% else %}{{ row.po.name }}{% endif %}</span></div>
+          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">{% if row.drawing.url %}<a href="{{ row.drawing.url }}">{{ row.drawing.name }}</a>{% else %}{{ row.drawing.name }}{% endif %}</span>{% if row.drawing.rev %}<span class="rev">{{ row.drawing.rev }}</span>{% endif %}</div>
         </div>
       </td>
-      <td><span class="amt">₹63,000</span></td>
+      <td><span class="amt">{{ row.value_display }}</span></td>
       <td>
         <div class="stage-track-inline">
-          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="2 · Design"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="3 · Material / Nesting"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot current" title="4 · Production"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="7 · Delivered"></div>
+          {% for dot in row.dots %}
+          <div class="stage-dot {{ dot.cls }}" title="{{ dot.n }} · {{ dot.label }}"></div>{% if not forloop.last %}<div class="stage-line-h {{ dot.line }}"></div>{% endif %}
+          {% endfor %}
         </div>
-        <div class="stage-label">Production — Etching in progress</div>
+        <div class="stage-label"{% if row.highlight %} style="color:var(--blue); font-weight:600;"{% endif %}>{{ row.stage_label }}{% if row.stage_note %} — {{ row.stage_note }}{% endif %}</div>
       </td>
-      <td><div class="del-date"><span class="lbl">Expected</span>12 Aug 2026</div></td>
-      <td><span class="ob-badge green">On track</span></td>
+      <td><div class="del-date"><span class="lbl">Expected</span>{{ row.expected_delivery|date:"d M Y"|default:"—" }}</div></td>
+      <td>
+        <span class="ob-badge {{ row.health }}">{{ row.status_text }}</span>
+        {% if row.reason %}<div class="hold-reason">Reason: {{ row.reason }}</div>{% endif %}
+      </td>
       <td class="action-cell">
-        <button class="btn-confirm outline" onclick="alert('View order detail (UI preview)')">👁 View</button>
+        {% if row.can_book %}
+        <button type="button" class="btn-confirm primary" onclick="openConfirmModal(this)">✓ Confirm &amp; Send to Design</button>
+        {% endif %}
+        {% if row.can_request_drawing %}
+        <form method="post" action="{{ row.drawing_url }}">{% csrf_token %}
+          <button type="submit" class="btn-confirm warn">🔔 Request Drawing from Sales</button>
+        </form>
+        <button type="button" class="btn-confirm outline" disabled title="Drawing must be uploaded by Sales before this order can be booked">✓ Confirm &amp; Book</button>
+        {% endif %}
+        {% if row.can_reject %}
+        <button type="button" class="btn-confirm outline" onclick="openRejectModal(this)">✕ Reject PO</button>
+        {% endif %}
+        {% if row.can_resume %}
+        <form method="post" action="{{ row.resume_url }}">{% csrf_token %}
+          <button type="submit" class="btn-confirm outline">▶ Resume</button>
+        </form>
+        {% endif %}
+        {% if row.is_cancelled %}
+        <span class="no-actions">Cancelled — terminal, no actions</span>
+        {% elif row.detail_url and not row.can_resume %}
+        <a class="btn-confirm outline" href="{{ row.detail_url }}">{{ row.detail_label }}</a>
+        {% endif %}
+        {% if row.has_kebab %}
         <div class="kebab-wrap">
-          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
+          <button type="button" class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
           <div class="kebab-menu">
-            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
-            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
+            {% if row.can_hold %}<button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>{% endif %}
+            {% if row.can_cancel %}<button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>{% endif %}
           </div>
         </div>
+        {% endif %}
       </td>
-      <td style="font-size:11.5px;">Imran S.</td>
+      <td style="font-size:11.5px;">{{ row.salesperson }}</td>
     </tr>
-
-    <!-- Row 2: Held at Design (2 of 7) -->
-    <tr>
-      <td>
-        <div class="so-no">SO-1041</div>
-        <div style="color:var(--ink-soft); font-size:10.5px;">02 Aug 2026</div>
+  {% empty %}
+    <tr class="empty-row">
+      <td colspan="9">
+        {% if search or active_filter != 'all' %}
+        No orders match this filter.
+        {% else %}
+        Nothing to book. Quotations appear here once Sales mark them awaiting a PO or upload one.
+        {% endif %}
       </td>
-      <td>
-        <div class="cust">Veeransh Fabricators<div class="sub">New · Ref QTN-0417</div></div>
-      </td>
-      <td>
-        <div class="files">
-          <div class="file-chip po"><span class="ic">PO</span><span class="name">PO_VF_0812.pdf</span></div>
-          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Nameplate_150x110</span><span class="rev">Rev00</span></div>
-        </div>
-      </td>
-      <td><span class="amt">₹9,676</span></td>
-      <td>
-        <div class="stage-track-inline">
-          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot current" title="2 · Design"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="7 · Delivered"></div>
-        </div>
-        <div class="stage-label">Design — Query raised on artwork</div>
-      </td>
-      <td><div class="del-date"><span class="lbl">Expected</span>09 Aug 2026</div></td>
-      <td><span class="ob-badge amber">Held — design query</span></td>
-      <td class="action-cell">
-        <button class="btn-confirm outline" onclick="alert('View query thread (UI preview)')">💬 View Query</button>
-        <div class="kebab-wrap">
-          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
-          <div class="kebab-menu">
-            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
-            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
-          </div>
-        </div>
-      </td>
-      <td style="font-size:11.5px;">Arjun P.</td>
     </tr>
-
-    <!-- Row 3: Delayed at Material / Nesting (3 of 7) -->
-    <tr>
-      <td>
-        <div class="so-no">SO-1040</div>
-        <div style="color:var(--ink-soft); font-size:10.5px;">01 Aug 2026</div>
-      </td>
-      <td>
-        <div class="cust">Konkan Marine Pvt Ltd<div class="sub">New · Ref QTN-0418</div></div>
-      </td>
-      <td>
-        <div class="files">
-          <div class="file-chip po"><span class="ic">PO</span><span class="name">KM_PO_2207.pdf</span></div>
-          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Deck_Tag_Brass</span><span class="rev">Rev02</span></div>
-        </div>
-      </td>
-      <td><span class="amt">₹76,800</span></td>
-      <td>
-        <div class="stage-track-inline">
-          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="2 · Design"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot current" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="7 · Delivered"></div>
-        </div>
-        <div class="stage-label">Material — Awaiting brass sheet (PO raised)</div>
-      </td>
-      <td><div class="del-date"><span class="lbl">Expected</span>18 Aug 2026</div></td>
-      <td><span class="ob-badge red">Delayed — material</span></td>
-      <td class="action-cell">
-        <button class="btn-confirm outline" onclick="alert('View order detail (UI preview)')">👁 View</button>
-        <div class="kebab-wrap">
-          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
-          <div class="kebab-menu">
-            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
-            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
-          </div>
-        </div>
-      </td>
-      <td style="font-size:11.5px;">Sneha R.</td>
-    </tr>
-
-    <!-- Row 4: Dispatch Ready (6 of 7) — PAST pre-dispatch, no Hold/Cancel -->
-    <tr>
-      <td>
-        <div class="so-no">SO-1039</div>
-        <div style="color:var(--ink-soft); font-size:10.5px;">29 Jul 2026</div>
-      </td>
-      <td>
-        <div class="cust">Anvi Engineering<div class="sub">Repeat · Ref QTN-0402</div></div>
-      </td>
-      <td>
-        <div class="files">
-          <div class="file-chip po"><span class="ic">PO</span><span class="name">AE_Aug_PO.pdf</span></div>
-          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Rating_Plate_SS</span><span class="rev">Rev00</span></div>
-        </div>
-      </td>
-      <td><span class="amt">₹22,400</span></td>
-      <td>
-        <div class="stage-track-inline">
-          <div class="stage-dot done" title="1 · PO Intake"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="2 · Design"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="3 · Material / Nesting"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="4 · Production"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot done" title="5 · QC"></div><div class="stage-line-h done"></div>
-          <div class="stage-dot current" title="6 · Dispatch"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="7 · Delivered"></div>
-        </div>
-        <div class="stage-label">Dispatch — Ready, awaiting pickup</div>
-      </td>
-      <td><div class="del-date"><span class="lbl">Expected</span>06 Aug 2026</div></td>
-      <td><span class="ob-badge green">On track</span></td>
-      <td class="action-cell">
-        <button class="btn-confirm outline" onclick="alert('View order detail (UI preview)')">👁 View</button>
-      </td>
-      <td style="font-size:11.5px;">Arjun P.</td>
-    </tr>
-
-    <!-- Row 5: PO Intake (1 of 7) — NOT yet booked, so it carries a QTN, not an SO -->
-    <tr>
-      <td>
-        <div class="so-no qtn" title="Quotation reference — Sales Order number is assigned on booking">QTN-0411</div>
-        <div style="color:var(--ink-soft); font-size:10.5px;">28 Jul 2026</div>
-      </td>
-      <td>
-        <div class="cust">Trident Pumps Ltd<div class="sub">New</div></div>
-      </td>
-      <td>
-        <div class="files">
-          <div class="file-chip po"><span class="ic">PO</span><span class="name">TP_PO_991.pdf</span></div>
-          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">—</span></div>
-        </div>
-      </td>
-      <td><span class="amt">₹14,200</span></td>
-      <td>
-        <div class="stage-track-inline">
-          <div class="stage-dot current" title="1 · PO Intake"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="2 · Design"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="7 · Delivered"></div>
-        </div>
-        <div class="stage-label">PO Intake — Drawing not yet received</div>
-      </td>
-      <td><div class="del-date"><span class="lbl">Expected</span>—</div></td>
-      <td><span class="ob-badge gray">Awaiting drawing</span></td>
-      <td class="action-cell">
-        <button class="btn-confirm warn" onclick="alert('Reminder sent to Imran S. (Sales) to upload the drawing.\n\nUI preview only.')">🔔 Request Drawing from Sales</button>
-        <button class="btn-confirm outline" disabled title="Drawing must be uploaded by Sales before this order can be booked">✓ Confirm &amp; Book</button>
-        <div class="kebab-wrap">
-          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
-          <div class="kebab-menu">
-            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
-            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
-          </div>
-        </div>
-      </td>
-      <td style="font-size:11.5px;">Imran S.</td>
-    </tr>
-
-    <!-- Row 6: PO received, ready to confirm & book — still a QTN until Accounts confirm -->
-    <tr style="background:#f0f7ff;">
-      <td>
-        <div class="so-no qtn" title="Quotation reference — Sales Order number is assigned on booking">QTN-0424</div>
-        <div style="color:var(--ink-soft); font-size:10.5px;">09 Aug 2026</div>
-      </td>
-      <td>
-        <div class="cust">Orion Compressors<div class="sub">New</div></div>
-      </td>
-      <td>
-        <div class="files">
-          <div class="file-chip po"><span class="ic">PO</span><span class="name">OC_PO_5510.pdf</span></div>
-          <div class="file-chip dwg"><span class="ic">DW</span><span class="name">Control_Panel_Tag</span><span class="rev">Rev00</span></div>
-        </div>
-      </td>
-      <td><span class="amt">₹41,500</span></td>
-      <td>
-        <div class="stage-track-inline">
-          <div class="stage-dot current" title="1 · PO Intake"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="2 · Design"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="3 · Material / Nesting"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="4 · Production"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="5 · QC"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="6 · Dispatch"></div><div class="stage-line-h"></div>
-          <div class="stage-dot" title="7 · Delivered"></div>
-        </div>
-        <div class="stage-label" style="color:var(--blue); font-weight:600;">PO Intake — Ready to book</div>
-      </td>
-      <td><div class="del-date"><span class="lbl">Expected</span>—</div></td>
-      <td><span class="ob-badge gray">Pending booking</span></td>
-      <td class="action-cell">
-        <button class="btn-confirm primary" onclick="openConfirmModal('QTN-0424','Orion Compressors','₹41,500')">✓ Confirm &amp; Send to Design</button>
-        <button class="btn-confirm outline" onclick="alert('Order rejected / returned to Sales (UI preview)')">✕ Reject PO</button>
-        <div class="kebab-wrap">
-          <button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">⋯</button>
-          <div class="kebab-menu">
-            <button type="button" onclick="openHoldModal(this)">⏸ Put On Hold</button>
-            <button type="button" class="danger" onclick="openCancelModal(this)">✕ Cancel Order</button>
-          </div>
-        </div>
-      </td>
-      <td style="font-size:11.5px;">Sneha R.</td>
-    </tr>
-
+  {% endfor %}
   </tbody>
 </table>
 </div>
 
 <!-- ======== CONFIRM & BOOK MODAL ======== -->
 <div class="modal-overlay" id="confirmModal">
-  <div class="modal-box">
+  <form class="modal-box" id="confirmForm" method="post" action="">
+    {% csrf_token %}
     <div class="modal-head">Confirm Order &amp; Send to Design</div>
     <div class="modal-body">
       <div class="modal-ref">
-        <div class="r-id" id="mSo">QTN-0424</div>
+        <div class="r-id" id="mSo">—</div>
         <div class="r-sub">
-          <span id="mCust">Orion Compressors</span> &middot; <span id="mVal">₹41,500</span>
+          <span id="mCust">—</span> &middot; <span id="mVal">—</span>
         </div>
         <div class="mint-note">Confirming this PO converts the quotation into a Sales Order — a new SO number will be assigned now.</div>
       </div>
@@ -569,34 +426,63 @@
 
       <div class="field" style="margin-top:16px;">
         <label>Committed Delivery Date</label>
-        <input type="date" value="2026-08-28">
+        <input type="date" id="mDate" name="expected_delivery">
       </div>
 
       <div class="field">
         <label>Assign to Designer</label>
-        <select>
-          <option>— Auto-assign (next available) —</option>
-          <option>Kavita M.</option>
-          <option>Rohit D.</option>
-          <option>Anjali S.</option>
+        <select name="designer">
+          <option value="">— Auto-assign (next available) —</option>
+          {% for designer in designers %}
+          <option value="{{ designer.pk }}">{{ designer.short_name }}</option>
+          {% endfor %}
         </select>
       </div>
 
       <div class="field">
         <label>Note to Design (optional)</label>
-        <textarea placeholder="e.g. Customer needs sample before bulk"></textarea>
+        <textarea name="design_note" maxlength="250" placeholder="e.g. Customer needs sample before bulk"></textarea>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn-confirm outline" onclick="closeConfirmModal()">Cancel</button>
-      <button class="btn-confirm primary" onclick="doConfirm()">✓ Book Order &amp; Send to Design</button>
+      <button type="button" class="btn-confirm outline" onclick="closeConfirmModal()">Cancel</button>
+      <button type="submit" class="btn-confirm primary">✓ Book Order &amp; Send to Design</button>
     </div>
-  </div>
+  </form>
+</div>
+
+<!-- ======== REJECT PO MODAL ======== -->
+<div class="modal-overlay" id="rejectModal">
+  <form class="modal-box" id="rejectForm" method="post" action="">
+    {% csrf_token %}
+    <div class="modal-head red-head">✕ Reject PO</div>
+    <div class="modal-body">
+      <div class="modal-ref">
+        <div class="r-id" id="rRef">—</div>
+        <div class="r-sub"><span id="rCust">—</span> &middot; <span id="rVal">—</span></div>
+      </div>
+
+      <div class="warn-note">
+        Rejecting sends the PO back to the salesperson who raised the quotation. The quotation
+        moves to <strong>PO Rejected</strong> and no Sales Order is created.
+      </div>
+
+      <div class="field">
+        <label>Reason for rejection <span class="req-star">*</span> (mandatory — sent to Sales &amp; logged)</label>
+        <textarea id="rejectReason" name="reason" required maxlength="500" oninput="checkRejectReason()" placeholder="e.g. PO value does not match the approved quotation"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn-confirm outline" onclick="closeRejectModal()">Cancel</button>
+      <button type="submit" class="btn-confirm danger" id="rejectConfirmBtn" disabled>✕ Reject PO</button>
+    </div>
+  </form>
 </div>
 
 <!-- ======== PUT ON HOLD MODAL ======== -->
 <div class="modal-overlay" id="holdModal">
-  <div class="modal-box">
+  <form class="modal-box" id="holdForm" method="post" action="">
+    {% csrf_token %}
     <div class="modal-head amber-head">⏸ Put Order On Hold</div>
     <div class="modal-body">
       <div class="modal-ref">
@@ -612,19 +498,20 @@
 
       <div class="field">
         <label>Reason for hold <span class="req-star">*</span> (mandatory — logged to audit trail)</label>
-        <textarea id="holdReason" oninput="checkHoldReason()" placeholder="e.g. Customer asked to pause pending revised artwork approval"></textarea>
+        <textarea id="holdReason" name="reason" required maxlength="500" oninput="checkHoldReason()" placeholder="e.g. Customer asked to pause pending revised artwork approval"></textarea>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn-confirm outline" onclick="closeHoldModal()">Cancel</button>
-      <button class="btn-confirm warn" id="holdConfirmBtn" onclick="doHold()" disabled>⏸ Put On Hold</button>
+      <button type="button" class="btn-confirm outline" onclick="closeHoldModal()">Cancel</button>
+      <button type="submit" class="btn-confirm warn" id="holdConfirmBtn" disabled>⏸ Put On Hold</button>
     </div>
-  </div>
+  </form>
 </div>
 
 <!-- ======== CANCEL ORDER MODAL ======== -->
 <div class="modal-overlay" id="cancelModal">
-  <div class="modal-box">
+  <form class="modal-box" id="cancelForm" method="post" action="">
+    {% csrf_token %}
     <div class="modal-head red-head">✕ Cancel Order</div>
     <div class="modal-body">
       <div class="modal-ref">
@@ -640,27 +527,20 @@
 
       <div class="field">
         <label>Reason for cancellation <span class="req-star">*</span> (mandatory — logged to audit trail)</label>
-        <textarea id="cancelReason" oninput="checkCancelReason()" placeholder="e.g. Customer withdrew the PO — project shelved"></textarea>
+        <textarea id="cancelReason" name="reason" required maxlength="500" oninput="checkCancelReason()" placeholder="e.g. Customer withdrew the PO — project shelved"></textarea>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn-confirm outline" onclick="closeCancelModal()">Keep Order</button>
-      <button class="btn-confirm danger" id="cancelConfirmBtn" onclick="doCancel()" disabled>✕ Cancel Order Permanently</button>
+      <button type="button" class="btn-confirm outline" onclick="closeCancelModal()">Keep Order</button>
+      <button type="submit" class="btn-confirm danger" id="cancelConfirmBtn" disabled>✕ Cancel Order Permanently</button>
     </div>
-  </div>
+  </form>
 </div>
 
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  document.querySelectorAll('.toolbar .chip').forEach(chip => {
-    chip.addEventListener('click', function() {
-      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
-
   /* ---------- helpers ---------- */
   function rowRef(row) {
     const el = row.querySelector('.so-no');
@@ -673,15 +553,6 @@
   function rowStage(row) {
     const el = row.querySelector('.stage-label');
     return el ? el.textContent.trim() : '—';
-  }
-  // Markup for the per-row overflow menu. cancelOnly = row is already on hold.
-  function kebabHTML(cancelOnly) {
-    return '<div class="kebab-wrap">'
-      + '<button class="btn-kebab" onclick="toggleKebab(this, event)" title="More actions">&#8943;</button>'
-      + '<div class="kebab-menu">'
-      + (cancelOnly ? '' : '<button type="button" onclick="openHoldModal(this)">&#9208; Put On Hold</button>')
-      + '<button type="button" class="danger" onclick="openCancelModal(this)">&#10005; Cancel Order</button>'
-      + '</div></div>';
   }
 
   /* ---------- overflow (kebab) menu ---------- */
@@ -702,91 +573,56 @@
   }
   document.addEventListener('click', closeAllKebabs);
 
-  /* ---------- Confirm & Book modal (QTN -> SO minting) ---------- */
-  let currentRef = null;          // the QTN (or SO) shown in the first column
-  const NEXT_SO_NUMBER = 'SO-1044';
+  /* Every modal below is a real <form>: the opener only points it at the right
+     row's URL and fills in the read-only reference block. The POST, the state
+     change and the redirect all happen server-side — §1.1 mints the SO number
+     there, not here. */
 
-  function openConfirmModal(ref, cust, val) {
-    currentRef = ref;
-    document.getElementById('mSo').textContent = ref;
-    document.getElementById('mCust').textContent = cust;
-    document.getElementById('mVal').textContent = val;
+  /* ---------- Confirm & Book modal (QTN -> SO minting) ---------- */
+  function openConfirmModal(btn) {
+    closeAllKebabs();
+    const row = btn.closest('tr');
+    document.getElementById('confirmForm').action = row.dataset.bookUrl;
+    document.getElementById('mSo').textContent = rowRef(row);
+    document.getElementById('mCust').textContent = row.dataset.cust;
+    document.getElementById('mVal').textContent = row.dataset.value;
+    document.getElementById('mDate').value = row.dataset.expected || '';
     document.getElementById('confirmModal').classList.add('show');
   }
-
   function closeConfirmModal() {
     document.getElementById('confirmModal').classList.remove('show');
   }
 
-  function doConfirm() {
-    closeConfirmModal();
-    let newSo = null;
-    const rows = document.querySelectorAll('table.orders tbody tr');
-    rows.forEach(row => {
-      const soEl = row.querySelector('.so-no');
-      if (!soEl || soEl.textContent.trim() !== currentRef) return;
-
-      row.style.background = '';
-
-      // §1.1 — the SO number is minted right here, on Accounts confirming the PO.
-      const wasQtn = soEl.classList.contains('qtn');
-      if (wasQtn) {
-        newSo = NEXT_SO_NUMBER;
-        soEl.classList.remove('qtn');
-        soEl.removeAttribute('title');
-        soEl.textContent = newSo;
-        // the originating quotation now becomes the "Ref QTN-xxxx" sub-label
-        const sub = row.querySelector('.cust .sub');
-        if (sub) sub.textContent = 'New · Ref ' + currentRef;
-      }
-
-      // advance the 7-dot stage track: PO Intake (1) done -> Design (2) current
-      const dots = row.querySelectorAll('.stage-dot');
-      const lines = row.querySelectorAll('.stage-line-h');
-      if (dots.length >= 2) {
-        dots[0].className = 'stage-dot done';
-        if (lines[0]) lines[0].className = 'stage-line-h done';
-        dots[1].className = 'stage-dot current';
-      }
-      const label = row.querySelector('.stage-label');
-      if (label) {
-        label.textContent = 'Design — Queued, awaiting designer';
-        label.style.color = '';
-        label.style.fontWeight = '';
-      }
-      const badge = row.querySelector('.ob-badge');
-      if (badge) {
-        badge.className = 'ob-badge green';
-        badge.textContent = 'On track';
-      }
-      const del = row.querySelector('.del-date');
-      if (del) del.innerHTML = '<span class="lbl">Expected</span>28 Aug 2026';
-      const actions = row.querySelector('.action-cell');
-      if (actions) {
-        actions.innerHTML =
-          '<button class="btn-confirm outline" onclick="alert(\'View order detail (UI preview)\')">&#128065; View</button>'
-          + kebabHTML(false);   // still pre-dispatch, so Hold / Cancel remain available
-      }
-    });
-
-    if (newSo) {
-      alert(currentRef + ' confirmed and booked.\n\nSales Order ' + newSo + ' has been created.\n'
-        + 'Sent to the Design queue — designer has been notified.');
-    } else {
-      alert(currentRef + ' booked successfully.\n\nSent to Design queue.');
-    }
-    currentRef = null;
+  /* ---------- Reject PO ---------- */
+  function openRejectModal(btn) {
+    closeAllKebabs();
+    const row = btn.closest('tr');
+    document.getElementById('rejectForm').action = row.dataset.rejectUrl;
+    document.getElementById('rRef').textContent = rowRef(row);
+    document.getElementById('rCust').textContent = row.dataset.cust;
+    document.getElementById('rVal').textContent = row.dataset.value;
+    const ta = document.getElementById('rejectReason');
+    ta.value = '';
+    document.getElementById('rejectConfirmBtn').disabled = true;
+    document.getElementById('rejectModal').classList.add('show');
+    ta.focus();
+  }
+  function closeRejectModal() {
+    document.getElementById('rejectModal').classList.remove('show');
+  }
+  function checkRejectReason() {
+    const v = document.getElementById('rejectReason').value.trim();
+    document.getElementById('rejectConfirmBtn').disabled = (v.length === 0);
   }
 
   /* ---------- Put On Hold ---------- */
-  let holdRow = null;
-
   function openHoldModal(btn) {
     closeAllKebabs();
-    holdRow = btn.closest('tr');
-    document.getElementById('hRef').textContent = rowRef(holdRow);
-    document.getElementById('hCust').textContent = rowCust(holdRow);
-    document.getElementById('hStage').textContent = rowStage(holdRow);
+    const row = btn.closest('tr');
+    document.getElementById('holdForm').action = row.dataset.holdUrl;
+    document.getElementById('hRef').textContent = rowRef(row);
+    document.getElementById('hCust').textContent = rowCust(row);
+    document.getElementById('hStage').textContent = rowStage(row);
     const ta = document.getElementById('holdReason');
     ta.value = '';
     document.getElementById('holdConfirmBtn').disabled = true;
@@ -795,74 +631,20 @@
   }
   function closeHoldModal() {
     document.getElementById('holdModal').classList.remove('show');
-    holdRow = null;
   }
   function checkHoldReason() {
     const v = document.getElementById('holdReason').value.trim();
     document.getElementById('holdConfirmBtn').disabled = (v.length === 0);
   }
 
-  function doHold() {
-    const reason = document.getElementById('holdReason').value.trim();
-    if (!reason || !holdRow) return;              // mandatory reason
-    const row = holdRow;
-    const badge = row.querySelector('.ob-badge');
-    const statusCell = badge.parentElement;
-    const actions = row.querySelector('.action-cell');
-
-    // remember the previous status + actions so Resume can restore them
-    if (!row._heldSnapshot) {
-      row._heldSnapshot = {
-        badgeClass: badge.className,
-        badgeText: badge.textContent,
-        actionsHTML: actions.innerHTML
-      };
-    }
-
-    badge.className = 'ob-badge amber';
-    badge.textContent = 'On hold';
-    let rn = statusCell.querySelector('.hold-reason');
-    if (!rn) { rn = document.createElement('div'); rn.className = 'hold-reason'; statusCell.appendChild(rn); }
-    rn.textContent = 'Reason: ' + reason;
-
-    row.style.background = '';
-    row.classList.add('row-held');
-    actions.innerHTML =
-      '<button class="btn-confirm outline" onclick="doResume(this)">&#9654; Resume</button>'
-      + kebabHTML(true);
-
-    const ref = rowRef(row);
-    closeHoldModal();
-    alert(ref + ' put ON HOLD.\n\nReason: ' + reason
-      + '\n\nThe job is hidden from active queues and can be resumed at any time.\nLogged to the audit trail.');
-  }
-
-  function doResume(btn) {
-    const row = btn.closest('tr');
-    const snap = row._heldSnapshot;
-    const badge = row.querySelector('.ob-badge');
-    if (snap && badge) {
-      badge.className = snap.badgeClass;
-      badge.textContent = snap.badgeText;
-    }
-    const rn = row.querySelector('.hold-reason');
-    if (rn) rn.remove();
-    row.classList.remove('row-held');
-    if (snap) row.querySelector('.action-cell').innerHTML = snap.actionsHTML;
-    row._heldSnapshot = null;
-    alert(rowRef(row) + ' resumed.\n\nRestored to its previous status: '
-      + (snap ? snap.badgeText : 'previous status') + '.\nLogged to the audit trail.');
-  }
-
   /* ---------- Cancel Order (terminal) ---------- */
-  let cancelRow = null;
-
   function openCancelModal(btn) {
     closeAllKebabs();
-    cancelRow = btn.closest('tr');
-    document.getElementById('cRef').textContent = rowRef(cancelRow);
-    document.getElementById('cCust').textContent = rowCust(cancelRow);
-    document.getElementById('cStage').textContent = rowStage(cancelRow);
+    const row = btn.closest('tr');
+    document.getElementById('cancelForm').action = row.dataset.cancelUrl;
+    document.getElementById('cRef').textContent = rowRef(row);
+    document.getElementById('cCust').textContent = rowCust(row);
+    document.getElementById('cStage').textContent = rowStage(row);
     const ta = document.getElementById('cancelReason');
     ta.value = '';
     document.getElementById('cancelConfirmBtn').disabled = true;
@@ -871,46 +653,17 @@
   }
   function closeCancelModal() {
     document.getElementById('cancelModal').classList.remove('show');
-    cancelRow = null;
   }
   function checkCancelReason() {
     const v = document.getElementById('cancelReason').value.trim();
     document.getElementById('cancelConfirmBtn').disabled = (v.length === 0);
   }
 
-  function doCancel() {
-    const reason = document.getElementById('cancelReason').value.trim();
-    if (!reason || !cancelRow) return;            // mandatory reason
-    const row = cancelRow;
-    const badge = row.querySelector('.ob-badge');
-    const statusCell = badge.parentElement;
-
-    badge.className = 'ob-badge gray';
-    badge.textContent = 'Cancelled';
-    let rn = statusCell.querySelector('.hold-reason');
-    if (!rn) { rn = document.createElement('div'); rn.className = 'hold-reason'; statusCell.appendChild(rn); }
-    rn.textContent = 'Reason: ' + reason;
-
-    row.style.background = '';
-    row.classList.remove('row-held');
-    row.classList.add('row-cancelled');
-    row._heldSnapshot = null;
-    row.querySelector('.action-cell').innerHTML =
-      '<span class="no-actions">Cancelled — terminal, no actions</span>';
-
-    const ref = rowRef(row);
-    closeCancelModal();
-    alert(ref + ' CANCELLED.\n\nReason: ' + reason
-      + '\n\nThis is terminal — the job has been killed.\nReserved material has been released back to available stock.\nLogged to the audit trail.');
-  }
-
   /* ---------- close modals on overlay click ---------- */
-  ['confirmModal', 'holdModal', 'cancelModal'].forEach(id => {
+  ['confirmModal', 'rejectModal', 'holdModal', 'cancelModal'].forEach(id => {
     document.getElementById(id).addEventListener('click', function(e) {
       if (e.target !== this) return;
       this.classList.remove('show');
-      if (id === 'holdModal') holdRow = null;
-      if (id === 'cancelModal') cancelRow = null;
     });
   });
 </script>
