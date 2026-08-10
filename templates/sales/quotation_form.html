@@ -43,10 +43,12 @@
   }
   .btn-remove-item:hover { background: var(--red-bg); }
 
+  /* Quantity sits first: it drives both the slab and the rate band. */
   .spec-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(5, 1fr);
     gap: 12px; margin-bottom: 16px;
   }
+  .spec-grid .item-quantity { font-family: 'IBM Plex Mono', monospace; }
 
   /* ---- Pricing tiers table ---- */
   .tier-section { margin-top: 8px; }
@@ -83,6 +85,26 @@
     background: none; border: none; color: var(--red); cursor: pointer;
     font-size: 14px; padding: 2px 6px; line-height: 1;
   }
+
+  /* ---- The customer's live rate card, shown beside the slab table ---- */
+  .band-ref {
+    display: none; margin-bottom: 8px; padding: 6px 10px;
+    background: var(--green-bg); border-left: 3px solid var(--green);
+    border-radius: 0 3px 3px 0; font-size: 11px; color: var(--ink-soft);
+  }
+  .band-ref.show { display: block; }
+  .band-ref b { color: var(--ink); font-weight: 700; }
+  .band-ref .bands { font-family: 'IBM Plex Mono'; color: var(--ink); }
+
+  /* Amber flag when a typed slab half-covers one of those bands. The real
+     gate is the server-side refusal at submit; this is only a heads-up. */
+  .slab-warn {
+    display: none; margin-top: 8px; padding: 7px 10px;
+    background: var(--amber-bg); border-left: 3px solid var(--amber);
+    border-radius: 0 3px 3px 0; font-size: 11px; color: var(--ink); line-height: 1.6;
+  }
+  .slab-warn.show { display: block; }
+  .slab-warn b { font-family: 'IBM Plex Mono'; }
 
   .tooling-row {
     display: flex; align-items: center; gap: 12px; margin-top: 12px;
@@ -510,7 +532,6 @@
       <input type="hidden" class="item-delete" name="{{ row.form.DELETE.html_name }}" value="">
       <input type="hidden" class="item-description" name="{{ row.form.description.html_name }}" value="{{ row.form.description.value|default_if_none:'' }}">
       <input type="hidden" class="item-artwork" name="{{ row.form.artwork_ref.html_name }}" value="{{ row.form.artwork_ref.value|default_if_none:'' }}">
-      <input type="hidden" class="item-quantity" name="{{ row.form.quantity.html_name }}" value="{{ row.form.quantity.value|default_if_none:'' }}">
 
       <div class="item-header">
         <div>
@@ -521,6 +542,11 @@
       </div>
 
       <div class="spec-grid">
+        <div class="field">
+          <label>Quantity (Nos.) <span class="opt">— picks the slab and the approved rate band</span></label>
+          <input type="number" min="1" step="1" class="item-quantity" name="{{ row.form.quantity.html_name }}"
+                 placeholder="e.g. 250" value="{{ row.form.quantity.value|default_if_none:'' }}">
+        </div>
         <div class="field">
           <label>Material</label>
           <select class="spec-material" name="{{ row.form.material.html_name }}">
@@ -557,6 +583,8 @@
       <!-- Batch-wise pricing tiers -->
       <div class="tier-section">
         <div class="tier-label">Batch-wise Pricing (Slab)</div>
+        <!-- Filled by the item-code type-ahead: the code's APPROVED bands -->
+        <div class="band-ref"></div>
         {{ row.tiers.management_form }}
         <table class="tiers">
           <thead>
@@ -588,6 +616,8 @@
             {% endfor %}
           </tbody>
         </table>
+        <!-- Amber heads-up when a slab straddles an approved band -->
+        <div class="slab-warn"></div>
         <button type="button" class="btn-add-tier" onclick="addTier(this)">+ Add pricing tier</button>
       </div>
 
@@ -780,6 +810,8 @@
           est.textContent = fmt(maxQty * rate);
         }
       }
+      // Editing a slab's quantities can walk it onto an approved band.
+      qaCheckSlabs(e.target.closest('.item-card'));
     }
 
     // Keep the two GST % inputs in sync (charges card <-> totals card)
@@ -851,6 +883,7 @@
     tbody.appendChild(tr);
     if (total) total.value = index + 1;
     recalcTotals();
+    qaCheckSlabs(card);
   }
 
   // ---- Remove pricing tier row ----
@@ -859,6 +892,7 @@
   function removeTier(btn) {
     const row = btn.closest('tr');
     const tbody = row.closest('tbody');
+    const card = btn.closest('.item-card');   // grabbed before the row detaches
     if (tbody.querySelectorAll('tr:not([hidden])').length <= 1) return;
 
     const pk = row.querySelector('input[name$="-id"]');
@@ -871,6 +905,7 @@
       row.remove();
     }
     recalcTotals();
+    qaCheckSlabs(card);
   }
 
   // ---- Remove item card ----
@@ -1075,6 +1110,111 @@
     delete card.dataset.approvedCode;
     qaSetRateChip(card, null);
     qaSetFlag(card, null);
+    qaSetBands(card, []);
+  }
+
+  /* =====================================================================
+     THE CUSTOMER'S APPROVED RATE CARD, ON THE SLAB TABLE
+     A read-only reference ("Approved bands: 1–100 @ ₹420 · …") plus an amber
+     flag when a typed slab only HALF-covers one of those bands, which would
+     put two prices on the same quantity.
+
+     Convenience only. The real gate is server-side: the quotation save path
+     refuses the submit (Quotation.band_conflicts) and ItemCodeRate.save()
+     refuses the write, so nothing here can be worked around by editing the
+     page.
+     ===================================================================== */
+  var BAND_OPEN_END = 1000000000;          // mirrors masters.models.BAND_OPEN_END
+
+  function qaRangeLabel(from, to) {
+    return (to === null || to === undefined) ? (from + '+') : (from + '–' + to);
+  }
+
+  // A tier row as the rate card would store it: bands start at 1, and a blank
+  // (or backwards) upper limit means "everything above".
+  //
+  // An entirely untouched row is NOT a slab — a fresh item card ships with
+  // three of them, and Django drops them on save, so reading them as "1 and
+  // above" would flag every rate card as a clash before a word is typed.
+  function qaSlabRange(row) {
+    var inputs = row.querySelectorAll('input[type=number]');
+    if (inputs.length < 3) return null;
+    var typed = false;
+    for (var i = 0; i < 3; i++) {
+      if ((inputs[i].value || '').trim() !== '') { typed = true; break; }
+    }
+    if (!typed) return null;
+
+    var from = parseInt(inputs[0].value, 10);
+    var to   = parseInt(inputs[1].value, 10);
+    from = Math.max(1, isNaN(from) ? 0 : from);
+    if (isNaN(to) || to < from) to = null;
+    return { from: from, to: to };
+  }
+
+  function qaCardBands(card) {
+    try { return JSON.parse(card.dataset.bands || '[]'); } catch (e) { return []; }
+  }
+
+  function qaSetBands(card, bands) {
+    if (!card) return;
+    bands = bands || [];
+    card.dataset.bands = JSON.stringify(bands);
+
+    var ref = card.querySelector('.band-ref');
+    if (ref && bands.length) {
+      ref.className = 'band-ref show';
+      ref.innerHTML = '<b>Approved bands:</b> <span class="bands">' +
+        bands.map(function (b) {
+          return qaRangeLabel(b.from, b.to) + ' @ ' + money(b.rate);
+        }).join(' · ') + '</span>';
+    } else if (ref) {
+      ref.className = 'band-ref';
+      ref.innerHTML = '';
+    }
+    qaCheckSlabs(card);
+  }
+
+  function qaCheckSlabs(card) {
+    if (!card) return;
+    var box = card.querySelector('.slab-warn');
+    if (!box) return;
+
+    var bands = qaCardBands(card);
+    var clashes = [];
+
+    if (bands.length) {
+      card.querySelectorAll('table.tiers tbody tr').forEach(function (row) {
+        if (row.hidden) return;
+        var del = row.querySelector('.tier-delete');
+        if (del && del.value) return;                 // flagged for deletion
+        var slab = qaSlabRange(row);
+        if (!slab) return;
+        var upper = slab.to === null ? BAND_OPEN_END : slab.to;
+
+        bands.forEach(function (b) {
+          var bTo    = (b.to === null || b.to === undefined) ? null : b.to;
+          var bUpper = bTo === null ? BAND_OPEN_END : bTo;
+          // The identical range is a REVISION of that band, not a collision.
+          if (b.from === slab.from && bTo === slab.to) return;
+          if (slab.from <= bUpper && b.from <= upper) {
+            var text = qaRangeLabel(slab.from, slab.to) +
+                       ' overlaps the approved band ' + qaRangeLabel(b.from, bTo);
+            if (clashes.indexOf(text) === -1) { clashes.push(text); }
+          }
+        });
+      });
+    }
+
+    if (!clashes.length) { box.className = 'slab-warn'; box.innerHTML = ''; return; }
+    box.className = 'slab-warn show';
+    box.innerHTML = '⚠ <b>' + clashes.join('</b>; <b>') + '</b>. ' +
+      'A quotation with an overlapping slab cannot be submitted — start the slab ' +
+      'above the existing band, or quote that band’s exact range to revise it.';
+  }
+
+  function qaCheckAllSlabs() {
+    document.querySelectorAll('#itemsContainer .item-card').forEach(qaCheckSlabs);
   }
 
   // Push an approved rate into the first tier
@@ -1233,6 +1373,9 @@
         qaClearApproved(card);
         qaSetState(card, 'pending', rec.code + ' — awaiting approval on ' + rec.pendingQtn);
       }
+      // The rate card is shown for BOTH: a code can be pending a revision at
+      // the header level and still have approved bands pricing live quotes.
+      qaSetBands(card, rec.bands);
     } else {
       input.dataset.matched = '';
       qaClearApproved(card);

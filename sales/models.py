@@ -10,10 +10,13 @@ from django.conf import settings
 from django.db import models, transaction
 
 from core.constants import (
-    PREFIX_QUOTATION, Currency, ItemCodeApproval, OrderType, QuotationStatus,
+    PREFIX_QUOTATION, Currency, OrderType, QuotationStatus,
 )
 from core.models import Sequence, TimeStampedModel
-from masters.models import Customer, Finish, ItemCode, Material, Thickness
+from masters.models import (
+    BandOverlapError, Customer, Finish, ItemCode, Material, Thickness,
+    band_overlap_message, band_range_label, normalise_band_range,
+)
 
 
 class Quotation(TimeStampedModel):
@@ -130,6 +133,35 @@ class Quotation(TimeStampedModel):
         return [i for i in self.items.select_related('item_code') if i.needs_code_approval]
 
     @property
+    def band_conflicts(self):
+        """Every typed slab on this quote that would straddle the rate card.
+
+        [(item, tier, conflicting_band)] — aggregated across the line items so
+        the salesperson is stopped at SUBMIT, long before a Sales Manager can
+        click Approve and meet an exception.
+        """
+        found = []
+        for item in self.items.select_related('item_code__customer').prefetch_related(
+                'tiers', 'item_code__rate_bands'):
+            for tier, band in item.band_conflicts:
+                found.append((item, tier, band))
+        return found
+
+    @property
+    def band_conflict_text(self):
+        """The conflicts as one readable sentence per clashing slab."""
+        lines, seen = [], set()
+        for item, tier, _band in self.band_conflicts:
+            key = (item.pk, tier.pk)
+            if key in seen:
+                continue
+            seen.add(key)
+            clashes = item.item_code.overlapping_bands(tier.qty_from, tier.qty_to)
+            lines.append(band_overlap_message(
+                item.item_code, tier.qty_from, tier.qty_to, clashes))
+        return ' '.join(lines)
+
+    @property
     def days_pending(self):
         """Age of the approval request, in days. Blank until submitted."""
         if not self.submitted_at:
@@ -145,12 +177,40 @@ class Quotation(TimeStampedModel):
 
     @transaction.atomic
     def approve(self, user):
-        """Approving the quote also locks in every new/revised item-code rate."""
+        """Approving the quote signs off the RATE BAND behind every line.
+
+        Only the bands this quotation actually quotes are touched; every other
+        band on the same item code is left exactly as it was, because an
+        approved band is permanent.
+
+        A quote carrying a straddling slab is refused outright, before the
+        first band is written: the whole approval is atomic, so a rate card is
+        never left half-updated with the quotation still pending.
+        """
         from django.utils import timezone
 
-        for item in self.items.select_related('item_code'):
-            if item.item_code and item.needs_code_approval:
-                item.item_code.approve(item.effective_rate, user, self.number)
+        conflict = self.band_conflict_text
+        if conflict:
+            raise BandOverlapError(
+                f'{self.number} cannot be approved — {conflict} '
+                f'Nothing has been written to the rate card; send the quotation '
+                f'back so the slab can be corrected.')
+
+        for item in self.items.select_related('item_code').prefetch_related('tiers'):
+            code = item.item_code
+            if code is None or not item.quantity:
+                continue
+            tier = item.applicable_tier
+            if tier is None:
+                # No slab covers the quantity — there is no rate to approve.
+                continue
+            band, kind = code.add_or_revise_band(
+                tier.qty_from, tier.qty_to, item.effective_rate,
+                reason=f'Quoted on {self.number}',
+            )
+            if kind != 'unchanged':
+                band.approve(user, self.number)
+            code.refresh_approved_rate()
 
         self.status = QuotationStatus.APPROVED
         self.approved_by = user
@@ -222,12 +282,21 @@ class QuotationItem(TimeStampedModel):
 
     @property
     def applicable_tier(self):
-        """Slab pricing: the tier whose range contains the ordered quantity."""
+        """Slab pricing: the tier whose range CONTAINS the ordered quantity.
+
+        No fallback. A quantity outside every slab is a hole in the ladder the
+        salesperson has to fix — see `has_slab_gap`.
+        """
         for tier in self.tiers.all():
-            upper = tier.qty_to or 10**9
+            upper = tier.qty_to if tier.qty_to is not None else 10**9
             if tier.qty_from <= self.quantity <= upper:
                 return tier
-        return self.tiers.last()
+        return None
+
+    @property
+    def has_slab_gap(self):
+        """A real quantity that no price tier covers."""
+        return bool(self.quantity) and self.applicable_tier is None
 
     @property
     def effective_rate(self):
@@ -240,12 +309,56 @@ class QuotationItem(TimeStampedModel):
 
     @property
     def needs_code_approval(self):
-        """True when this line would change what the master holds."""
-        if not self.item_code:
+        """True when this line would add to, or change, the customer's rate card.
+
+        The band covering the quoted quantity is what matters: if it is already
+        approved at this rate the line is auto-priced and needs no sign-off, no
+        matter what any other band on the code is doing.
+        """
+        if not self.item_code or not self.quantity:
             return False
-        if self.item_code.approval_state == ItemCodeApproval.PENDING:
+        band = self.item_code.approved_band_for(self.quantity)
+        if band is None:
             return True
-        return self.item_code.approved_rate != self.effective_rate
+        return band.approved_rate != self.effective_rate
+
+    @property
+    def band_conflicts(self):
+        """[(tier, conflicting_band)] — the slab that would straddle the rate card.
+
+        Only the APPLICABLE tier is checked, because that is the only one
+        approve() ever writes to the rate card. Blocking on the other slabs
+        punishes a quote for rows that will never be committed — a quote of 200
+        against a clean 101-300 band was being refused because some unrelated
+        301+ row overlapped an existing 301-1000 band.
+
+        An exact range match is fine (that is a revision of that band) and so
+        is a range that touches nothing (that is a new band).
+        """
+        code = self.item_code
+        tier = self.applicable_tier
+        if code is None or tier is None:
+            return []
+        return [(tier, band)
+                for band in code.overlapping_bands(tier.qty_from, tier.qty_to)]
+
+    @property
+    def has_band_conflict(self):
+        return bool(self.band_conflicts)
+
+    @property
+    def band_state(self):
+        """'ok' | 'new_band' | 'revised_band' | 'no_slab' — for the UI badge."""
+        if not self.item_code or not self.quantity:
+            return 'ok'
+        if self.applicable_tier is None:
+            return 'no_slab'
+        band = self.item_code.approved_band_for(self.quantity)
+        if band is None:
+            return 'new_band'
+        if band.approved_rate != self.effective_rate:
+            return 'revised_band'
+        return 'ok'
 
     def clone_to(self, quotation):
         clone = QuotationItem.objects.create(
@@ -276,6 +389,16 @@ class PriceTier(TimeStampedModel):
     def __str__(self):
         upper = self.qty_to if self.qty_to else '+'
         return f'{self.qty_from}-{upper} @ {self.rate_per_unit}'
+
+    @property
+    def range_label(self):
+        """'1–100' / '301+' — a slab named the way the rate card names bands.
+
+        Normalised first: a tier conventionally starts at 0 and the band it
+        would become starts at 1, so this is the range that actually gets
+        compared against the customer's rate card.
+        """
+        return band_range_label(*normalise_band_range(self.qty_from, self.qty_to))
 
     @property
     def estimated_amount(self):

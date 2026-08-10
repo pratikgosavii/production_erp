@@ -85,7 +85,11 @@ class QuotationForm(forms.ModelForm):
 
 
 class BillToForm(forms.ModelForm):
-    """The Bill-To block. Only used when a brand-new customer is typed in."""
+    """The Bill-To block — creates a new customer, and edits an existing one.
+
+    Edits here write straight back to the customer master, so a corrected
+    phone number or address does not need an admin.
+    """
 
     credit_limit = forms.CharField(required=False)
 

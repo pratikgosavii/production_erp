@@ -1,0 +1,668 @@
+{% extends "base.html" %}
+
+{% block title %}Quotation {{ quotation.number }} — Full Detail{% endblock %}
+{% block topbar_sub %}Quotation — Full Detail{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">{{ role_label }}</span>
+  <span class="name">{{ user_name }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .crumb { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 14px; }
+  .crumb b { color: var(--ink); font-family: 'IBM Plex Mono'; }
+
+  /* ---------- Header card ---------- */
+  .header-card {
+    background: var(--card); border: var(--border); border-radius: var(--radius);
+    padding: 20px 22px; margin-bottom: 16px;
+  }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .qtn-title { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 700; }
+  .qtn-title .ver { font-size: 13px; color: var(--ink-soft); font-weight: 400; margin-left: 6px; }
+  .qtn-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+  .qtn-sub .supersedes { font-family: 'IBM Plex Mono'; color: var(--steel); }
+
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .overall-badge {
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 8px 16px; border-radius: 20px; white-space: nowrap;
+  }
+  .overall-badge.green { background: var(--green-bg); color: var(--green); }
+  .overall-badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .overall-badge.red   { background: var(--red-bg);   color: var(--red); }
+  .overall-badge.blue  { background: var(--blue-bg);  color: var(--blue); }
+  .overall-badge.gray  { background: var(--gray-bg);  color: var(--gray); }
+  .grand-figure { font-family: 'IBM Plex Mono'; font-size: 25px; font-weight: 700; line-height: 1; }
+  .grand-label { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+
+  .header-meta {
+    /* All eight cells fit one row on a normal desktop; they wrap on narrow ones. */
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 1px;
+    background: var(--line); border: 1px solid var(--line);
+  }
+  .header-meta .m { background: #fff; padding: 10px 13px; min-width: 0; }
+  .header-meta .m .l { font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 4px; }
+  .header-meta .m .v { font-size: 12px; font-weight: 600; word-break: break-word; }
+
+  /* ---------- Actions ---------- */
+  .action-bar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .act {
+    font-size: 11px; font-weight: 600; padding: 7px 14px; border-radius: 3px;
+    cursor: pointer; white-space: nowrap; font-family: 'IBM Plex Sans';
+    text-decoration: none; display: inline-block; border: 1px solid transparent;
+  }
+  .act:hover { text-decoration: none; }
+  .act.approve { background: var(--green); color: #fff; border-color: var(--green); }
+  .act.reject  { background: #fff; color: var(--red); border-color: var(--red); }
+  .act.revise  { background: #fff; color: var(--steel); border-color: var(--steel); }
+  .act.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .act.outline { background: #fff; color: var(--navy); border-color: var(--navy); }
+  .act.upload  { background: #fff; color: var(--blue); border-color: var(--blue); }
+
+  .inline-form { display: none; margin-top: 12px; border-radius: var(--radius); padding: 12px 14px; }
+  .inline-form.open { display: block; }
+  .inline-form.reject { background: var(--red-bg); border: 1px solid var(--red); }
+  .inline-form.revise { background: var(--blue-bg); border: 1px solid var(--blue); }
+  .inline-form.po     { background: var(--gray-bg); border: 1px solid var(--line); }
+  .inline-form .fl {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    display: block; margin-bottom: 6px;
+  }
+  .inline-form.reject .fl { color: var(--red); }
+  .inline-form.revise .fl { color: var(--blue); }
+  .inline-form.po .fl { color: var(--ink-soft); }
+  .inline-form textarea {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 3px; font-family: 'IBM Plex Sans'; font-size: 12px;
+    resize: vertical; min-height: 60px; margin-bottom: 8px;
+  }
+  .inline-form .rf-actions { display: flex; gap: 8px; }
+  .po-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .po-grid .f { min-width: 0; }
+  .po-grid input, .po-grid select {
+    width: 100%; box-sizing: border-box; padding: 7px 9px; font-size: 12px;
+    border: 1px solid var(--line); border-radius: 3px; font-family: 'IBM Plex Sans';
+  }
+  .po-hint { font-size: 10.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 8px; }
+
+  /* ---------- Section titles ---------- */
+  .section-title {
+    font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); margin: 22px 0 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .section-title .hint { font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-soft); }
+
+  /* ---------- Plain fact card ---------- */
+  .fact-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .fact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px 18px; }
+  .fact .l { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 4px; }
+  .fact .v { font-size: 12.5px; font-weight: 600; line-height: 1.5; word-break: break-word; }
+  .fact .v.mono { font-family: 'IBM Plex Mono'; }
+  .fact .v.none { color: var(--gray); font-weight: 400; font-style: italic; }
+
+  /* ---------- Line items ---------- */
+  .li-card {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--steel);
+    border-radius: 3px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .li-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .li-pos {
+    font-family: 'IBM Plex Mono'; font-size: 10px; font-weight: 700; color: var(--ink-soft);
+    background: var(--gray-bg); border-radius: 3px; padding: 2px 7px; margin-right: 8px;
+  }
+  .ic-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 13px; color: var(--steel); }
+  .code-badge {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: 3px; display: inline-block; white-space: nowrap; margin-left: 6px;
+  }
+  .code-badge.new     { background: var(--amber-bg); color: var(--amber); }
+  .code-badge.revised { background: var(--amber-bg); color: var(--amber); }
+  .code-badge.ok      { background: var(--green-bg); color: var(--green); }
+  /* A band that cannot be written at all — it straddles an approved one. */
+  .code-badge.conflict { background: var(--red-bg); color: var(--red); }
+  .cp-conflict { margin-top: 4px; font-size: 10.5px; color: var(--red); font-family: 'IBM Plex Mono'; }
+  .li-desc { font-size: 12.5px; font-weight: 600; margin-top: 6px; }
+  .li-spec { font-size: 11px; color: var(--ink-soft); margin-top: 3px; line-height: 1.5; }
+  .li-spec .aw { font-family: 'IBM Plex Mono'; }
+  .li-money { text-align: right; white-space: nowrap; }
+  .li-money .amt { font-family: 'IBM Plex Mono'; font-size: 16px; font-weight: 700; }
+  .li-money .bits { font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.6; font-family: 'IBM Plex Mono'; }
+
+  table.tiers { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 12px; }
+  table.tiers th {
+    text-align: left; padding: 6px 10px; font-size: 9px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft); font-weight: 600;
+    background: var(--paper); border-bottom: 1px solid var(--line);
+  }
+  table.tiers td { padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  table.tiers tr:last-child td { border-bottom: none; }
+  table.tiers td.num { font-family: 'IBM Plex Mono'; white-space: nowrap; }
+  table.tiers tr.applies td { background: var(--green-bg); font-weight: 700; color: var(--green); }
+  .tier-flag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .no-tiers { font-size: 11px; color: var(--gray); font-style: italic; margin-top: 10px; }
+
+  .empty-card {
+    background: var(--card); border: 1px dashed var(--line); border-radius: var(--radius);
+    padding: 34px 16px; text-align: center; color: var(--gray); font-style: italic; font-size: 12px;
+  }
+
+  /* ---------- Totals ---------- */
+  .totals-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 6px 18px; max-width: 420px; margin-left: auto;
+  }
+  .t-row { display: flex; justify-content: space-between; gap: 20px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .t-row:last-child { border-bottom: none; }
+  .t-row .tv { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .t-row.grand { padding: 13px 0; }
+  .t-row.grand .tl { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .t-row.grand .tv { font-size: 18px; font-weight: 700; }
+
+  /* ---------- Item-code lock-in panel (same idea as the approval queue) ---- */
+  .code-panel {
+    border: 1px solid var(--amber); border-radius: 3px;
+    background: var(--amber-bg); padding: 12px 14px;
+  }
+  .code-panel table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .code-panel th {
+    text-align: left; padding: 6px 10px; font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft); font-weight: 600;
+    background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .code-panel td { padding: 7px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .code-panel tr:last-child td { border-bottom: none; }
+  .code-panel .cp-rate { font-family: 'IBM Plex Mono'; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .code-panel .cp-old { font-family: 'IBM Plex Mono'; color: var(--ink-soft); text-decoration: line-through; font-weight: 400; }
+  .code-panel .cp-foot { font-size: 10.5px; color: var(--amber); font-style: italic; margin-top: 9px; line-height: 1.5; }
+
+  /* ---------- Trail ---------- */
+  .trail-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 18px; }
+  .trail-item { display: flex; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+  .trail-item:last-child { border-bottom: none; }
+  .trail-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 5px; background: var(--gray); }
+  .trail-dot.green { background: var(--green); }
+  .trail-dot.amber { background: var(--amber); }
+  .trail-dot.red   { background: var(--red); }
+  .trail-dot.blue  { background: var(--blue); }
+  .trail-item .tt { font-weight: 600; }
+  .trail-item .td { font-size: 11px; color: var(--ink-soft); margin-top: 3px; line-height: 1.5; }
+  .trail-item .td q { font-style: italic; }
+
+  .doc-chip {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; margin-top: 6px;
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
+  }
+  a.doc-chip:hover { border-color: var(--steel); text-decoration: none; }
+  .doc-chip .ic {
+    width: 24px; height: 24px; border-radius: var(--radius); background: var(--blue); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8.5px; font-weight: 700; flex-shrink: 0;
+  }
+  .doc-chip.dwg .ic { background: var(--steel); }
+  .doc-chip .name { font-size: 11px; font-weight: 600; word-break: break-all; }
+  .doc-chip .meta { font-size: 9.5px; color: var(--ink-soft); }
+
+  /* ---------- Activity log ---------- */
+  .log-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; font-size: 11.5px; }
+  .log-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .log-item:last-child { border-bottom: none; }
+  .log-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; height: fit-content; margin-top: 1px; font-family: 'IBM Plex Mono'; }
+  .log-tag.qtn  { background: var(--blue-bg);  color: var(--blue); }
+  .log-tag.code { background: var(--amber-bg); color: var(--amber); }
+  .log-tag.so   { background: var(--gray-bg);  color: var(--gray); }
+  .log-item .ld { font-size: 11px; color: var(--ink-soft); margin-top: 2px; line-height: 1.45; }
+  .log-item .lt { color: var(--ink-soft); font-size: 10px; margin-top: 2px; }
+  .log-empty { color: var(--gray); font-style: italic; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">{{ role_label }}</div>
+  <a href="{{ back_url }}" class="nav-item">
+    <span class="icon">📋</span> {{ back_label }}
+  </a>
+  {% if request.user.is_salesman %}
+  <a href="{% url 'sales:quotation_create' %}" class="nav-item">
+    <span class="icon">✏️</span> New Quotation
+  </a>
+  {% endif %}
+  <a href="{% url 'sales:quotation_detail' quotation.pk %}" class="nav-item active">
+    <span class="icon">🧾</span> {{ quotation.number }}
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ back_url }}">{{ back_label }}</a> → <b>{{ quotation.number }} v{{ quotation.version }}</b></div>
+
+<!-- ======== 1. HEADER ======== -->
+<div class="header-card">
+  <div class="header-top">
+    <div>
+      <div class="qtn-title">{{ quotation.number }}<span class="ver">v{{ quotation.version }}</span></div>
+      <div class="qtn-sub">
+        {{ quotation.customer.name }} · {{ quotation.salesperson.short_name }}
+        {% if quotation.supersedes %}
+          · <span class="supersedes">supersedes {{ quotation.supersedes.number }} v{{ quotation.supersedes.version }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="header-right">
+      <span class="overall-badge {{ badge_class }}">{{ quotation.get_status_display }}</span>
+      <div style="text-align:right;">
+        <div class="grand-label">Grand Total</div>
+        <div class="grand-figure">{{ grand_total }}</div>
+      </div>
+
+      <!-- ==== 9. CONTEXTUAL ACTIONS (role + status) ==== -->
+      <div class="action-bar">
+        {% if can_approve %}
+          <form method="post" action="{% url 'sales:quotation_approve' quotation.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="act approve"
+                    onclick="return confirm('Approve {{ quotation.number|escapejs }} — {{ quotation.customer.name|escapejs }}?{% if code_rows %}\n\nThis also locks {{ code_rows|length }} item code rate(s) into the customer master.{% endif %}')">✓ Approve</button>
+          </form>
+          <button type="button" class="act reject" onclick="toggleForm('rejectForm')">✕ Reject</button>
+          <button type="button" class="act revise" onclick="toggleForm('reviseForm')">↺ Request Revision</button>
+        {% endif %}
+
+        {% if can_edit %}
+          <a href="{% url 'sales:quotation_edit' quotation.pk %}" class="act primary">Continue Editing</a>
+        {% endif %}
+
+        {% if can_send %}
+          <form method="post" action="{% url 'sales:quotation_send' quotation.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="act primary"
+                    onclick="return confirm('Email the approved quotation PDF?\n\n{{ quotation.number|escapejs }} — {{ quotation.customer.name|escapejs }}\nTo: {{ quotation.customer.email|default:'(no email on the customer master)'|escapejs }}')">
+              {% if quotation.sent_to_customer_at %}Resend to Customer{% else %}Send to Customer{% endif %}
+            </button>
+          </form>
+          <button type="button" class="act upload" onclick="toggleForm('poForm')">+ Upload PO</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if meta %}
+  <div class="header-meta">
+    {% for cell in meta %}
+    <div class="m"><div class="l">{{ cell.label }}</div><div class="v">{{ cell.value }}</div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if can_approve %}
+  <form method="post" action="{% url 'sales:quotation_reject' quotation.pk %}" class="inline-form reject" id="rejectForm">
+    {% csrf_token %}
+    <label class="fl">Rejection reason</label>
+    <textarea name="comment" required placeholder="e.g. Margin too low — revise rate to ₹XX per unit"></textarea>
+    <div class="rf-actions">
+      <button type="submit" class="act reject" style="background:var(--red); color:#fff;">Reject &amp; Send Back</button>
+      <button type="button" class="act outline" onclick="toggleForm('rejectForm')">Cancel</button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'sales:quotation_request_revision' quotation.pk %}" class="inline-form revise" id="reviseForm">
+    {% csrf_token %}
+    <label class="fl">What needs revising?</label>
+    <textarea name="comment" required placeholder="Describe the changes needed before this can be approved..."></textarea>
+    <div class="rf-actions">
+      <button type="submit" class="act" style="background:var(--blue); color:#fff; border-color:var(--blue);">Send Back for Revision</button>
+      <button type="button" class="act outline" onclick="toggleForm('reviseForm')">Cancel</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if can_send %}
+  <form method="post" enctype="multipart/form-data" action="{% url 'sales:quotation_po' quotation.pk %}"
+        class="inline-form po" id="poForm">
+    {% csrf_token %}
+    <label class="fl">Upload the customer PO</label>
+    <div class="po-grid">
+      <div class="f">
+        <div class="fact"><div class="l">PO Number *</div></div>
+        <input type="text" name="po_number" value="{{ quotation.po_number }}" required placeholder="e.g. BSG/PO/2026/0148">
+      </div>
+      <div class="f">
+        <div class="fact"><div class="l">PO File{% if not quotation.po_file %} *{% endif %}</div></div>
+        <input type="file" name="po_file" accept=".pdf,.jpg,.jpeg,.png" {% if not quotation.po_file %}required{% endif %}>
+      </div>
+      <div class="f">
+        <div class="fact"><div class="l">PO Date *</div></div>
+        <input type="date" name="po_date" required
+               value="{% if quotation.po_date %}{{ quotation.po_date|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}">
+      </div>
+      <div class="f">
+        <div class="fact"><div class="l">Drawing File (optional)</div></div>
+        <input type="file" name="drawing_file" accept=".pdf,.dxf,.dwg,.jpg,.jpeg,.png">
+      </div>
+      <div class="f">
+        <div class="fact"><div class="l">Expected Delivery *</div></div>
+        <input type="date" name="expected_delivery" required
+               value="{% if quotation.expected_delivery %}{{ quotation.expected_delivery|date:'Y-m-d' }}{% else %}{{ default_delivery|date:'Y-m-d' }}{% endif %}">
+      </div>
+      <div class="f">
+        <div class="fact"><div class="l">Order Type *</div></div>
+        <select name="order_type">
+          <option value="NEW" {% if quotation.order_type == 'NEW' %}selected{% endif %}>New</option>
+          <option value="REPEAT" {% if quotation.order_type == 'REPEAT' %}selected{% endif %}>Repeat</option>
+        </select>
+      </div>
+    </div>
+    <div class="po-hint">
+      Without a drawing the job is held as “Awaiting drawing” — Accounts can still receive the
+      PO, but it will not enter the Design queue.
+    </div>
+    <div class="rf-actions">
+      <button type="submit" class="act primary">Upload &amp; Send to Accounts</button>
+      <button type="button" class="act outline" onclick="toggleForm('poForm')">Cancel</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+<!-- ======== 2. BILL TO ======== -->
+<div class="section-title">Bill To <span class="hint">From the customer master — read-only here</span></div>
+<div class="fact-card">
+  <div class="fact-grid">
+    <div class="fact"><div class="l">Customer</div><div class="v">{{ quotation.customer.name }}</div></div>
+    <div class="fact">
+      <div class="l">Address</div>
+      <div class="v {% if not quotation.customer.address %}none{% endif %}">{{ quotation.customer.address|default:"Not on file" }}</div>
+    </div>
+    <div class="fact">
+      <div class="l">GSTIN / Tax ID</div>
+      <div class="v mono {% if not quotation.customer.gstin %}none{% endif %}">{{ quotation.customer.gstin|default:"Not on file" }}</div>
+    </div>
+    <div class="fact">
+      <div class="l">Contact Person</div>
+      <div class="v {% if not quotation.customer.contact_person %}none{% endif %}">{{ quotation.customer.contact_person|default:"Not on file" }}</div>
+    </div>
+    <div class="fact">
+      <div class="l">Phone</div>
+      <div class="v mono {% if not quotation.customer.phone %}none{% endif %}">{{ quotation.customer.phone|default:"Not on file" }}</div>
+    </div>
+    <div class="fact">
+      <div class="l">Email</div>
+      <div class="v {% if not quotation.customer.email %}none{% endif %}">{{ quotation.customer.email|default:"Not on file" }}</div>
+    </div>
+    <div class="fact"><div class="l">Credit Limit</div><div class="v mono">{{ credit_limit }}</div></div>
+  </div>
+</div>
+
+<!-- ======== 3. TERMS ======== -->
+<div class="section-title">Terms</div>
+<div class="fact-card">
+  <div class="fact-grid">
+    <div class="fact">
+      <div class="l">Payment Terms</div>
+      <div class="v {% if not quotation.payment_terms %}none{% endif %}">{{ quotation.payment_terms|default:"Not stated" }}</div>
+    </div>
+    <div class="fact">
+      <div class="l">Delivery Terms</div>
+      <div class="v {% if not quotation.delivery_terms %}none{% endif %}">{{ quotation.delivery_terms|default:"Not stated" }}</div>
+    </div>
+    <div class="fact">
+      <div class="l">Lead Time</div>
+      <div class="v {% if not quotation.lead_time %}none{% endif %}">{{ quotation.lead_time|default:"Not stated" }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 4. LINE ITEMS ======== -->
+<div class="section-title">
+  Line Items
+  <span class="hint">Slab pricing — the tier the quoted quantity lands in is the one that bills</span>
+</div>
+
+{% for row in rows %}
+<div class="li-card">
+  <div class="li-top">
+    <div style="min-width:0;">
+      <div>
+        <span class="li-pos">#{{ row.position }}</span>
+        {% if row.code %}
+          <span class="ic-code">{{ row.code }}</span>
+        {% else %}
+          <span class="ic-code" style="color:var(--gray);">No item code</span>
+        {% endif %}
+        {% if row.badge %}<span class="code-badge {{ row.badge.css }}">{{ row.badge.label }}</span>{% endif %}
+      </div>
+      <div class="li-desc">{{ row.description|default:"—" }}</div>
+      <div class="li-spec">
+        {% if row.spec %}{{ row.spec }}{% else %}No specification recorded{% endif %}
+        {% if row.artwork_ref %} · Artwork <span class="aw">{{ row.artwork_ref }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="li-money">
+      <div class="amt">{{ row.amount }}</div>
+      <div class="bits">
+        {{ row.quantity }} Nos × {{ row.effective_rate }}
+        {% if row.has_tooling %}<br>Tooling {{ row.tooling }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if row.tiers %}
+  <table class="tiers">
+    <thead>
+      <tr>
+        <th style="width:34%">Qty Range</th>
+        <th style="width:22%">Rate / Unit</th>
+        <th style="width:26%">Estimated Amount</th>
+        <th style="width:18%"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tier in row.tiers %}
+      <tr {% if tier.applies %}class="applies"{% endif %}>
+        <td class="num">{{ tier.range }}</td>
+        <td class="num">{{ tier.rate }}</td>
+        <td class="num">{{ tier.estimated }}</td>
+        <td>{% if tier.applies %}<span class="tier-flag">✓ Applicable</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="no-tiers">No price tiers were entered for this line — the effective rate is nil.</div>
+  {% endif %}
+</div>
+{% empty %}
+<div class="empty-card">This quotation has no line items yet.</div>
+{% endfor %}
+
+<!-- ======== 5. TOTALS ======== -->
+<div class="section-title">Totals</div>
+<div class="totals-card">
+  {% for t in totals %}
+  <div class="t-row"><span class="tl">{{ t.label }}</span><span class="tv">{{ t.value }}</span></div>
+  {% endfor %}
+  <div class="t-row grand"><span class="tl">Grand Total</span><span class="tv">{{ grand_total }}</span></div>
+</div>
+
+<!-- ======== 6. ITEM CODES THIS APPROVAL WOULD LOCK IN ======== -->
+{% if code_rows %}
+<div class="section-title">
+  Item Codes This Approval Would Lock In
+  <span class="hint">Written into {{ quotation.customer.name }}'s item-code master on approval</span>
+</div>
+<div class="code-panel">
+  <table>
+    <thead>
+      <tr><th>Item Code</th><th>Specification</th><th>State</th><th>Rate to be locked</th></tr>
+    </thead>
+    <tbody>
+      {% for row in code_rows %}
+      <tr>
+        <td><span class="ic-code" style="font-size:11.5px;">{{ row.code }}</span></td>
+        <td>{{ row.spec }}</td>
+        <td>
+          {% if row.kind == 'conflict' %}<span class="code-badge conflict" style="margin-left:0;">Conflict</span>
+          {% elif row.is_new %}<span class="code-badge new" style="margin-left:0;">New band</span>
+          {% else %}<span class="code-badge revised" style="margin-left:0;">Rate revised</span>{% endif %}
+          {% if row.conflict %}<div class="cp-conflict">{{ row.conflict }}</div>{% endif %}
+        </td>
+        <td>
+          {% if row.kind == 'conflict' %}
+            <span class="cp-rate" style="color:var(--red);">Cannot be locked in</span>
+          {% elif row.is_new %}
+            <span class="cp-rate">₹{{ row.new_rate|floatformat:2 }}</span>
+          {% else %}
+            <span class="cp-old">₹{{ row.old_rate|floatformat:2 }}</span>
+            <span class="cp-rate"> → ₹{{ row.new_rate|floatformat:2 }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="cp-foot">
+    Approving {{ quotation.number }} writes these rates into {{ quotation.customer.name }}'s item-code
+    master. They auto-fill on every future quotation until someone revises them.
+  </div>
+</div>
+{% endif %}
+
+<!-- ======== 7. APPROVAL / PO TRAIL ======== -->
+<div class="section-title">Approval &amp; PO Trail <span class="hint">Only the steps that have actually happened</span></div>
+<div class="trail-card">
+  {% if quotation.submitted_at %}
+  <div class="trail-item">
+    <span class="trail-dot amber"></span>
+    <div>
+      <div class="tt">Submitted for approval</div>
+      <div class="td">{{ quotation.submitted_at|date:"d M Y, g:i A" }} · {{ quotation.salesperson.short_name }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if quotation.approved_at %}
+  <div class="trail-item">
+    <span class="trail-dot green"></span>
+    <div>
+      <div class="tt">Approved by {{ quotation.approved_by.short_name|default:"Sales Manager" }}</div>
+      <div class="td">{{ quotation.approved_at|date:"d M Y, g:i A" }}</div>
+    </div>
+  </div>
+  {% elif quotation.manager_comment %}
+  <div class="trail-item">
+    <span class="trail-dot red"></span>
+    <div>
+      <div class="tt">Sent back by {{ quotation.approved_by.short_name|default:"Sales Manager" }}</div>
+      <div class="td"><q>{{ quotation.manager_comment }}</q></div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if quotation.approved_at and quotation.manager_comment %}
+  <div class="trail-item">
+    <span class="trail-dot blue"></span>
+    <div>
+      <div class="tt">Manager comment</div>
+      <div class="td"><q>{{ quotation.manager_comment }}</q></div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if quotation.sent_to_customer_at %}
+  <div class="trail-item">
+    <span class="trail-dot green"></span>
+    <div>
+      <div class="tt">Quotation sent to customer</div>
+      <div class="td">
+        {{ quotation.sent_to_customer_at|date:"d M Y, g:i A" }}
+        {% if quotation.customer.email %} · {{ quotation.customer.email }}{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if quotation.po_number or quotation.po_file %}
+  <div class="trail-item">
+    <span class="trail-dot green"></span>
+    <div>
+      <div class="tt">Customer PO received{% if quotation.po_number %} — {{ quotation.po_number }}{% endif %}</div>
+      {% if quotation.po_date %}<div class="td">PO dated {{ quotation.po_date|date:"d M Y" }}</div>{% endif %}
+      {% if quotation.po_file %}
+      <a class="doc-chip" href="{{ quotation.po_file.url }}" target="_blank">
+        <div class="ic">PO</div>
+        <div><div class="name">{{ quotation.po_file.name|cut:"po/" }}</div><div class="meta">Purchase Order</div></div>
+      </a>
+      {% endif %}
+      {% if quotation.drawing_file %}
+      <a class="doc-chip dwg" href="{{ quotation.drawing_file.url }}" target="_blank">
+        <div class="ic">DWG</div>
+        <div><div class="name">{{ quotation.drawing_file.name|cut:"drawings/" }}</div><div class="meta">Customer drawing</div></div>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if quotation.po_rejected_at or quotation.po_rejection_reason %}
+  <div class="trail-item">
+    <span class="trail-dot red"></span>
+    <div>
+      <div class="tt">PO returned by {{ quotation.po_rejected_by.short_name|default:"Accounts" }}</div>
+      <div class="td">
+        {% if quotation.po_rejection_reason %}<q>{{ quotation.po_rejection_reason }}</q>{% endif %}
+        {% if quotation.po_rejected_at %}<br>{{ quotation.po_rejected_at|date:"d M Y, g:i A" }}{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not quotation.submitted_at and not quotation.approved_at and not quotation.manager_comment and not quotation.sent_to_customer_at and not quotation.po_number and not quotation.po_file and not quotation.po_rejected_at %}
+  <div class="trail-item">
+    <span class="trail-dot"></span>
+    <div><div class="td">Nothing has happened to {{ quotation.number }} yet — it is still a draft.</div></div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ======== 8. ACTIVITY LOG ======== -->
+<div class="section-title">Activity Log <span class="hint">Audit trail for {{ quotation.number }}, newest first</span></div>
+<div class="log-card">
+  {% for entry in activity %}
+  <div class="log-item">
+    <span class="log-tag {{ entry.tag_class }}">{{ entry.tag }}</span>
+    <div>
+      <div>{{ entry.action }}</div>
+      {% if entry.detail %}<div class="ld">{{ entry.detail }}</div>{% endif %}
+      <div class="lt">{{ entry.created_at|date:"d M, g:i A" }} · {{ entry.actor }}</div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="log-empty">No activity has been logged against {{ quotation.number }} yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // The three action forms are mutually exclusive panels. Everything they post
+  // goes to the existing views in sales/urls.py — this page owns no state.
+  function toggleForm(id) {
+    ['rejectForm', 'reviseForm', 'poForm'].forEach(function (other) {
+      if (other === id) return;
+      var el = document.getElementById(other);
+      if (el) el.classList.remove('open');
+    });
+    var target = document.getElementById(id);
+    if (target) target.classList.toggle('open');
+  }
+</script>
+{% endblock %}

@@ -43,6 +43,12 @@
   .code-badge.new     { background: var(--amber-bg); color: var(--amber); }
   .code-badge.revised { background: var(--amber-bg); color: var(--amber); }
   .code-badge.ok      { background: var(--green-bg); color: var(--green); }
+  /* A band that cannot be written at all — it straddles an approved one. */
+  .code-badge.conflict { background: var(--red-bg); color: var(--red); }
+  .cp-conflict {
+    display: block; margin-top: 4px; font-size: 10.5px; color: var(--red);
+    font-family: 'IBM Plex Mono';
+  }
   .ic-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; color: var(--steel); }
 
   /* Short note that sits directly above the Approve button */
@@ -51,6 +57,10 @@
     background: var(--amber-bg); color: var(--amber);
     border-left: 3px solid var(--amber); border-radius: 0 3px 3px 0;
     padding: 7px 9px; margin-bottom: 8px;
+  }
+  /* Same note, for a quote whose slab cannot be written to the rate card. */
+  .approve-note.conflict {
+    background: var(--red-bg); color: var(--red); border-left-color: var(--red);
   }
 
   /* Panel inside the detail row listing exactly what gets locked in */
@@ -154,8 +164,11 @@
   .btn-revise:hover { background: var(--gray-bg); border-color: var(--navy-2); color: var(--navy-2); }
   .btn-view-details {
     font-size: 10.5px; color: var(--ink-soft); background: none; border: none;
-    text-decoration: underline; cursor: pointer; padding: 0; margin-top: 6px; display: block;
+    text-decoration: underline; cursor: pointer; padding: 0; display: block;
   }
+  /* Fast triage stays inline; the full read-only screen is one click away. */
+  .detail-links { display: flex; gap: 12px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .btn-full-detail { font-size: 10.5px; color: var(--blue); text-decoration: underline; }
 
   /* Expandable detail */
   .row-detail {
@@ -243,6 +256,9 @@
   <a href="{% url 'sales:manager_approvals' %}" class="nav-item active">
     <span class="icon">✅</span> Approval Queue
   </a>
+  <a href="{% url 'masters:customers' %}" class="nav-item">
+    <span class="icon">🏢</span> Customers
+  </a>
 </div>
 {% endblock %}
 
@@ -294,7 +310,10 @@
   {% for q in quotations %}
     <tr id="row-{{ q.pk }}">
       <td>
-        <div class="qno">{{ q.number }}<div class="ver">v{{ q.version }}{% if q.supersedes %} (resubmitted){% endif %}</div></div>
+        <div class="qno">
+          <a href="{% url 'sales:quotation_detail' q.pk %}">{{ q.number }}</a>
+          <div class="ver">v{{ q.version }}{% if q.supersedes %} (resubmitted){% endif %}</div>
+        </div>
       </td>
       <td>
         <div class="cust">{{ q.customer.name }}<div class="sub">{{ q.get_order_type_display }} Customer</div></div>
@@ -315,7 +334,15 @@
         <span class="days-label">pending</span>
       </td>
       <td>
-        {% if q.code_rows %}
+        {% if q.conflict_codes %}
+        <div class="approve-note conflict">
+          ✕ <b>{{ q.conflict_codes }} slab{{ q.conflict_codes|pluralize }} overlap{{ q.conflict_codes|pluralize:"s," }}
+          an approved rate band</b> — this quotation cannot be approved as it stands.
+          Send it back so the slab is corrected; nothing will be written to
+          {{ q.customer.name }}'s master.
+        </div>
+        {% endif %}
+        {% if q.new_codes or q.revised_codes %}
         <div class="approve-note">
           ⚠ Approving this quotation also
           {% if q.new_codes %}approves <b>{{ q.new_codes }} new item code{{ q.new_codes|pluralize }}</b>{% endif %}
@@ -334,7 +361,10 @@
           <button type="button" class="btn-reject" onclick="toggleReject('{{ q.pk }}')">✕ Reject</button>
           <button type="button" class="btn-revise" onclick="toggleRevise('{{ q.pk }}')">↺ Request Revision</button>
         </div>
-        <button type="button" class="btn-view-details" onclick="toggleDetail('{{ q.pk }}')">View line items ▾</button>
+        <div class="detail-links">
+          <button type="button" class="btn-view-details" onclick="toggleDetail('{{ q.pk }}')">View line items ▾</button>
+          <a class="btn-full-detail" href="{% url 'sales:quotation_detail' q.pk %}">Full detail →</a>
+        </div>
 
         <form method="post" action="{% url 'sales:quotation_reject' q.pk %}" class="reject-form" id="reject-{{ q.pk }}">
           {% csrf_token %}
@@ -425,11 +455,15 @@
                   <td><span class="ic-code">{{ row.code }}</span></td>
                   <td>{{ row.spec }}</td>
                   <td>
-                    {% if row.is_new %}<span class="code-badge new">New code</span>
-                    {% else %}<span class="code-badge revised">Rate revised</span>{% endif %}
+                    {% if row.kind == 'conflict' %}<span class="code-badge conflict">Conflict</span>
+                    {% elif row.kind == 'revision' %}<span class="code-badge revised">Revision of an existing band</span>
+                    {% else %}<span class="code-badge new">New band</span>{% endif %}
+                    {% if row.conflict %}<span class="cp-conflict">{{ row.conflict }}</span>{% endif %}
                   </td>
                   <td>
-                    {% if row.is_new %}
+                    {% if row.kind == 'conflict' %}
+                      <span class="cp-rate" style="color:var(--red);">Cannot be locked in</span>
+                    {% elif row.is_new %}
                       <span class="cp-rate">₹{{ row.new_rate|floatformat:2 }}</span>
                     {% else %}
                       <span class="cp-old">₹{{ row.old_rate|floatformat:2 }}</span>

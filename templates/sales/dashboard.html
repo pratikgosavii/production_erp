@@ -171,6 +171,9 @@
   <a href="{% url 'sales:quotation_create' %}" class="nav-item">
     <span class="icon">✏️</span> New Quotation
   </a>
+  <a href="{% url 'masters:customers' %}" class="nav-item">
+    <span class="icon">🏢</span> Customers
+  </a>
 </div>
 {% endblock %}
 
@@ -284,11 +287,9 @@
       </td>
 
       <td class="action-cell">
+        <div class="action-stack">
         {% if q.action_kind == 'draft' %}
           <a href="{% url 'sales:quotation_edit' q.pk %}" class="action-btn">Continue Editing</a>
-
-        {% elif q.action_kind == 'pending' %}
-          <a href="{% url 'sales:quotation_edit' q.pk %}" class="action-btn">View</a>
 
         {% elif q.action_kind == 'rejected' %}
           <form method="post" action="{% url 'sales:quotation_revise' q.pk %}">
@@ -333,13 +334,16 @@
             {% endif %}
           </div>
 
-        {% else %}
-          {% if q.po_file %}
-            <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
-          {% else %}
-            <span class="action-note">Booked by Accounts</span>
-          {% endif %}
+        {% elif q.po_file %}
+          <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
+
+        {% elif q.action_kind == 'converted' %}
+          <span class="action-note">Booked by Accounts</span>
         {% endif %}
+
+        {# Every row reaches the read-only full detail, whatever its status. #}
+        <a href="{% url 'sales:quotation_detail' q.pk %}" class="action-btn">View</a>
+        </div>
       </td>
     </tr>
   {% empty %}

@@ -511,14 +511,14 @@
   <div>
     <!-- Forward to production -->
     <div class="card side-block">
-      <div class="st">Forward to Production</div>
+      <div class="st">Sent to Production Manager</div>
       <div class="fwd-counts">
-        <div class="c ok"><div class="n">{{ ready_rows|length }}</div><div class="l">Items ready</div></div>
-        <div class="c blocked"><div class="n">{{ blocked_rows|length }}</div><div class="l">Still blocked</div></div>
+        <div class="c ok"><div class="n">{{ ready_rows|length }}</div><div class="l">Items sent</div></div>
+        <div class="c blocked"><div class="n">{{ blocked_rows|length }}</div><div class="l">Still with you</div></div>
       </div>
       <div class="fwd-list">
         {% for r in ready_rows %}
-        <div class="f ok"><span class="fc">{{ r.code }}</span><span class="fr">In the production queue</span></div>
+        <div class="f ok"><span class="fc">{{ r.code }}</span><span class="fr">In the Production Manager's queue</span></div>
         {% endfor %}
         {% for r in blocked_rows %}
         <div class="f"><span class="fc">{{ r.code }}</span><span class="fr">{{ r.reason|default:"Waiting" }}</span></div>
@@ -528,9 +528,10 @@
         {% endif %}
       </div>
       <div class="fwd-note">
-        Readiness is <b>derived</b>, not sent. An item appears in the Production Manager's Ready Queue by itself
-        the moment it has a current drawing, design approval and material <b>issued</b> by Stores — so there is
-        no "forward" button here and nothing to click. Items move one at a time; the rest of the order can wait.
+        Approving an item is what sends it. Each item goes to the Production Manager on its own — the rest of
+        the order can keep waiting. He then sets its priority (1–4) and bundles ready items into a Job Card for
+        the shop floor. An item only leaves you once its drawing is approved <b>and</b> Stores have issued the
+        material.
       </div>
     </div>
 
@@ -627,15 +628,15 @@
         <input type="hidden" name="item" value="{{ item.pk }}">
         <button type="submit" class="btn-approve-design" id="btnApprove"
                 {% if not can_approve %}disabled{% endif %}>
-          {% if item.design_approved %}Design Approved{% else %}Mark Design Approved{% endif %}
+          {% if item.design_approved %}Sent to Production Manager{% else %}Approve &amp; Send to Production Manager{% endif %}
         </button>
       </form>
       {% if item.design_approved %}
       <div class="gate-note done">
         Approved{% if item.design_approved_by %} by {{ item.design_approved_by.short_name }}{% endif %}
         {% if item.design_approved_at %}on {{ item.design_approved_at|date:"d M Y, h:i A" }}{% endif %}.
-        {% if item.material_issued %}Material issued — this item is in the production queue.
-        {% else %}Waiting for Stores to issue the reserved sheet.{% endif %}
+        {% if item.material_issued %}Material issued — this item is now in the Production Manager's queue.
+        {% else %}Sits with Stores until they issue the reserved sheet, then it reaches the Production Manager.{% endif %}
       </div>
       {% elif approve_block_reason %}
       <div class="gate-note">{{ approve_block_reason }}</div>

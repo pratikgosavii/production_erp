@@ -34,6 +34,24 @@ def admin_required(view):
     return wrapper
 
 
+def customer_editor_required(view):
+    """The customer master is also Sales' to maintain.
+
+    Rates and item codes stay Admin-only, but a salesperson correcting an
+    address or adding a customer should not need one — they already do exactly
+    that from the Bill-To block on a quotation.
+    """
+    @wraps(view)
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        user = request.user
+        if (user.is_staff or user.is_superuser
+                or user.is_salesman or user.is_sales_manager):
+            return view(request, *args, **kwargs)
+        raise PermissionDenied('Only Sales or Admin may maintain customers.')
+    return wrapper
+
+
 # ---------------------------------------------------------------- item codes
 def _item_code_queryset():
     return ItemCode.objects.select_related(
@@ -172,7 +190,7 @@ def item_code_toggle(request, pk):
 
 
 # ----------------------------------------------------------------- customers
-@admin_required
+@customer_editor_required
 def customers(request):
     year = timezone.localdate().year
     people = Customer.objects.annotate(
@@ -220,7 +238,7 @@ def customers(request):
     })
 
 
-@admin_required
+@customer_editor_required
 @require_POST
 def customer_save(request):
     """+ Add Customer / Edit, with the duplicate-name guard in the form."""

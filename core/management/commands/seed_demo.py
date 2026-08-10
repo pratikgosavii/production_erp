@@ -49,8 +49,8 @@ from core.constants import (
 from core.models import AuditLog, Notification, Sequence
 from design.models import DesignQuery, DrawingRevision, MaterialReservation, QueryMessage
 from masters.models import (
-    Customer, Finish, Grade, ItemCode, Material, ProcessStation, Rack,
-    ReorderLevel, SheetSize, Supplier, Thickness,
+    Customer, Finish, Grade, ItemCode, ItemCodeRate, Material, ProcessStation,
+    Rack, ReorderLevel, SheetSize, Supplier, Thickness,
 )
 from production.models import JobCard, JobCardItem, JobCardStation
 from sales.models import PriceTier, Quotation, QuotationItem
@@ -173,6 +173,25 @@ ITEM_CODES = [
     ('BS-COV-300', 'BS', 'Cover Plate 300x200', 'Mild Steel', '3.0mm', '300 x 200',
      'Black Epoxy Filled', '1180.00', 'QTN-0396', date(2026, 6, 1), True),
 ]
+
+# --------------------------------------------------------------------------
+# RATE CARDS. An item code is priced by quantity BAND, not by one flat rate.
+# Each band is approved once and then reused forever, so these are the figures
+# a salesperson gets back automatically when they quote inside the band.
+#
+# Only the hero codes carry a real ladder; every other approved code above gets
+# a single 1..(no limit) band at its rate, which is exactly what the data
+# migration does to a legacy database.
+#
+# Note BS-PNL-200 deliberately STOPS at 200: quoting 250 of it falls in no band
+# at all, which is what puts a "new band" in the Sales Manager's queue.
+# --------------------------------------------------------------------------
+RATE_BANDS = {
+    'VF-NP-150':  [(1, 100, '420.00'), (101, 300, '380.00'), (301, 1000, '340.00')],
+    'BS-PNL-200': [(1, 50, '1500.00'), (51, 200, '1382.00')],
+    'TP-NP-120':  [(1, 100, '560.00'), (101, 500, '512.00')],
+    'VF-DP-080':  [(1, 100, '175.00'), (101, 200, '111.00'), (201, 500, '95.00')],
+}
 
 # --------------------------------------------------------------------------
 # THE SHOWCASE ORDER — one Sales Order, ten item codes, three job cards.
@@ -468,7 +487,7 @@ class Command(BaseCommand):
         for model in (
             JobCardStation, JobCardItem, JobCard, DispatchRecord, MaterialReservation,
             QueryMessage, DesignQuery, DrawingRevision, SOItem, SalesOrder,
-            PriceTier, QuotationItem, Quotation, ItemCode, ReorderLevel,
+            PriceTier, QuotationItem, Quotation, ItemCodeRate, ItemCode, ReorderLevel,
             Sheet, AuditLog, Notification, Sequence,
         ):
             model.objects.all().delete()
@@ -587,6 +606,12 @@ class Command(BaseCommand):
                 'suppliers': suppliers, 'customers': customers, 'stations': stations}
 
     def seed_item_codes(self, m, users):
+        """Every approved code gets a rate CARD, not a single rate.
+
+        The hero codes carry a real ladder out of RATE_BANDS; the rest get one
+        open-ended band at their historic rate. Pending codes get no band —
+        there is nothing approved to put on the card yet.
+        """
         codes = {}
         for (code, cust, desc, mat, thk, size, fin, rate, via, on, active) in ITEM_CODES:
             approved = rate is not None
@@ -601,7 +626,48 @@ class Command(BaseCommand):
                 approval_source=ApprovalSource.QUOTATION,
                 approved_by=users['vikram'] if approved else None,
             )
+            if not approved:
+                continue
+
+            bands = RATE_BANDS.get(code) or [(1, None, rate)]
+            ItemCodeRate.objects.bulk_create([
+                ItemCodeRate(
+                    item_code=codes[code], qty_from=qty_from, qty_to=qty_to,
+                    rate_per_unit=Decimal(band_rate),
+                    approved_rate=Decimal(band_rate),
+                    approval_state=ItemCodeApproval.APPROVED,
+                    approved_via=via, approved_on=on,
+                    approved_by=users['vikram'],
+                    approval_source=ApprovalSource.QUOTATION,
+                )
+                for qty_from, qty_to, band_rate in bands
+            ])
+            # The legacy flat field is only a mirror of the lowest band now.
+            codes[code].refresh_approved_rate()
         return codes
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def band_rate(code_obj, qty):
+        """The approved band rate for `qty` — what the form would auto-fill."""
+        band = code_obj.approved_band_for(qty)
+        if band is not None:
+            return band.approved_rate
+        return code_obj.approved_rate
+
+    @staticmethod
+    def fit_qty(code_obj, qty):
+        """Pull a generated quantity back inside the code's rate card.
+
+        Only the seeder needs this: a demo order quoted outside every band
+        would look like it was booked without an approved rate.
+        """
+        if code_obj.approved_band_for(qty) is not None:
+            return qty
+        top = code_obj.approved_bands.last()
+        if top is None:
+            return qty
+        return min(qty, top.qty_to) if top.qty_to else max(qty, top.qty_from)
 
     def seed_sequences(self):
         """Pre-seed the counters so minted numbers land clear of the heroes."""
@@ -768,7 +834,9 @@ class Command(BaseCommand):
                approved_at=at(date(2026, 7, 26)), expected_delivery=date(2026, 8, 20))
 
         # --- the Sales Manager's approval queue -----------------------------
-        # QTN-0417: rejected on margin, revised and resubmitted as v2.
+        # QTN-0417: rejected on margin, revised and resubmitted as v2. The v2
+        # rate is the one already approved on the 101-300 band, so that line
+        # needs no sign-off at all — an approved band is reused, not re-asked.
         v1 = pinned('QTN-0417', 'VF', 'arjun', QuotationStatus.DRAFT, date(2026, 8, 2),
                     [('VF-NP-150', 200, '340.00')])
         v1.submit()
@@ -806,6 +874,18 @@ class Command(BaseCommand):
             Decimal('468.00'), 'Aluminium coil price up 8% — revised on QTN-0419')
         quotes['QTN-0419'] = b2
 
+        # QTN-0420: an APPROVED code quoted at a quantity its rate card does
+        # not reach. BS-PNL-200 is banded 1-50 and 51-200; 250 falls in NO
+        # band, so a brand-new 101-300 band is proposed and the Sales Manager
+        # has to price it. The 1-50 and 51-200 bands are not touched.
+        q20 = pinned('QTN-0420', 'BS', 'imran', QuotationStatus.PENDING_APPROVAL,
+                     date(2026, 8, 5), [('BS-PNL-200', 250, '1290.00')],
+                     tooling_charges=Decimal('0.00'),
+                     packing_forwarding=Decimal('6500.00'))
+        q20.submitted_at = now - timedelta(days=4)
+        q20.expected_delivery = day(27)
+        q20.save()
+
         # QTN-0421 / QTN-0422: brand new codes, first approval.
         q21 = pinned('QTN-0421', 'BS', 'imran', QuotationStatus.PENDING_APPROVAL,
                      date(2026, 8, 6), [('BS-TAG-075', 150, '210.00')],
@@ -838,7 +918,7 @@ class Command(BaseCommand):
             if qtn:
                 quotation = quotes[qtn]
             else:
-                qty = 110 + (idx * 13) % 180
+                qty = self.fit_qty(code_obj, 110 + (idx * 13) % 180)
                 quotation = Quotation.objects.create(
                     customer=m['customers'][cust], salesperson=users[sales],
                     status=QuotationStatus.APPROVED,
@@ -846,7 +926,7 @@ class Command(BaseCommand):
                     approved_at=at(booked_on - timedelta(days=4)),
                     expected_delivery=day(due_in),
                     **self.quote_defaults(booked_on - timedelta(days=8)))
-                self.add_line(quotation, code_obj, qty, code_obj.approved_rate)
+                self.add_line(quotation, code_obj, qty, self.band_rate(code_obj, qty))
 
             quotation.po_number = f'PO/2026/{700 + idx:04d}'
             quotation.po_date = booked_on - timedelta(days=1)
@@ -1058,7 +1138,7 @@ class Command(BaseCommand):
             **self.quote_defaults(booked_on - timedelta(days=10)))
         for pos, (code, qty, _state) in enumerate(SHOWCASE_ITEMS, start=1):
             obj = codes[code]
-            self.add_line(quotation, obj, qty, obj.approved_rate, pos)
+            self.add_line(quotation, obj, qty, self.band_rate(obj, qty), pos)
 
         quotation.po_number = 'PO/2026/0912'
         quotation.po_date = booked_on - timedelta(days=1)
@@ -1192,15 +1272,16 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def seed_live_quotations(self, users, m, codes):
         """The 25 minted quotations that are still in the sales pipeline."""
-        for i, (cust, code, sales, status, qdate_ago, qty) in enumerate(LIVE_QUOTES):
+        for i, (cust, code, sales, status, qdate_ago, raw_qty) in enumerate(LIVE_QUOTES):
             qdate = ago(qdate_ago)
             code_obj = codes[code]
+            qty = self.fit_qty(code_obj, raw_qty)
             q = Quotation.objects.create(
                 customer=m['customers'][cust], salesperson=users[sales],
                 status=status, enquiry_ref=f'ENQ/2026/{310 + i:04d}',
                 expected_delivery=day(20 + i % 12),
                 **self.quote_defaults(qdate))
-            self.add_line(q, code_obj, qty, code_obj.approved_rate)
+            self.add_line(q, code_obj, qty, self.band_rate(code_obj, qty))
 
             if status != QuotationStatus.DRAFT:
                 q.submitted_at = at(qdate + timedelta(days=1), 12)

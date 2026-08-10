@@ -8,6 +8,8 @@ urlpatterns = [
     # Salesperson
     path('dashboard/', views.dashboard, name='dashboard'),
     path('quotation/new/', views.quotation_create, name='quotation_create'),
+    # Read-only full detail — Sales, Sales Manager and Accounts all land here.
+    path('quotation/<int:pk>/', views.quotation_detail, name='quotation_detail'),
     path('quotation/<int:pk>/edit/', views.quotation_edit, name='quotation_edit'),
     path('quotation/<int:pk>/send/', views.quotation_send, name='quotation_send'),
     path('quotation/<int:pk>/revise/', views.quotation_revise, name='quotation_revise'),

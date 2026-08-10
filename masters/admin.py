@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from .models import (
-    Customer, Finish, Grade, ItemCode, Material, ProcessStation, Rack,
-    ReorderLevel, SheetSize, Supplier, Thickness,
+    Customer, Finish, Grade, ItemCode, ItemCodeRate, Material, ProcessStation,
+    Rack, ReorderLevel, SheetSize, Supplier, Thickness,
 )
 
 
@@ -11,6 +11,16 @@ class CustomerAdmin(admin.ModelAdmin):
     list_display = ('name', 'contact_person', 'phone', 'email', 'gstin', 'credit_limit', 'is_active')
     list_filter = ('is_active',)
     search_fields = ('name', 'gstin', 'contact_person', 'email')
+
+
+class ItemCodeRateInline(admin.TabularInline):
+    """The rate card, band by band — this is the source of truth for pricing."""
+
+    model = ItemCodeRate
+    extra = 0
+    fields = ('qty_from', 'qty_to', 'rate_per_unit', 'approved_rate',
+              'proposed_rate', 'approval_state', 'approved_via', 'approved_on')
+    readonly_fields = ('approved_via', 'approved_on')
 
 
 @admin.register(ItemCode)
@@ -23,6 +33,19 @@ class ItemCodeAdmin(admin.ModelAdmin):
     search_fields = ('code', 'description', 'customer__name')
     autocomplete_fields = ('customer',)
     readonly_fields = ('approved_on', 'approved_by', 'approved_via')
+    inlines = [ItemCodeRateInline]
+
+
+@admin.register(ItemCodeRate)
+class ItemCodeRateAdmin(admin.ModelAdmin):
+    list_display = (
+        'item_code', 'qty_from', 'qty_to', 'approved_rate', 'proposed_rate',
+        'approval_state', 'approved_via', 'approved_on',
+    )
+    list_filter = ('approval_state', 'approval_source', 'item_code__customer')
+    search_fields = ('item_code__code', 'item_code__customer__name', 'approved_via')
+    autocomplete_fields = ('item_code',)
+    readonly_fields = ('approved_on', 'approved_by')
 
 
 @admin.register(ProcessStation)
