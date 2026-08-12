@@ -1,28 +1,47 @@
-"""Production ready queue and the shop-floor job card (§3.8, §4, §10.1·3).
+"""Production planning screens and the shop-floor job card (§3.8, §4, §10.1·3).
 
 The gate this module defends is the one from §4: a job reaches the floor only
 when the drawing is approved AND the material has been *issued* by Stores.
 A reservation is not enough, so readiness is read off SOItem.is_ready, which
 asks for a live reservation carrying an issued_at stamp.
 
-The queue is ITEM level, not order level. Every item code of every live order
-is listed — ready ones selectable, blocked ones greyed with their own reason —
-because a job card covers a subset of item codes and may even span orders.
-Selection is a courtesy; `create_job_card` re-checks every gate server-side.
+The Production Manager works top-down across three screens:
+
+  A. `dashboard`      — every live Sales Order, newest first, with its PO, its
+                        value and how many of its item codes are ready. This is
+                        the landing page: an order is the unit he thinks in.
+  B. `order_detail`   — ONE order's item codes. Ready ones selectable, blocked
+                        ones greyed with their own reason, carded ones linked
+                        to their JC. Selection is a courtesy; `create_job_card`
+                        re-checks every gate server-side.
+  C. `priority_board` — the same orders as drag-and-drop cards in four priority
+                        columns (§4 fixed priority at numeric 1-4). Dropping a
+                        card writes `priority`; reordering inside a column
+                        writes `queue_rank`.
+
+The earlier flat item queue mixed every item code of every order into one list,
+which hid the shape of an order and buried the PO. It has moved wholesale into
+Screen B, scoped to a single order.
 
 The job card enforces its own ordering server-side — Start Work, then confirm
 the station list, then mark stations complete. Disabled buttons are a courtesy;
 the checks below are the rule.
 """
+import json
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from accounts.models import SOItem
-from core.constants import OrderStatus, Priority, StationStatus
+from accounts.models import SalesOrder, SOItem
+from core.constants import OrderStatus, OrderType, Priority, StationStatus
 from core.decorators import role_required
 from core.services import log, notify
 
@@ -38,6 +57,11 @@ DEAD_ORDER_STATUSES = [OrderStatus.CANCELLED, OrderStatus.ON_HOLD]
 
 RECENT_JOB_CARDS = 10
 
+# Screen A / C list the same population: everything except the terminal state.
+# ON_HOLD stays visible (greyed, with its reason) because the planner has to
+# know an order exists before he can chase the hold.
+BOARD_EXCLUDED_STATUSES = [OrderStatus.CANCELLED]
+
 
 def _due_bucket(days):
     if days is None:
@@ -49,28 +73,95 @@ def _due_bucket(days):
     return 'ok'
 
 
-def _queue_items():
-    """Every item code still waiting for a job card, ready or blocked.
+def _live_orders():
+    """Every Sales Order the Production Manager can still act on.
 
-    Blocked items are deliberately NOT filtered out — the planner needs to see
-    what is missing from an order as much as what is available.
+    Prefetches everything `is_ready` / `blocked_reason` reach for, so a 40-order
+    board does not turn into several hundred queries.
     """
     return (
-        SOItem.objects
-        .filter(job_card_items__isnull=True)
-        .exclude(order__status__in=DEAD_ORDER_STATUSES)
-        .select_related(
-            'order', 'order__customer', 'order__quotation',
-            'quotation_item', 'quotation_item__item_code',
-            'quotation_item__material', 'quotation_item__thickness',
-            'quotation_item__finish',
-        )
+        SalesOrder.objects
+        .exclude(status__in=BOARD_EXCLUDED_STATUSES)
+        .select_related('customer', 'quotation')
         .prefetch_related(
-            'reservations', 'queries', 'drawing_revisions',
-            'quotation_item__tiers', 'order__queries',
+            'queries',
+            'items__quotation_item__item_code',
+            'items__quotation_item__material',
+            'items__quotation_item__thickness',
+            'items__quotation_item__finish',
+            'items__reservations',
+            'items__queries',
+            'items__drawing_revisions',
+            'items__job_card_items__job_card',
         )
-        .order_by('order__priority', 'order__number', 'position')
     )
+
+
+def _po_chip(order):
+    """The PO as the planner asks for it: a filename that opens the file.
+
+    Falls back to the bare PO number when Accounts recorded one without
+    attaching a scan, and to nothing at all when neither exists.
+    """
+    quotation = order.quotation
+    if quotation.po_file:
+        name = quotation.po_file.name.replace('\\', '/').rsplit('/', 1)[-1]
+        return {'name': name, 'url': quotation.po_file.url}
+    if quotation.po_number:
+        return {'name': quotation.po_number, 'url': ''}
+    return {'name': '', 'url': ''}
+
+
+def _item_state(item):
+    """('carded' | 'ready' | 'blocked', job card or None, reason).
+
+    An item on a card is neither ready nor blocked — it has left the queue.
+    """
+    card = item.current_job_card
+    if card is not None:
+        return 'carded', card, ''
+    if item.is_ready:
+        return 'ready', None, ''
+    return 'blocked', None, (item.blocked_reason or 'Not ready')
+
+
+def _order_counts(order):
+    """How the item codes of one order split three ways."""
+    ready = carded = blocked = 0
+    for item in order.items.all():
+        state, _card, _reason = _item_state(item)
+        if state == 'carded':
+            carded += 1
+        elif state == 'ready':
+            ready += 1
+        else:
+            blocked += 1
+    total = ready + carded + blocked
+    return {
+        'total': total,
+        'ready': ready,
+        'carded': carded,
+        'blocked': blocked,
+        'ready_pct': round(ready / total * 100) if total else 0,
+        'carded_pct': round(carded / total * 100) if total else 0,
+        'blocked_pct': round(blocked / total * 100) if total else 0,
+    }
+
+
+def _order_card(order, today):
+    """The shared shape Screens A and C both draw an order from."""
+    days = (order.expected_delivery - today).days if order.expected_delivery else None
+    counts = _order_counts(order)
+    return {
+        'order': order,
+        'counts': counts,
+        'po': _po_chip(order),
+        'days': days,
+        'due_class': _due_bucket(days),
+        'on_hold': order.status == OrderStatus.ON_HOLD,
+        'is_repeat': order.order_type == OrderType.REPEAT,
+        'detail_url': reverse('production:order_detail', args=[order.number]),
+    }
 
 
 def _item_code_text(item):
@@ -104,94 +195,299 @@ def _job_card_state(card):
     return 'Assigned'
 
 
+# --------------------------------------------------- Screen A: sales orders
+# Filter chips. Each is a plain querystring link, so the whole screen stays
+# bookmarkable and works with JavaScript switched off.
+ORDER_FILTERS = [
+    ('all', 'All live orders'),
+    ('ready', 'Has ready items'),
+    ('blocked', 'Fully blocked'),
+    ('hold', 'On hold'),
+    ('repeat', 'Repeat orders'),
+]
+
+
+def _matches_filter(row, key):
+    if key == 'ready':
+        return row['counts']['ready'] > 0
+    if key == 'blocked':
+        return row['counts']['total'] > 0 and row['counts']['blocked'] == row['counts']['total']
+    if key == 'hold':
+        return row['on_hold']
+    if key == 'repeat':
+        return row['is_repeat']
+    return True
+
+
 @role_required('is_production_manager')
 def dashboard(request):
-    """Item-level ready queue. No KPI tiles — those were dropped by design."""
+    """Screen A — live Sales Orders, newest first. The planning landing page.
+
+    Newest first is the whole point: the flat item queue sorted by priority and
+    buried a just-booked order at the bottom of a 37-row list.
+    """
     today = timezone.localdate()
 
-    groups = {}
-    for item in _queue_items():
-        order = item.order
-        days = (order.expected_delivery - today).days if order.expected_delivery else None
-        ready = item.is_ready
+    active = request.GET.get('f', 'all')
+    if active not in dict(ORDER_FILTERS):
+        active = 'all'
+    query = (request.GET.get('q') or '').strip()
 
-        group = groups.get(order.pk)
-        if group is None:
-            group = groups[order.pk] = {
-                'order': order,
-                'days': days,
-                'due_class': _due_bucket(days),
-                'rows': [],
-                'ready_count': 0,
-            }
+    orders = _live_orders()
+    if query:
+        orders = orders.filter(
+            Q(number__icontains=query)
+            | Q(customer__name__icontains=query)
+            | Q(quotation__number__icontains=query)
+        )
+    # Newest first. booked_on is nullable, so `-number` is the tie-break that
+    # keeps an unbooked-date order from floating to an arbitrary place.
+    orders = orders.order_by('-booked_on', '-number')
 
-        group['rows'].append({
+    rows = [_order_card(order, today) for order in orders]
+
+    # The strip counts the whole live population, not the filtered slice —
+    # otherwise clicking a chip would silently rewrite the headline numbers.
+    summary = {
+        'orders': len(rows),
+        'with_ready': sum(1 for r in rows if r['counts']['ready']),
+        'items_ready': sum(r['counts']['ready'] for r in rows),
+        'items_blocked': sum(r['counts']['blocked'] for r in rows),
+    }
+
+    chips = []
+    for key, label in ORDER_FILTERS:
+        params = []
+        if key != 'all':
+            params.append(f'f={key}')
+        if query:
+            params.append(f'q={query}')
+        chips.append({
+            'key': key,
+            'label': label,
+            'count': sum(1 for r in rows if _matches_filter(r, key)),
+            'url': '?' + '&'.join(params) if params else '?',
+            'active': key == active,
+        })
+
+    rows = [r for r in rows if _matches_filter(r, active)]
+
+    return render(request, 'production/dashboard.html', {
+        'rows': rows,
+        'summary': summary,
+        'chips': chips,
+        'active_filter': active,
+        'q': query,
+        'nav': 'orders',
+    })
+
+
+# ---------------------------------------------------- Screen B: one order
+@role_required('is_production_manager')
+def order_detail(request, so_no):
+    """Screen B — the item codes of ONE order; the old flat queue, scoped.
+
+    Selection is deliberately confined to this order: bundling across orders is
+    what made the old screen unreadable, and `create_job_card` still accepts a
+    cross-order set if one is ever posted.
+    """
+    # Not _live_orders(): a cancelled order still has to open, or the job cards
+    # already raised against it would become unreachable from here.
+    order = get_object_or_404(
+        SalesOrder.objects
+        .select_related('customer', 'quotation')
+        .prefetch_related(
+            'queries',
+            'items__quotation_item__item_code',
+            'items__quotation_item__material',
+            'items__quotation_item__thickness',
+            'items__quotation_item__finish',
+            'items__reservations',
+            'items__queries',
+            'items__drawing_revisions',
+            'items__job_card_items__job_card',
+        ),
+        number__iexact=so_no,
+    )
+
+    today = timezone.localdate()
+    days = (order.expected_delivery - today).days if order.expected_delivery else None
+
+    rows = []
+    for item in order.items.all():
+        state, card, reason = _item_state(item)
+        rows.append({
             'item': item,
-            'order': order,
             'code': _item_code_text(item),
             'spec': _spec_text(item),
             'qty': item.quantity,
             'value': item.quotation_item.line_amount,
-            'is_ready': ready,
+            'state': state,
+            'is_ready': state == 'ready',
             # blocked_reason is the item's own words; never re-worded here.
-            'reason': '' if ready else (item.blocked_reason or 'Not ready'),
-            'days': days,
-            'due_class': _due_bucket(days),
+            'reason': reason,
+            'card': card,
         })
-        if ready:
-            group['ready_count'] += 1
-
-    groups = list(groups.values())
 
     cards = (
         JobCard.objects
+        .filter(items__so_item__order=order)
+        .distinct()
         .prefetch_related(
-            'items__so_item__quotation_item__item_code',
-            'items__so_item__order',
-            'stations',
+            'items__so_item__quotation_item__item_code', 'stations',
         )
-        .order_by('-created_at')[:RECENT_JOB_CARDS]
+        .order_by('-created_at')
     )
-    recent_cards = [{
+    order_cards = [{
         'card': card,
         'state': _job_card_state(card),
-        'orders': ', '.join(sorted(o.number for o in card.orders)) or '—',
         'codes': [_item_code_text(link.so_item) for link in card.items.all()],
     } for card in cards]
 
-    total_rows = sum(len(g['rows']) for g in groups)
-    return render(request, 'production/dashboard.html', {
-        'groups': groups,
-        'total_rows': total_rows,
-        'ready_total': sum(g['ready_count'] for g in groups),
-        'blocked_total': total_rows - sum(g['ready_count'] for g in groups),
-        'priorities': Priority.choices,
-        'recent_cards': recent_cards,
+    return render(request, 'production/order_detail.html', {
+        'order': order,
+        'rows': rows,
+        'counts': _order_counts(order),
+        'po': _po_chip(order),
+        'days': days,
+        'due_class': _due_bucket(days),
+        'on_hold': order.status == OrderStatus.ON_HOLD,
+        'order_cards': order_cards,
+        'nav': 'orders',
+        'nav_order': order.number,
     })
+
+
+# ------------------------------------------------- Screen C: priority board
+@role_required('is_production_manager')
+def priority_board(request):
+    """Screen C — one draggable card per live order, in four priority columns."""
+    today = timezone.localdate()
+
+    orders = _live_orders().order_by('queue_rank', '-booked_on', '-number')
+    rows = [_order_card(order, today) for order in orders]
+
+    columns = [
+        {'value': value, 'label': label, 'cards': [
+            r for r in rows if r['order'].priority == value
+        ]}
+        for value, label in Priority.choices
+    ]
+
+    return render(request, 'production/priority_board.html', {
+        'columns': columns,
+        'priorities': Priority.choices,
+        'total': len(rows),
+        'save_url': reverse('production:save_priority'),
+        'nav': 'priority',
+    })
+
+
+def _safe_next(request, fallback):
+    """Only ever redirect back to somewhere on this site."""
+    target = request.POST.get('next') or ''
+    if target and url_has_allowed_host_and_scheme(
+        target, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+    ):
+        return target
+    return fallback
+
+
+def _apply_priority(user, order, priority, queue_rank=None):
+    """Write one card's arrangement, logging only a genuine priority change."""
+    fields = []
+    was = order.priority
+    if priority is not None and priority != order.priority:
+        order.priority = priority
+        fields.append('priority')
+    if queue_rank is not None and queue_rank != order.queue_rank:
+        order.queue_rank = queue_rank
+        fields.append('queue_rank')
+    if not fields:
+        return False
+    order.save(update_fields=fields + ['updated_at'])
+    if 'priority' in fields:
+        log(user, 'SalesOrder', order.number, 'Priority changed',
+            from_value=was, to_value=order.priority)
+    return True
 
 
 @role_required('is_production_manager')
 @require_POST
-def set_priority(request):
-    """Priority lives on the SO — it is set before any job card exists (§4).
+def save_priority(request):
+    """Persist the board arrangement — priority AND position within a column.
 
-    The queue renders one control per order group and posts `order`; the older
-    per-item callers post `item`. Both still land on the same sales order.
+    Two callers, one place the write happens:
+      * the board's fetch posts JSON [{order_id, priority, queue_rank}, ...]
+        and gets JSON back, so the page can toast without reloading;
+      * the no-JavaScript <select> (and the older per-order/per-item forms)
+        post a normal form and get a redirect.
+
+    Everything lands in ONE transaction: a half-applied board is worse than a
+    rejected one, because the screen would then disagree with the database.
     """
+    is_json = 'application/json' in (request.content_type or '')
+
+    if is_json:
+        try:
+            payload = json.loads(request.body.decode('utf-8') or '[]')
+        except (ValueError, UnicodeDecodeError):
+            return JsonResponse({'ok': False, 'error': 'Malformed request body.'}, status=400)
+        if isinstance(payload, dict):
+            payload = payload.get('orders') or []
+        if not isinstance(payload, list):
+            return JsonResponse({'ok': False, 'error': 'Expected a list of cards.'}, status=400)
+
+        wanted = {}
+        for entry in payload:
+            if not isinstance(entry, dict):
+                return JsonResponse({'ok': False, 'error': 'Expected a list of cards.'}, status=400)
+            try:
+                pk = int(entry.get('order_id'))
+                priority = int(entry.get('priority'))
+                rank = int(entry.get('queue_rank', 0))
+            except (TypeError, ValueError):
+                return JsonResponse({'ok': False, 'error': 'Unreadable card in the arrangement.'}, status=400)
+            if priority not in Priority.values:
+                return JsonResponse({'ok': False, 'error': f'Priority {priority} is not 1-4.'}, status=400)
+            wanted[pk] = (priority, rank)
+
+        found = {
+            order.pk: order for order in
+            SalesOrder.objects.filter(pk__in=wanted).exclude(status__in=BOARD_EXCLUDED_STATUSES)
+        }
+        missing = set(wanted) - set(found)
+        if missing:
+            return JsonResponse(
+                {'ok': False, 'error': 'Some orders on the board no longer exist.'}, status=400,
+            )
+
+        changed = 0
+        with transaction.atomic():
+            for pk, (priority, rank) in wanted.items():
+                if _apply_priority(request.user, found[pk], priority, rank):
+                    changed += 1
+        return JsonResponse({'ok': True, 'saved': len(wanted), 'changed': changed})
+
+    # ---- plain form post (no-JavaScript fallback, and the older callers) ----
+    fallback = reverse('production:dashboard')
     if request.POST.get('order'):
-        from accounts.models import SalesOrder
         order = get_object_or_404(SalesOrder, pk=request.POST.get('order'))
-    else:
+    elif request.POST.get('item'):
         order = get_object_or_404(SOItem, pk=request.POST.get('item')).order
+    else:
+        messages.error(request, 'No sales order was named, so nothing was changed.')
+        return redirect(_safe_next(request, fallback))
 
     form = PriorityForm(request.POST)
-    if form.is_valid():
-        was = order.priority
-        order.priority = form.cleaned_data['priority']
-        order.save(update_fields=['priority', 'updated_at'])
-        log(request.user, 'SalesOrder', order.number, 'Priority changed',
-            from_value=was, to_value=order.priority)
-    return redirect('production:dashboard')
+    if not form.is_valid():
+        messages.error(request, 'That priority is not one of 1-4. Nothing was changed.')
+        return redirect(_safe_next(request, fallback))
+
+    with transaction.atomic():
+        _apply_priority(request.user, order, form.cleaned_data['priority'])
+    messages.success(request, f'{order.number} set to priority {order.priority}.')
+    return redirect(_safe_next(request, fallback))
 
 
 @role_required('is_production_manager')
@@ -201,12 +497,16 @@ def create_job_card(request):
 
     Everything the template disabled is re-checked here: a hand-rolled POST
     must not be able to put a blocked item, or an item already on a card, onto
-    the floor. Any rejection changes nothing at all.
+    the floor. Any rejection changes nothing at all, and lands back on the
+    order the selection was made from.
     """
     raw_ids = request.POST.getlist('items')
+    so_no = (request.POST.get('so_no') or '').strip()
 
     def refuse(text):
         messages.error(request, text)
+        if so_no:
+            return redirect('production:order_detail', so_no=so_no)
         return redirect('production:dashboard')
 
     try:
@@ -283,9 +583,14 @@ def create_job_card(request):
     messages.success(
         request,
         f'{card.number} created covering {len(found)} item code'
-        f'{"" if len(found) == 1 else "s"} ({codes}).',
+        f'{"" if len(found) == 1 else "s"} ({codes}). It is now with the floor.',
     )
-    return redirect('production:job_card', jc_no=card.number)
+    # Back to the order, NOT to the job card: that screen belongs to the Floor
+    # Manager, so sending the Production Manager there minted the card and then
+    # threw 403 on the redirect.
+    if so_no:
+        return redirect('production:order_detail', so_no=so_no)
+    return redirect('production:dashboard')
 
 
 @role_required('is_production_manager')
@@ -304,12 +609,13 @@ def send_to_production(request):
 
     existing = item.current_job_card
     if existing:
-        return redirect('production:job_card', jc_no=existing.number)
+        messages.info(request, f'That item is already on {existing.number}.')
+        return redirect('production:order_detail', so_no=order.number)
 
     # Re-check the gate: the button was rendered from a queryset, but the POST
     # could have been hand-rolled, or the state could have moved since.
     if not (item.design_approved and item.material_issued and order.is_ready_to_produce):
-        return redirect('production:dashboard')
+        return redirect('production:order_detail', so_no=order.number)
 
     card = JobCard.create_for([item], request.user, priority=order.priority)
     order.refresh_status()
@@ -318,7 +624,10 @@ def send_to_production(request):
         detail=f'Item #{item.position}', to_value=order.status)
     notify(order.assigned_designer, f'{card.number} released for {order.number}',
            object_ref=order.number)
-    return redirect('production:job_card', jc_no=card.number)
+    messages.success(request, f'{card.number} created. It is now with the floor.')
+    # The job card screen is the Floor Manager's — a Production Manager sent
+    # there would meet a 403 straight after a successful release.
+    return redirect('production:order_detail', so_no=order.number)
 
 
 # ------------------------------------------------------------------ floor
@@ -334,9 +643,14 @@ def _get_card(jc_no):
     )
 
 
-@role_required('is_floor_manager')
+@role_required('is_floor_manager', 'is_production_manager')
 def job_card(request, jc_no):
-    """One real job card. The station list is whatever build_stations() laid out."""
+    """One real job card. The station list is whatever build_stations() laid out.
+
+    The Production Manager can READ this — he released the card and needs to
+    see how it is going — but only the Floor Manager may start work, confirm
+    stations or mark one complete. Those POSTs stay floor-only.
+    """
     card = _get_card(jc_no)
     card_items = card.so_items
     # The floor sheet still leads on one item; a multi-item card lists the
@@ -394,6 +708,8 @@ def job_card(request, jc_no):
         'roster': roster,
         'pill_class': pill_class,
         'pill_text': pill_text,
+        # Only the floor runs the card; the Production Manager is here to watch.
+        'can_run': bool(request.user.is_floor_manager or request.user.is_superuser),
     })
 
 

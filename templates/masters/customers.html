@@ -179,9 +179,6 @@
   <a href="{% url 'sales:dashboard' %}" class="nav-item">
     <span class="icon">📋</span> My Quotations
   </a>
-  <a href="{% url 'sales:quotation_create' %}" class="nav-item">
-    <span class="icon">✏️</span> New Quotation
-  </a>
   <a href="{% url 'masters:customers' %}" class="nav-item active">
     <span class="icon">🏢</span> Customers
   </a>
@@ -192,6 +189,9 @@
   <div class="nav-label">Sales Manager</div>
   <a href="{% url 'sales:manager_approvals' %}" class="nav-item">
     <span class="icon">✅</span> Approval Queue
+  </a>
+  <a href="{% url 'sales:manager_quotations' %}" class="nav-item">
+    <span class="icon">📄</span> All Quotations
   </a>
   <a href="{% url 'masters:customers' %}" class="nav-item active">
     <span class="icon">🏢</span> Customers

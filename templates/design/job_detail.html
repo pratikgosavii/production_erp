@@ -161,7 +161,24 @@
   .btn-row { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 
   /* Raw material selection — designer picks a sheet/offcut manually from Stores */
-  .mat-filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .mat-filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .mat-filter input[type=text] {
+    padding: 7px 11px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12.5px; font-family: 'IBM Plex Sans'; flex: 1; min-width: 210px;
+  }
+  .mat-filter input[type=text]:focus {
+    outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg);
+  }
+  .mat-filter .mat-all {
+    font-size: 11.5px; color: var(--blue); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; white-space: nowrap;
+  }
+  .mat-filter .mat-all:hover { border-color: var(--blue); text-decoration: none; }
+  .mat-empty {
+    font-size: 11.5px; color: var(--ink-soft); font-style: italic;
+    padding: 14px; text-align: center; background: #fafbfc;
+    border: 1px dashed var(--line); border-radius: var(--radius); margin-bottom: 10px;
+  }
   .mat-filter select {
     padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px;
     font-size: 11.5px; background: #fff; color: var(--ink); font-family: 'IBM Plex Sans';
@@ -447,7 +464,13 @@
       <div class="mat-filter">
         <select><option>Material: {{ item.material.name|default:"—" }}</option></select>
         <select><option>Thickness: {{ item.thickness.name|default:"—" }}</option></select>
+        {# Client-side filter over an already material+thickness-scoped list. #}
+        <input type="text" id="sheetSearch" placeholder="Search UID / size / rack / supplier"
+               autocomplete="off" aria-label="Filter available sheets">
+        <a href="{% url 'stores:dashboard' %}" class="mat-all" target="_blank"
+           title="Browse the whole inventory">📦 Full inventory</a>
       </div>
+      <div class="mat-empty" id="sheetNoMatch" hidden>No sheet matches that search.</div>
 
       {% if reservation %}
       <div class="sheet-option selected">
@@ -671,6 +694,37 @@
      below only does the picking-a-radio affordance and the hidden file input.
      Nothing here decides state — the page re-renders from the database, and
      the approval gate is enforced in the view, not by the disabled button. */
+
+  /* ---- Filter the sheet list as the designer types ----
+     Purely visual: it hides rows, it never changes what the server accepts.
+     A hidden row's radio is cleared so a filtered-away sheet can't be
+     submitted by accident. */
+  (function () {
+    var box = document.getElementById('sheetSearch');
+    if (!box) { return; }
+    var empty = document.getElementById('sheetNoMatch');
+
+    box.addEventListener('input', function () {
+      var needle = box.value.trim().toLowerCase();
+      var shown = 0;
+      document.querySelectorAll('.sheet-option').forEach(function (row) {
+        var hit = !needle || row.textContent.toLowerCase().indexOf(needle) !== -1;
+        row.hidden = !hit;
+        if (hit) {
+          shown++;
+        } else {
+          var radio = row.querySelector('input[type=radio]');
+          if (radio && radio.checked) {
+            radio.checked = false;
+            row.classList.remove('selected');
+            var btn = document.getElementById('btnReserve');
+            if (btn && !btn.disabled) { btn.textContent = 'Reserve selected sheet'; }
+          }
+        }
+      });
+      if (empty) { empty.hidden = shown !== 0; }
+    });
+  })();
 
   function selectSheet(el) {
     document.querySelectorAll('.sheet-option').forEach(function (s) {

@@ -11,22 +11,25 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.constants import ItemCodeApproval, OrderType, QuotationStatus
+from core.constants import ItemCodeApproval, OrderType, QuotationStatus, QueryStatus
 from core.decorators import landing_url_name, role_required
 from core.models import AuditLog
 from core.services import log, notify
+from design.models import DesignQuery
 from masters.models import Customer, Finish, ItemCode, Material, Thickness
 from sales.forms import (
     BillToForm, BlankTierFormSet, EditTierFormSet, NewTierFormSet, POUploadForm,
     QuotationForm, QuotationItemEditFormSet, QuotationItemFormSet, _thickness_label,
 )
 from sales.models import Quotation
+from sales.pdf import build_quotation_pdf, quotation_pdf_filename
 
 User = get_user_model()
 
@@ -117,6 +120,18 @@ def _owned_quotation(request, pk):
     return quotation
 
 
+def _assert_can_view(user, quotation):
+    """Read access to one quotation — the rule the full-detail screen uses.
+
+    A salesperson sees their own quotations only. Sales Manager, Accounts and
+    Admin see every quotation. Both the detail screen and the printable PDF go
+    through here, so there is exactly one copy of the rule.
+    """
+    privileged = user.is_superuser or user.is_sales_manager or user.is_accounts
+    if not privileged and quotation.salesperson_id != user.pk:
+        raise PermissionDenied('That quotation belongs to another salesperson.')
+
+
 def _accounts_users():
     return User.objects.filter(is_accounts=True, is_active=True)
 
@@ -167,6 +182,8 @@ def _action_kind(quotation):
     if status in OUT_WITH_CUSTOMER:
         return 'awaiting_po'
     if status == QuotationStatus.PO_UPLOADED:
+        if quotation.sent_to_accounts_at:
+            return 'with_accounts'
         return 'convertible' if quotation.has_drawing else 'no_drawing'
     if status == QuotationStatus.PO_REJECTED:
         return 'po_rejected'
@@ -234,32 +251,30 @@ def dashboard(request):
     return render(request, 'sales/dashboard.html', context)
 
 
-@require_POST
-@role_required('is_salesman')
-def quotation_send(request, pk):
-    """Email the approved quote out; the quote now waits on the customer's PO."""
-    quotation = _owned_quotation(request, pk)
-    if quotation.status not in OUT_WITH_CUSTOMER:
-        messages.error(request, f'{quotation.number} is not in a state that can be sent.')
-        return redirect('sales:dashboard')
+@role_required('is_salesman', 'is_sales_manager', 'is_accounts')
+def quotation_pdf(request, pk):
+    """The printable quotation — the document the customer actually receives.
 
-    previous = quotation.status
-    quotation.sent_to_customer_at = timezone.now()
-    quotation.status = QuotationStatus.AWAITING_PO
-    quotation.save(update_fields=['sent_to_customer_at', 'status', 'updated_at'])
-
-    log(request.user, 'Quotation', quotation.number, 'Sent to customer',
-        detail=f'Emailed to {quotation.customer.email or quotation.customer.name}',
-        from_value=previous, to_value=quotation.status)
-    notify(quotation.salesperson,
-           f'{quotation.number} sent to {quotation.customer.name} — awaiting PO.',
-           link=reverse('sales:dashboard'), object_ref=quotation.number)
-    messages.success(
-        request,
-        f'{quotation.number} sent to {quotation.customer.name}'
-        f'{" · " + quotation.customer.email if quotation.customer.email else ""}.',
+    Inline by default so it opens in a tab; ``?download=1`` forces a save.
+    Available whatever the status, a draft included: the salesperson has to be
+    able to read the paper before deciding to submit it.
+    """
+    quotation = get_object_or_404(
+        Quotation.objects
+        .select_related('customer', 'salesperson')
+        .prefetch_related('items__tiers', 'items__item_code',
+                          'items__material', 'items__thickness', 'items__finish'),
+        pk=pk,
     )
-    return redirect('sales:dashboard')
+    _assert_can_view(request.user, quotation)
+
+    pdf_bytes = build_quotation_pdf(quotation)
+    disposition = 'attachment' if request.GET.get('download') else 'inline'
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'{disposition}; filename="{quotation_pdf_filename(quotation)}"'
+    )
+    return response
 
 
 @require_POST
@@ -327,6 +342,12 @@ def quotation_convert(request, pk):
     if quotation.status != QuotationStatus.PO_UPLOADED:
         messages.error(request, f'{quotation.number} has no PO on file yet.')
         return redirect('sales:dashboard')
+    if quotation.sent_to_accounts_at:
+        messages.info(
+            request,
+            f'{quotation.number} is already with Accounts — waiting on their PO approval.',
+        )
+        return redirect('sales:dashboard')
     if not quotation.has_drawing:
         messages.error(
             request,
@@ -334,9 +355,12 @@ def quotation_convert(request, pk):
         )
         return redirect('sales:dashboard')
 
+    quotation.sent_to_accounts_at = timezone.now()
+    quotation.save(update_fields=['sent_to_accounts_at', 'updated_at'])
+
     log(request.user, 'Quotation', quotation.number, 'Sent for order booking',
         detail='PO and drawing complete — queued for Accounts',
-        from_value=quotation.status, to_value=quotation.status)
+        from_value=quotation.status, to_value='WITH_ACCOUNTS')
     for user in _accounts_users():
         notify(user, f'{quotation.number} ({quotation.customer.name}) is ready to book.',
                link=reverse('accounts:order_booking'), object_ref=quotation.number)
@@ -828,6 +852,57 @@ def _decorate_for_manager(quotation):
 
 
 @role_required('is_sales_manager')
+def manager_quotations(request):
+    """Every quotation, whoever raised it — the Sales Manager's history.
+
+    The approval queue only ever shows PENDING_APPROVAL, so once a manager
+    approves or rejects something it disappears from their screens entirely.
+    This is where they find it again.
+    """
+    quotations = (
+        Quotation.objects
+        .select_related('customer', 'salesperson', 'approved_by')
+        .prefetch_related('items__tiers')
+        .order_by('-quote_date', '-number', '-version')
+    )
+
+    status = (request.GET.get('status') or 'all').strip()
+    if status != 'all':
+        quotations = quotations.filter(status=status)
+
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        quotations = quotations.filter(
+            Q(number__icontains=q)
+            | Q(customer__name__icontains=q)
+            | Q(salesperson__first_name__icontains=q)
+        )
+
+    rows = list(quotations[:300])
+    for quotation in rows:
+        quotation.badge_class = BADGE_CLASS.get(quotation.status, 'badge-gray')
+        quotation.spec_display = _spec_line(quotation)
+        quotation.total_display = _money(quotation.grand_total)
+
+    # Counts come off the unfiltered set so the chips do not shrink as you use them.
+    everything = Quotation.objects.all()
+    chips = [('all', 'All', everything.count())] + [
+        (value, label, everything.filter(status=value).count())
+        for value, label in QuotationStatus.choices
+    ]
+
+    context = {
+        'rows': rows,
+        'chips': [c for c in chips if c[2] or c[0] == status or c[0] == 'all'],
+        'active_status': status,
+        'search': q,
+        'total_shown': len(rows),
+    }
+    context.update(_user_context(request, 'Sales Manager'))
+    return render(request, 'sales/manager_quotations.html', context)
+
+
+@role_required('is_sales_manager')
 def manager_approvals(request):
     """Everything waiting on the Sales Manager (§3.3b)."""
     queue = list(
@@ -837,7 +912,7 @@ def manager_approvals(request):
         # rate_bands too: the item-code panel compares every typed slab
         # against the customer's live rate card.
         .prefetch_related('items__tiers', 'items__item_code__rate_bands')
-        .order_by('submitted_at', 'number')
+        .order_by('-submitted_at', '-number')
     )
     for quotation in queue:
         _decorate_for_manager(quotation)
@@ -996,21 +1071,30 @@ def _code_badge(item):
     }[item.band_state]
 
 
+def _tier_range(tier):
+    """'101 – 200' / '201 and above' — one label for the ladder and the table."""
+    return (f'{tier.qty_from} – {tier.qty_to}' if tier.qty_to
+            else f'{tier.qty_from} and above')
+
+
 def _detail_rows(quotation):
     rows = []
     for item in quotation.items.all():
         applicable = item.applicable_tier
         applicable_pk = applicable.pk if applicable else None
         tiers = [{
-            'range': (f'{tier.qty_from} – {tier.qty_to}' if tier.qty_to
-                      else f'{tier.qty_from} and above'),
+            'range': _tier_range(tier),
             'rate': _rate(tier.rate_per_unit),
             'estimated': _money(tier.estimated_amount),
             'applies': tier.pk == applicable_pk,
         } for tier in item.tiers.all()]
 
         rows.append({
+            'pk': item.pk,
             'position': item.position,
+            # Blank when no slab covers the quoted quantity — the table says so
+            # in amber rather than inventing a rate.
+            'slab': _tier_range(applicable) if applicable else '',
             'code': item.item_code.code if item.item_code else '',
             'badge': _code_badge(item),
             'description': item.description,
@@ -1094,11 +1178,7 @@ def quotation_detail(request, pk):
     )
 
     user = request.user
-    # A salesperson sees their own quotations only. Managers, Accounts and
-    # Admin see every quotation — enforced here, not by hiding the link.
-    privileged = user.is_superuser or user.is_sales_manager or user.is_accounts
-    if not privileged and quotation.salesperson_id != user.pk:
-        raise PermissionDenied('That quotation belongs to another salesperson.')
+    _assert_can_view(user, quotation)
 
     is_manager = user.is_sales_manager or user.is_superuser
     owns = quotation.salesperson_id == user.pk
@@ -1110,6 +1190,15 @@ def quotation_detail(request, pk):
     # Breadcrumb points back at whichever list this role actually owns.
     landing = landing_url_name(user)
 
+    # Once booked, the header links across to the Sales Order — but only for
+    # the roles accounts.views.order_detail actually admits. A salesperson is
+    # not one of them, so they would only meet a 403.
+    sales_order = quotation.sales_orders.first()
+    can_open_sales_order = sales_order is not None and (
+        user.is_superuser or user.is_accounts
+        or user.is_sales_manager or user.is_production_manager
+    )
+
     context = {
         'quotation': quotation,
         'badge_class': HEADER_BADGE.get(quotation.status, 'gray'),
@@ -1117,14 +1206,21 @@ def quotation_detail(request, pk):
         'meta': _detail_meta(quotation),
         'credit_limit': _money(quotation.customer.credit_limit),
         'rows': _detail_rows(quotation),
+        # The item-master table foots on the line-item sub total, not the
+        # grand total — charges and GST sit below it in the Totals card.
+        'items_total': _money(quotation.sub_total),
         'totals': _detail_totals(quotation),
         'code_rows': _code_rows(quotation),
         'activity': _detail_activity(quotation),
         # Contextual actions — every one of them POSTs to an existing view.
         'can_approve': is_manager and quotation.status == QuotationStatus.PENDING_APPROVAL,
         'can_edit': can_act_as_owner and quotation.status in QuotationStatus.editable(),
-        'can_send': can_act_as_owner and quotation.status in OUT_WITH_CUSTOMER,
+        # The quote is out with the customer — the only thing left for Sales to
+        # do is record the PO when it arrives.
+        'can_upload_po': can_act_as_owner and quotation.status in OUT_WITH_CUSTOMER,
         'is_manager': is_manager,
+        'sales_order': sales_order,
+        'can_open_sales_order': can_open_sales_order,
         'back_url': reverse(landing),
         'back_label': BACK_LABELS.get(landing, 'Back'),
         'today': timezone.localdate(),
@@ -1132,3 +1228,143 @@ def quotation_detail(request, pk):
     }
     context.update(_user_context(request, role_label))
     return render(request, 'sales/quotation_detail.html', context)
+
+
+# ---------------------------------------------------------------------------
+# SCREEN 5 — Design Queries (the salesperson's inbox, §7.1)
+# ---------------------------------------------------------------------------
+# DesignQuery.raise_for() routes a query to the exact salesperson who raised the
+# originating quotation and halts the job. This is where that person finally
+# sees it. Closing is deliberately absent: only the designer can judge whether
+# the answer actually unblocks the drawing, so only Design may close.
+QUERY_FILTERS = ['open', 'answered', 'closed', 'all']
+
+# Open first — those are the ones holding a job up. Within a bucket the
+# queryset's own '-created_at' ordering (newest first) is preserved.
+QUERY_RANK = {QueryStatus.OPEN: 0, QueryStatus.ANSWERED: 1, QueryStatus.CLOSED: 2}
+
+
+def _my_queries(user):
+    """Queries assigned to this user — a superuser inspects every inbox."""
+    queries = (
+        DesignQuery.objects
+        .select_related('order__customer', 'order__quotation',
+                        'so_item__quotation_item__item_code',
+                        'raised_by', 'assigned_to')
+        .prefetch_related('messages__author')
+    )
+    if not user.is_superuser:
+        queries = queries.filter(assigned_to=user)
+    return queries
+
+
+def _query_item_label(query):
+    """Which item code the query concerns; so_item is null for order-level."""
+    if query.so_item is None:
+        return ''
+    code = query.so_item.item_code
+    return code.code if code else f'Item {query.so_item.position}'
+
+
+def _query_thread(query):
+    """The full conversation, mirroring the Design-side thread markup.
+
+    A message from the assignee is the Sales side; anything else came from
+    Design — exactly the rule DesignQuery.reply() uses to flip the status.
+    """
+    rows = []
+    for msg in query.messages.all():
+        is_sales = msg.author_id == query.assigned_to_id
+        rows.append({
+            'author': msg.author.short_name,
+            'role_label': 'Sales' if is_sales else 'Design',
+            'side': 'sales' if is_sales else 'design',
+            'created_at': msg.created_at,
+            'body': msg.body,
+            'attachment': msg.attachment if msg.attachment else None,
+        })
+    return rows
+
+
+def _decorate_query(query):
+    query.item_label = _query_item_label(query)
+    query.pill_class = query.status.lower()
+    query.thread = _query_thread(query)
+    query.can_reply = query.status != QueryStatus.CLOSED
+    # The SO itself lives on an Accounts screen a salesperson may not GET, so
+    # the number links to the quotation it came from — which they own.
+    query.quotation_url = reverse('sales:quotation_detail', args=[query.order.quotation_id])
+    return query
+
+
+def _owned_query(request, pk):
+    query = get_object_or_404(_my_queries(request.user), pk=pk)
+    return query
+
+
+@role_required('is_salesman')
+def design_queries(request):
+    """My Design Queries — the inbox §7.1 promised and never built."""
+    rows = list(_my_queries(request.user))
+
+    counts = {'all': len(rows), 'open': 0, 'answered': 0, 'closed': 0}
+    for query in rows:
+        key = query.status.lower()
+        if key in counts:
+            counts[key] += 1
+
+    # Default lands on the ones needing him, not on everything.
+    active = (request.GET.get('status') or 'open').lower()
+    if active not in QUERY_FILTERS:
+        active = 'open'
+
+    visible = rows if active == 'all' else [q for q in rows if q.status.lower() == active]
+    visible.sort(key=lambda q: QUERY_RANK.get(q.status, 3))
+    for query in visible:
+        _decorate_query(query)
+
+    context = {
+        'queries': visible,
+        'counts': counts,
+        'active_filter': active,
+        'has_any': bool(rows),
+    }
+    context.update(_user_context(request, 'Sales'))
+    return render(request, 'sales/queries.html', context)
+
+
+@require_POST
+@role_required('is_salesman')
+def query_reply(request, pk):
+    """Answer the designer. reply() flips the query to ANSWERED for us."""
+    query = _owned_query(request, pk)
+    body = (request.POST.get('body') or '').strip()
+
+    if query.status == QueryStatus.CLOSED:
+        messages.error(request, 'That query has been closed by Design — nothing was posted.')
+        return redirect('sales:queries')
+    if not body:
+        messages.error(request, 'Type a reply before sending.')
+        return redirect('sales:queries')
+
+    previous = query.status
+    query.reply(request.user, body)
+
+    item = _query_item_label(query) or 'order-level'
+    log(request.user, 'DesignQuery', query.order.number, 'Query answered by Sales',
+        detail=f'{item} · {query.subject}',
+        from_value=previous, to_value=query.status)
+    # Straight back to the designer's own job screen, on the right item.
+    link = reverse('design:job_detail', args=[query.order.number])
+    if query.so_item_id:
+        link = f'{link}?item={query.so_item_id}'
+    notify(query.raised_by,
+           f'{request.user.short_name} answered your query on {query.order.number}: '
+           f'{query.subject}',
+           link=link, object_ref=query.order.number)
+    messages.success(
+        request,
+        f'Reply sent to {query.raised_by.short_name} — {query.order.number} is marked Answered. '
+        f'Design decides whether it unblocks the job.',
+    )
+    return redirect(f"{reverse('sales:queries')}?status={request.POST.get('back') or 'open'}")

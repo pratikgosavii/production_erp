@@ -12,7 +12,7 @@ Django==5.1.4
 pillow==11.0.0
 
 # ---- PDF generation ----
-# Quotation PDF ("printable PDF" + "Send to Customer" — PROJECT_DESIGN.md §3.2, §3.3).
+# The printable quotation PDF — sales/pdf.py, served by sales:quotation_pdf.
 reportlab==3.6.12
 
 # ---------------------------------------------------------------------------

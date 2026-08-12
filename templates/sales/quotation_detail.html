@@ -109,16 +109,49 @@
   .fact .v.mono { font-family: 'IBM Plex Mono'; }
   .fact .v.none { color: var(--gray); font-weight: 400; font-style: italic; }
 
-  /* ---------- Line items ---------- */
-  .li-card {
-    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--steel);
-    border-radius: 3px; padding: 14px 16px; margin-bottom: 10px;
+  /* ---------- Item master table (the mockup's lead block) ---------- */
+  table.items {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    border: 1px solid var(--line); font-size: 12px;
   }
-  .li-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
-  .li-pos {
-    font-family: 'IBM Plex Mono'; font-size: 10px; font-weight: 700; color: var(--ink-soft);
-    background: var(--gray-bg); border-radius: 3px; padding: 2px 7px; margin-right: 8px;
+  table.items thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 9px 11px;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; font-weight: 600;
   }
+  table.items thead th.r { text-align: right; }
+  table.items td { padding: 10px 11px; vertical-align: middle; }
+  table.items tr.item-row { border-top: 1px solid var(--line); }
+  table.items tr.item-row:hover { background: #fafbfc; }
+  table.items td.num { font-family: 'IBM Plex Mono'; text-align: right; white-space: nowrap; }
+  table.items tfoot td { background: var(--gray-bg); font-weight: 700; padding: 10px 11px; font-size: 12px; }
+  table.items tfoot td.num { font-family: 'IBM Plex Mono'; text-align: right; }
+  table.items .code-badge { margin-left: 0; }
+  .items-empty td { padding: 34px 12px; text-align: center; color: var(--gray); font-style: italic; }
+
+  .item-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; }
+  .item-code .internal { font-weight: 400; color: var(--ink-soft); font-size: 9.5px; display: block; margin-top: 2px; }
+  .item-code.none { color: var(--gray); font-weight: 400; }
+  .spec-cell { line-height: 1.5; }
+  .spec-cell .none { color: var(--gray); font-style: italic; }
+  .slab { font-family: 'IBM Plex Mono'; white-space: nowrap; }
+  /* No tier covers the quoted quantity — never guess a rate, say so. */
+  .slab.none { font-family: 'IBM Plex Sans'; color: var(--amber); font-style: italic; white-space: normal; }
+
+  /* Expander — the same interaction and classes as the approval queue. */
+  .btn-view-details {
+    font-size: 10.5px; color: var(--ink-soft); background: none; border: none;
+    text-decoration: underline; cursor: pointer; padding: 0; display: block;
+  }
+  .row-detail { display: none; background: #f8f9fb; border-top: 1px dashed var(--line); }
+  .row-detail.open { display: table-row; }
+  .detail-inner { padding: 14px 18px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .detail-grid .dg-item .dg-label {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); margin-bottom: 4px;
+  }
+  .detail-grid .dg-item .dg-value { font-size: 13px; font-weight: 600; word-break: break-word; }
+
   .ic-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 13px; color: var(--steel); }
   .code-badge {
     font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
@@ -130,13 +163,8 @@
   /* A band that cannot be written at all — it straddles an approved one. */
   .code-badge.conflict { background: var(--red-bg); color: var(--red); }
   .cp-conflict { margin-top: 4px; font-size: 10.5px; color: var(--red); font-family: 'IBM Plex Mono'; }
-  .li-desc { font-size: 12.5px; font-weight: 600; margin-top: 6px; }
-  .li-spec { font-size: 11px; color: var(--ink-soft); margin-top: 3px; line-height: 1.5; }
-  .li-spec .aw { font-family: 'IBM Plex Mono'; }
-  .li-money { text-align: right; white-space: nowrap; }
-  .li-money .amt { font-family: 'IBM Plex Mono'; font-size: 16px; font-weight: 700; }
-  .li-money .bits { font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.6; font-family: 'IBM Plex Mono'; }
 
+  /* ---------- The full tier ladder, inside the expander ---------- */
   table.tiers { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 12px; }
   table.tiers th {
     text-align: left; padding: 6px 10px; font-size: 9px; text-transform: uppercase;
@@ -149,11 +177,6 @@
   table.tiers tr.applies td { background: var(--green-bg); font-weight: 700; color: var(--green); }
   .tier-flag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .no-tiers { font-size: 11px; color: var(--gray); font-style: italic; margin-top: 10px; }
-
-  .empty-card {
-    background: var(--card); border: 1px dashed var(--line); border-radius: var(--radius);
-    padding: 34px 16px; text-align: center; color: var(--gray); font-style: italic; font-size: 12px;
-  }
 
   /* ---------- Totals ---------- */
   .totals-card {
@@ -232,9 +255,6 @@
     <span class="icon">📋</span> {{ back_label }}
   </a>
   {% if request.user.is_salesman %}
-  <a href="{% url 'sales:quotation_create' %}" class="nav-item">
-    <span class="icon">✏️</span> New Quotation
-  </a>
   {% endif %}
   <a href="{% url 'sales:quotation_detail' quotation.pk %}" class="nav-item active">
     <span class="icon">🧾</span> {{ quotation.number }}
@@ -256,6 +276,14 @@
           · <span class="supersedes">supersedes {{ quotation.supersedes.number }} v{{ quotation.supersedes.version }}</span>
         {% endif %}
       </div>
+      {# Booked already. Only Accounts / Sales Manager / Production may open the
+         SO screen, so a salesperson is not offered a link into a 403. #}
+      {% if can_open_sales_order %}
+      <div class="qtn-sub">
+        Converted to Sales Order
+        <a class="supersedes" href="{% url 'accounts:order_detail' sales_order.number %}">{{ sales_order.number }}</a>
+      </div>
+      {% endif %}
     </div>
 
     <div class="header-right">
@@ -277,18 +305,14 @@
           <button type="button" class="act revise" onclick="toggleForm('reviseForm')">↺ Request Revision</button>
         {% endif %}
 
+        {# The printed quotation, whatever the status — a draft included. #}
+        <a href="{% url 'sales:quotation_pdf' quotation.pk %}" target="_blank" class="act outline">View Quotation PDF</a>
+
         {% if can_edit %}
           <a href="{% url 'sales:quotation_edit' quotation.pk %}" class="act primary">Continue Editing</a>
         {% endif %}
 
-        {% if can_send %}
-          <form method="post" action="{% url 'sales:quotation_send' quotation.pk %}">
-            {% csrf_token %}
-            <button type="submit" class="act primary"
-                    onclick="return confirm('Email the approved quotation PDF?\n\n{{ quotation.number|escapejs }} — {{ quotation.customer.name|escapejs }}\nTo: {{ quotation.customer.email|default:'(no email on the customer master)'|escapejs }}')">
-              {% if quotation.sent_to_customer_at %}Resend to Customer{% else %}Send to Customer{% endif %}
-            </button>
-          </form>
+        {% if can_upload_po %}
           <button type="button" class="act upload" onclick="toggleForm('poForm')">+ Upload PO</button>
         {% endif %}
       </div>
@@ -325,7 +349,7 @@
   </form>
   {% endif %}
 
-  {% if can_send %}
+  {% if can_upload_po %}
   <form method="post" enctype="multipart/form-data" action="{% url 'sales:quotation_po' quotation.pk %}"
         class="inline-form po" id="poForm">
     {% csrf_token %}
@@ -421,68 +445,123 @@
   </div>
 </div>
 
-<!-- ======== 4. LINE ITEMS ======== -->
+<!-- ======== 4. LINE ITEMS — item master table ======== -->
 <div class="section-title">
-  Line Items
+  Item Code Master — Rates &amp; Slabs
   <span class="hint">Slab pricing — the tier the quoted quantity lands in is the one that bills</span>
 </div>
 
-{% for row in rows %}
-<div class="li-card">
-  <div class="li-top">
-    <div style="min-width:0;">
-      <div>
-        <span class="li-pos">#{{ row.position }}</span>
-        {% if row.code %}
-          <span class="ic-code">{{ row.code }}</span>
+<div class="table-wrap">
+<table class="items">
+  <thead>
+    <tr>
+      <th style="width:14%">Item Code</th>
+      <th style="width:25%">Specification</th>
+      <th class="r" style="width:8%">Qty</th>
+      <th class="r" style="width:10%">Rate</th>
+      <th class="r" style="width:11%">Amount</th>
+      <th style="width:13%">Slab Applied</th>
+      <th style="width:19%">Rate Source</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr class="item-row" id="row-{{ row.pk }}">
+      <td>
+        <div class="item-code {% if not row.code %}none{% endif %}">
+          {{ row.code|default:"No item code" }}
+          {% if row.artwork_ref %}<span class="internal">Internal: {{ row.artwork_ref }}</span>{% endif %}
+        </div>
+      </td>
+      <td class="spec-cell">
+        {% if row.spec %}{{ row.spec }}{% else %}<span class="none">No specification recorded</span>{% endif %}
+        <button type="button" class="btn-view-details" onclick="toggleDetail('{{ row.pk }}')">View price ladder ▾</button>
+      </td>
+      <td class="num">{{ row.quantity }}</td>
+      <td class="num">{{ row.effective_rate }}</td>
+      <td class="num">{{ row.amount }}</td>
+      <td>
+        {% if row.slab %}
+          <span class="slab">{{ row.slab }}</span>
         {% else %}
-          <span class="ic-code" style="color:var(--gray);">No item code</span>
+          <span class="slab none">no slab covers this qty</span>
         {% endif %}
-        {% if row.badge %}<span class="code-badge {{ row.badge.css }}">{{ row.badge.label }}</span>{% endif %}
-      </div>
-      <div class="li-desc">{{ row.description|default:"—" }}</div>
-      <div class="li-spec">
-        {% if row.spec %}{{ row.spec }}{% else %}No specification recorded{% endif %}
-        {% if row.artwork_ref %} · Artwork <span class="aw">{{ row.artwork_ref }}</span>{% endif %}
-      </div>
-    </div>
-    <div class="li-money">
-      <div class="amt">{{ row.amount }}</div>
-      <div class="bits">
-        {{ row.quantity }} Nos × {{ row.effective_rate }}
-        {% if row.has_tooling %}<br>Tooling {{ row.tooling }}{% endif %}
-      </div>
-    </div>
-  </div>
+      </td>
+      <td>
+        {% if row.badge %}
+          <span class="code-badge {{ row.badge.css }}">{{ row.badge.label }}</span>
+        {% else %}
+          <span class="spec-cell"><span class="none">Not on the rate card</span></span>
+        {% endif %}
+      </td>
+    </tr>
 
-  {% if row.tiers %}
-  <table class="tiers">
-    <thead>
-      <tr>
-        <th style="width:34%">Qty Range</th>
-        <th style="width:22%">Rate / Unit</th>
-        <th style="width:26%">Estimated Amount</th>
-        <th style="width:18%"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for tier in row.tiers %}
-      <tr {% if tier.applies %}class="applies"{% endif %}>
-        <td class="num">{{ tier.range }}</td>
-        <td class="num">{{ tier.rate }}</td>
-        <td class="num">{{ tier.estimated }}</td>
-        <td>{% if tier.applies %}<span class="tier-flag">✓ Applicable</span>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="no-tiers">No price tiers were entered for this line — the effective rate is nil.</div>
+    <!-- The FULL ladder, one click away — same expander as the approval queue. -->
+    <tr class="row-detail" id="detail-{{ row.pk }}">
+      <td colspan="7">
+        <div class="detail-inner">
+          <div class="detail-grid">
+            <div class="dg-item">
+              <div class="dg-label">Line</div><div class="dg-value">#{{ row.position }}</div>
+            </div>
+            <div class="dg-item">
+              <div class="dg-label">Description</div>
+              <div class="dg-value">{{ row.description|default:"—" }}</div>
+            </div>
+            <div class="dg-item">
+              <div class="dg-label">Artwork Ref</div>
+              <div class="dg-value">{{ row.artwork_ref|default:"—" }}</div>
+            </div>
+            <div class="dg-item">
+              <div class="dg-label">Tooling Charge</div>
+              <div class="dg-value">{% if row.has_tooling %}{{ row.tooling }}{% else %}—{% endif %}</div>
+            </div>
+          </div>
+
+          {% if row.tiers %}
+          <table class="tiers">
+            <thead>
+              <tr>
+                <th style="width:34%">Qty Range</th>
+                <th style="width:22%">Rate / Unit</th>
+                <th style="width:26%">Estimated Amount</th>
+                <th style="width:18%"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tier in row.tiers %}
+              <tr {% if tier.applies %}class="applies"{% endif %}>
+                <td class="num">{{ tier.range }}</td>
+                <td class="num">{{ tier.rate }}</td>
+                <td class="num">{{ tier.estimated }}</td>
+                <td>{% if tier.applies %}<span class="tier-flag">✓ Applicable</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="no-tiers">No price tiers were entered for this line — the effective rate is nil.</div>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% empty %}
+    <tr class="items-empty">
+      <td colspan="7">This quotation has no line items yet.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  {% if rows %}
+  <tfoot>
+    <tr>
+      <td colspan="4">Total ({{ rows|length }} item code{{ rows|length|pluralize }})</td>
+      <td class="num">{{ items_total }}</td>
+      <td colspan="2"></td>
+    </tr>
+  </tfoot>
   {% endif %}
+</table>
 </div>
-{% empty %}
-<div class="empty-card">This quotation has no line items yet.</div>
-{% endfor %}
 
 <!-- ======== 5. TOTALS ======== -->
 <div class="section-title">Totals</div>
@@ -577,19 +656,6 @@
   </div>
   {% endif %}
 
-  {% if quotation.sent_to_customer_at %}
-  <div class="trail-item">
-    <span class="trail-dot green"></span>
-    <div>
-      <div class="tt">Quotation sent to customer</div>
-      <div class="td">
-        {{ quotation.sent_to_customer_at|date:"d M Y, g:i A" }}
-        {% if quotation.customer.email %} · {{ quotation.customer.email }}{% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
   {% if quotation.po_number or quotation.po_file %}
   <div class="trail-item">
     <span class="trail-dot green"></span>
@@ -625,7 +691,7 @@
   </div>
   {% endif %}
 
-  {% if not quotation.submitted_at and not quotation.approved_at and not quotation.manager_comment and not quotation.sent_to_customer_at and not quotation.po_number and not quotation.po_file and not quotation.po_rejected_at %}
+  {% if not quotation.submitted_at and not quotation.approved_at and not quotation.manager_comment and not quotation.po_number and not quotation.po_file and not quotation.po_rejected_at %}
   <div class="trail-item">
     <span class="trail-dot"></span>
     <div><div class="td">Nothing has happened to {{ quotation.number }} yet — it is still a draft.</div></div>
@@ -663,6 +729,20 @@
     });
     var target = document.getElementById(id);
     if (target) target.classList.toggle('open');
+  }
+
+  // The per-item price ladder. Same function name, classes and behaviour as
+  // the approval queue's "View line items ▾" expander, so the two screens
+  // feel identical.
+  function toggleDetail(id) {
+    var row = document.getElementById('detail-' + id);
+    if (!row) return;
+    row.classList.toggle('open');
+    var btn = document.querySelector('#row-' + id + ' .btn-view-details');
+    if (btn) {
+      btn.textContent = row.classList.contains('open')
+        ? 'Hide price ladder ▴' : 'View price ladder ▾';
+    }
   }
 </script>
 {% endblock %}

@@ -1,0 +1,130 @@
+{% comment %}
+Topbar bell — role-agnostic. Every notification core.services.notify() has ever
+written is addressed to one person, so the same surface serves every role.
+Counts and rows come from core.context_processors.badges.
+
+Everything here is namespaced under .erp-bell / erpBell so a screen's own
+scripts and ids cannot collide with it.
+{% endcomment %}
+{% if user.is_authenticated %}
+<style>
+  .erp-bell { position: relative; }
+  .erp-bell .erp-bell-btn {
+    background: none; border: none; cursor: pointer; padding: 4px 6px;
+    color: #fff; font-size: 16px; line-height: 1; position: relative;
+    font-family: 'IBM Plex Sans'; display: block;
+  }
+  .erp-bell .erp-bell-btn:hover { opacity: .85; }
+  .erp-bell .erp-bell-count {
+    position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px;
+    padding: 0 4px; border-radius: 20px; background: var(--red); color: #fff;
+    font-family: 'IBM Plex Mono'; font-size: 9.5px; font-weight: 600;
+    line-height: 16px; text-align: center;
+  }
+  .erp-bell .erp-bell-panel {
+    display: none; position: absolute; right: 0; top: 30px; width: 330px;
+    background: var(--card); color: var(--ink); border: var(--border);
+    border-radius: var(--radius); box-shadow: 0 12px 32px rgba(19,36,53,.22);
+    z-index: 1200; overflow: hidden;
+  }
+  .erp-bell.open .erp-bell-panel { display: block; }
+  .erp-bell .erp-bell-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--paper);
+  }
+  .erp-bell .erp-bell-head .t {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft);
+  }
+  .erp-bell .erp-bell-head button {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-family: 'IBM Plex Sans'; font-size: 10.5px; font-weight: 600; color: var(--blue);
+  }
+  .erp-bell .erp-bell-head button:hover { text-decoration: underline; }
+  .erp-bell .erp-bell-list { max-height: 340px; overflow-y: auto; }
+  .erp-bell .erp-bell-row { border-bottom: 1px solid var(--line); }
+  .erp-bell .erp-bell-row:last-child { border-bottom: none; }
+  .erp-bell .erp-bell-row button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    padding: 9px 12px; cursor: pointer; font-family: 'IBM Plex Sans';
+  }
+  .erp-bell .erp-bell-row.unread button { background: var(--blue-bg); }
+  .erp-bell .erp-bell-row button:hover { background: var(--paper); }
+  .erp-bell .erp-bell-row .m { font-size: 11.5px; line-height: 1.45; color: var(--ink); }
+  .erp-bell .erp-bell-row .w {
+    font-family: 'IBM Plex Mono'; font-size: 9.5px; color: var(--ink-soft); margin-top: 4px;
+  }
+  .erp-bell .erp-bell-empty {
+    padding: 20px 12px; text-align: center; font-size: 11.5px;
+    color: var(--ink-soft); font-style: italic;
+  }
+</style>
+
+<div class="erp-bell" id="erpBell">
+  <button type="button" class="erp-bell-btn" id="erpBellBtn"
+          aria-haspopup="true" aria-expanded="false"
+          title="{{ unread_notification_count }} unread notification{{ unread_notification_count|pluralize }}">
+    🔔
+    {% if unread_notification_count %}
+      <span class="erp-bell-count">{{ unread_notification_count }}</span>
+    {% endif %}
+  </button>
+
+  <div class="erp-bell-panel" id="erpBellPanel">
+    <div class="erp-bell-head">
+      <span class="t">Notifications ({{ unread_notification_count }} unread)</span>
+      {% if unread_notification_count %}
+      <form method="post" action="{% url 'core:notification_read_all' %}">
+        {% csrf_token %}
+        <button type="submit">Mark all read</button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="erp-bell-list">
+      {% for note in recent_notifications %}
+      <div class="erp-bell-row {% if not note.is_read %}unread{% endif %}">
+        <form method="post" action="{% url 'core:notification_read' note.pk %}">
+          {% csrf_token %}
+          <button type="submit">
+            <div class="m">{{ note.message }}</div>
+            <div class="w">{{ note.created_at|timesince }} ago{% if note.object_ref %} · {{ note.object_ref }}{% endif %}</div>
+          </button>
+        </form>
+      </div>
+      {% empty %}
+      <div class="erp-bell-empty">Nothing yet — handoffs meant for you land here.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+  /* Self-contained: one IIFE, its own ids, and the document listener bails out
+     immediately unless this bell is actually open. Nothing global is defined. */
+  (function () {
+    var bell  = document.getElementById('erpBell');
+    var btn   = document.getElementById('erpBellBtn');
+    if (!bell || !btn) { return; }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = bell.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!bell.classList.contains('open')) { return; }
+      if (bell.contains(e.target)) { return; }
+      bell.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && bell.classList.contains('open')) {
+        bell.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  })();
+</script>
+{% endif %}

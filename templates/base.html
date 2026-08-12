@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Chemical Etching Works — ERP{% endblock %}</title>
+  <title>{% block title %}Ravi Raj Anodisers — ERP{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/erp.css' %}">
   {% block extra_css %}{% endblock %}
 </head>
@@ -13,19 +13,23 @@
   <!-- Topbar -->
   <div class="topbar">
     <div class="brand">
-      <div class="mark"><span>CE</span></div>
+      <div class="mark"><span>RR</span></div>
       <div>
-        <div class="title">Chemical Etching Works — ERP</div>
+        <div class="title">Ravi Raj Anodisers — ERP</div>
         <div class="sub">{% block topbar_sub %}Dashboard{% endblock %}</div>
       </div>
     </div>
-    {% block topbar_right %}
-    <div class="user-info">
-      <span class="role-tag">{{ role_label|default:"Sales" }}</span>
-      <span class="name">{{ user_name|default:"Arjun P." }}</span>
-      <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+    {# Bell sits outside topbar_right: most screens override that block. #}
+    <div style="display:flex; align-items:center; gap:18px;">
+      {% include "core/_notification_bell.html" %}
+      {% block topbar_right %}
+      <div class="user-info">
+        <span class="role-tag">{{ role_label|default:"Sales" }}</span>
+        <span class="name">{{ user_name|default:"Arjun P." }}</span>
+        <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+      </div>
+      {% endblock %}
     </div>
-    {% endblock %}
   </div>
 
   <!-- Layout: sidebar + main -->

@@ -56,6 +56,13 @@ class SalesOrder(TimeStampedModel):
         choices=Priority.choices, default=Priority.P3,
     )
 
+    # Hand-dragged position WITHIN a priority column on the Production
+    # Priority Board. Lower sorts earlier; 0 is simply "not yet arranged", so a
+    # freshly booked order drops to the top of its column and the planner can
+    # push it down. Priority answers "how urgent"; queue_rank answers "in what
+    # order among the equally urgent", which priority alone cannot express.
+    queue_rank = models.IntegerField(default=0)
+
     # §10.1·5 — hold is resumable, cancel is terminal; both need a reason.
     hold_reason = models.TextField(blank=True)
     status_before_hold = models.CharField(max_length=25, blank=True)

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Design Queries — Sales{% endblock %}
+{% block topbar_sub %}Design Queries{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ---- Summary strip (same rhythm as My Quotations) ---- */
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 1px; background: var(--line); border-bottom: 1px solid var(--line);
+    margin: -24px -28px 22px -28px;
+  }
+  .summary .cell { background: var(--card); padding: 14px 18px; }
+  .summary .cell .n { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 600; line-height: 1; }
+  .summary .cell .l { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+  .summary .cell.open     .n { color: var(--amber); }
+  .summary .cell.answered .n { color: var(--blue); }
+  .summary .cell.closed   .n { color: var(--gray); }
+
+  /* ---- Filter chips ---- */
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .chip {
+    padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 11.5px; background: #fff; color: var(--ink-soft);
+    text-decoration: none; display: inline-block;
+  }
+  .chip:hover { text-decoration: none; }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .chip:hover:not(.active) { border-color: var(--steel); color: var(--ink); }
+
+  /* ---- Query card ---- */
+  .query-card { margin-bottom: 16px; }
+  .q-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 12px; flex-wrap: wrap; padding-bottom: 12px;
+    border-bottom: 1px solid var(--line); margin-bottom: 12px;
+  }
+  .q-subject { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.4; }
+  .q-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.6; }
+  .q-meta .so { font-family: 'IBM Plex Mono'; font-weight: 700; }
+  .q-meta .code {
+    font-family: 'IBM Plex Mono'; font-weight: 600; background: var(--blue-bg);
+    color: var(--blue); padding: 1px 6px; border-radius: 3px;
+  }
+  .q-meta .order-level {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    background: var(--gray-bg); color: var(--steel); padding: 2px 7px; border-radius: 3px;
+  }
+
+  /* Status pill — same vocabulary as the Design side */
+  .q-pill {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+  }
+  .q-pill.open     { background: var(--amber-bg); color: var(--amber); }
+  .q-pill.answered { background: var(--blue-bg);  color: var(--blue); }
+  .q-pill.closed   { background: var(--gray-bg);  color: var(--gray); }
+
+  .q-route {
+    background: var(--blue-bg); border-radius: 3px; padding: 8px 10px;
+    font-size: 11px; color: var(--blue); margin-bottom: 12px; line-height: 1.45;
+  }
+  .q-route b { font-weight: 700; }
+  .q-route .qtn { font-family: 'IBM Plex Mono'; }
+
+  /* ---- Thread: mirrors templates/design/job_detail.html exactly ---- */
+  .q-thread { max-height: 340px; overflow-y: auto; margin-bottom: 12px; }
+  .q-msg { padding: 9px 0; }
+  .q-msg + .q-msg { border-top: 1px solid var(--line); }
+  .q-msg .qh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+  .q-msg .qa { font-size: 11.5px; font-weight: 700; color: var(--ink); }
+  .q-msg .qr {
+    font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 1px 6px; border-radius: 3px; margin-left: 5px;
+  }
+  .q-msg.design .qr { background: var(--blue-bg); color: var(--blue); }
+  .q-msg.sales  .qr { background: var(--gray-bg); color: var(--steel); }
+  .q-msg .qt { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: var(--ink-soft); white-space: nowrap; }
+  .q-msg .qb { font-size: 11.5px; line-height: 1.5; color: var(--ink); border-radius: 3px; padding: 8px 10px; }
+  .q-msg.design .qb { background: var(--blue-bg); border-left: 3px solid var(--blue); }
+  .q-msg.sales  .qb { background: var(--paper);   border-left: 3px solid var(--steel); }
+  .q-msg .qf { font-size: 10.5px; margin-top: 5px; }
+
+  textarea.query-input {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: 'IBM Plex Sans'; font-size: 12px; resize: vertical; min-height: 66px; color: var(--ink);
+  }
+  textarea.query-input:focus { outline: none; border-color: var(--blue); }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+  .btn-send {
+    background: var(--navy); color: #fff; border: none; padding: 8px 16px;
+    border-radius: 3px; font-size: 12px; font-weight: 600; cursor: pointer;
+    font-family: 'IBM Plex Sans';
+  }
+  .btn-send:hover { background: var(--navy-2); }
+  .btn-link {
+    font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 3px;
+    border: 1px solid var(--navy); background: #fff; color: var(--navy);
+    text-decoration: none; display: inline-block;
+  }
+  .btn-link:hover { text-decoration: none; }
+
+  .close-note {
+    font-size: 10.5px; color: var(--ink-soft); line-height: 1.5;
+    background: var(--paper); border-left: 3px solid var(--steel);
+    border-radius: 0 var(--radius) var(--radius) 0; padding: 8px 10px;
+  }
+  .closed-note {
+    font-size: 11px; color: var(--gray); background: var(--gray-bg);
+    border-radius: 3px; padding: 9px 11px; line-height: 1.5;
+  }
+
+  .page-note {
+    font-size: 11px; color: var(--amber); background: var(--amber-bg);
+    border-left: 3px solid var(--amber); border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 9px 12px; margin-bottom: 16px; line-height: 1.55;
+  }
+
+  .empty-state {
+    border: 1px dashed var(--line); border-radius: var(--radius); padding: 34px 26px;
+    text-align: center; background: #fafbfc;
+  }
+  .empty-state .big { font-size: 24px; margin-bottom: 10px; }
+  .empty-state .h { font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+  .empty-state .p { font-size: 12px; color: var(--ink-soft); line-height: 1.6; max-width: 460px; margin: 0 auto; }
+  .empty-state .p a { font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Sales</div>
+  <a href="{% url 'sales:dashboard' %}" class="nav-item">
+    <span class="icon">📋</span> My Quotations
+  </a>
+  <a href="{% url 'sales:queries' %}" class="nav-item active">
+    <span class="icon">❓</span> Design Queries{% if open_query_count %} ({{ open_query_count }}){% endif %}
+  </a>
+  <a href="{% url 'masters:customers' %}" class="nav-item">
+    <span class="icon">🏢</span> Customers
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="summary">
+  <div class="cell"><div class="n">{{ counts.all }}</div><div class="l">Queries assigned to me</div></div>
+  <div class="cell open"><div class="n">{{ counts.open }}</div><div class="l">Open — waiting on my answer</div></div>
+  <div class="cell answered"><div class="n">{{ counts.answered }}</div><div class="l">Answered — back with Design</div></div>
+  <div class="cell closed"><div class="n">{{ counts.closed }}</div><div class="l">Closed by Design</div></div>
+</div>
+
+<div class="flex-between mb-2" style="flex-wrap:wrap; gap:10px;">
+  <h1 style="font-size:16px; margin:0; font-weight:600;">Design Queries</h1>
+  <div class="toolbar">
+    <a href="?status=open" class="chip {% if active_filter == 'open' %}active{% endif %}">Open ({{ counts.open }})</a>
+    <a href="?status=answered" class="chip {% if active_filter == 'answered' %}active{% endif %}">Answered ({{ counts.answered }})</a>
+    <a href="?status=closed" class="chip {% if active_filter == 'closed' %}active{% endif %}">Closed ({{ counts.closed }})</a>
+    <a href="?status=all" class="chip {% if active_filter == 'all' %}active{% endif %}">All ({{ counts.all }})</a>
+  </div>
+</div>
+
+<div class="page-note">
+  A query halts the item it was raised on until Design is satisfied. You answer here —
+  <b>only the designer can close a query</b>, because only they can judge whether your
+  answer actually unblocks the drawing. There is no Close button on this screen.
+</div>
+
+{% for q in queries %}
+<div class="card query-card">
+  <div class="q-top">
+    <div>
+      <div class="q-subject">{{ q.subject }}</div>
+      <div class="q-meta">
+        <a href="{{ q.quotation_url }}" class="so">{{ q.order.number }}</a> ·
+        {{ q.order.customer.name }} ·
+        {% if q.item_label %}<span class="code">{{ q.item_label }}</span>{% else %}<span class="order-level">Order level</span>{% endif %}
+        <br>
+        Raised by <b>{{ q.raised_by.short_name }}</b> (Design) ·
+        {{ q.created_at|date:"d M Y, h:i A" }} ·
+        due {{ q.order.expected_delivery|date:"d M Y"|default:"not set" }}
+        {% if q.resolved_at %} · closed {{ q.resolved_at|date:"d M Y" }}{% endif %}
+      </div>
+    </div>
+    <span class="q-pill {{ q.pill_class }}">{{ q.get_status_display }}</span>
+  </div>
+
+  <div class="q-route">
+    Routed to you as the salesperson who raised
+    <span class="qtn">{{ q.order.quotation.number }}</span>.
+    Your reply goes straight back to <b>{{ q.raised_by.short_name }}</b>'s design job screen.
+  </div>
+
+  <div class="q-thread">
+    {% for msg in q.thread %}
+    <div class="q-msg {{ msg.side }}">
+      <div class="qh">
+        <div>
+          <span class="qa">{{ msg.author }}</span>
+          <span class="qr">{{ msg.role_label }}</span>
+        </div>
+        <span class="qt">{{ msg.created_at|date:"d M, h:i A" }}</span>
+      </div>
+      <div class="qb">{{ msg.body|linebreaksbr }}</div>
+      {% if msg.attachment %}
+      <div class="qf">📎 <a href="{{ msg.attachment.url }}" target="_blank">{{ msg.attachment.name|cut:"queries/" }}</a></div>
+      {% endif %}
+    </div>
+    {% empty %}
+    <div class="q-msg design"><div class="qb">No messages on this query yet.</div></div>
+    {% endfor %}
+  </div>
+
+  {% if q.can_reply %}
+  <form method="post" action="{% url 'sales:query_reply' q.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="back" value="{{ active_filter }}">
+    <textarea class="query-input" name="body" required
+              placeholder="Reply to {{ q.raised_by.short_name }} — answer the question so the drawing can continue..."></textarea>
+    <div class="btn-row">
+      <button type="submit" class="btn-send">Send Reply</button>
+      <a href="{{ q.quotation_url }}" class="btn-link">Open {{ q.order.quotation.number }}</a>
+      <span class="close-note" style="border:none; background:none; padding:0;">
+        Sending marks this <b>Answered</b> and hands it back to Design.
+      </span>
+    </div>
+  </form>
+  {% else %}
+  <div class="closed-note">
+    Closed by Design{% if q.resolved_at %} on {{ q.resolved_at|date:"d M Y, h:i A" }}{% endif %} —
+    the answer was accepted and the job moved on. Nothing further is needed from you.
+  </div>
+  {% endif %}
+</div>
+{% empty %}
+<div class="card">
+  <div class="empty-state">
+    <div class="big">📭</div>
+    {% if not has_any %}
+      <div class="h">No design queries have come your way.</div>
+      <div class="p">
+        When a designer hits something unclear on a job, the query lands here — routed to you
+        because you raised the quotation it came from. Until then there is nothing waiting, and
+        no job of yours is held up in Design.
+      </div>
+    {% elif active_filter == 'open' %}
+      <div class="h">Nothing open — you are all caught up.</div>
+      <div class="p">
+        Every query assigned to you has been answered or closed. Look at
+        <a href="?status=answered">Answered ({{ counts.answered }})</a> to see what is still
+        sitting with Design, or <a href="?status=all">All ({{ counts.all }})</a> for the whole history.
+      </div>
+    {% else %}
+      <div class="h">No {{ active_filter }} queries.</div>
+      <div class="p">
+        Nothing of yours is in this state right now.
+        <a href="?status=all">Show all {{ counts.all }}</a>.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

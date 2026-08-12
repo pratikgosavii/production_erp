@@ -137,6 +137,10 @@
     font-family: 'IBM Plex Mono'; font-size: 10px; color: var(--ink-soft);
     font-weight: 400; display: block; margin-top: 2px; white-space: nowrap;
   }
+  /* Two quotes submitted the same day are not the same age — show the clock. */
+  .sub-time {
+    font-family: 'IBM Plex Mono'; font-size: 10px; color: var(--ink-soft); margin-top: 2px;
+  }
   .days-pending {
     font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 14px;
   }
@@ -256,6 +260,9 @@
   <a href="{% url 'sales:manager_approvals' %}" class="nav-item active">
     <span class="icon">✅</span> Approval Queue
   </a>
+  <a href="{% url 'sales:manager_quotations' %}" class="nav-item">
+    <span class="icon">📄</span> All Quotations
+  </a>
   <a href="{% url 'masters:customers' %}" class="nav-item">
     <span class="icon">🏢</span> Customers
   </a>
@@ -328,7 +335,12 @@
         {% endif %}
       </td>
       <td><span class="amt">₹{{ q.amount_display }}</span></td>
-      <td style="font-size:11.5px;">{{ q.submitted_at|date:'d M Y'|default:'—' }}</td>
+      <td style="font-size:11.5px;">
+        {% if q.submitted_at %}
+          {{ q.submitted_at|date:'d M Y' }}
+          <div class="sub-time">{{ q.submitted_at|date:'h:i A' }}</div>
+        {% else %}—{% endif %}
+      </td>
       <td>
         <span class="days-pending {% if q.pending_days >= 3 %}warn{% else %}ok{% endif %}">{{ q.pending_days }}d</span>
         <span class="days-label">pending</span>

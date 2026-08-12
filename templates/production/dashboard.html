@@ -1,8 +1,7 @@
 {% extends "base.html" %}
-{% load static %}
 
-{% block title %}Production Ready Queue — Item Level{% endblock %}
-{% block topbar_sub %}Production Ready Queue — Item Level{% endblock %}
+{% block title %}Production — Sales Orders{% endblock %}
+{% block topbar_sub %}Production — Sales Orders{% endblock %}
 
 {% block topbar_right %}
 <div class="user-info">
@@ -14,371 +13,228 @@
 
 {% block extra_css %}
 <style>
-  /* --orange is not a global token; the Due column needs a third band. */
+  /* --orange is not in erp.css's token set; the Due column needs a third band. */
   :root { --orange: #c25a1f; --orange-bg: #fbe8dc; }
 
-  .page-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 12px; }
   .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
-  .page-head .desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; max-width: 620px; }
-  .count-strip { display: flex; gap: 14px; font-size: 10.5px; color: var(--ink-soft); font-family: 'IBM Plex Mono'; }
-  .count-strip b { color: var(--ink); font-weight: 700; }
+  .page-head .desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; max-width: 640px; line-height: 1.55; }
 
-  .info-note {
-    background: var(--blue-bg); color: var(--blue); font-size: 12px; line-height: 1.6;
-    padding: 11px 15px; border-radius: var(--radius); margin-bottom: 16px;
+  /* ---- summary strip ---------------------------------------------------- */
+  .summary {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); margin-bottom: 16px;
   }
+  .summary .s { background: var(--card); padding: 12px 15px; }
+  .summary .s .l { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 5px; }
+  .summary .s .v { font-family: 'IBM Plex Mono'; font-size: 20px; font-weight: 700; line-height: 1; }
+  .summary .s.ready .v { color: var(--green); }
+  .summary .s.blocked .v { color: var(--red); }
+  @media (max-width: 780px) { .summary { grid-template-columns: repeat(2, 1fr); } }
 
-  /* ---- one block per Sales Order --------------------------------------- */
-  .so-group { margin-bottom: 22px; }
-  .so-group-head {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    padding: 9px 12px; background: #f8f9fb; border: 1px solid var(--line);
-    border-bottom: none; border-radius: var(--radius) var(--radius) 0 0;
+  /* ---- filter chips + search -------------------------------------------- */
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  a.chip {
+    font-size: 11.5px; padding: 6px 13px; border-radius: 20px; text-decoration: none;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink-soft);
   }
-  .so-group-head .so-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 13px; }
-  .so-group-head .cust { font-size: 12px; color: var(--ink-soft); }
-  .so-group-head .meta { font-size: 10.5px; color: var(--ink-soft); font-family: 'IBM Plex Mono'; }
-  .so-group-head .spacer { margin-left: auto; }
-  .prio-form { display: flex; align-items: center; gap: 6px; }
-  .prio-form .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); font-weight: 700; }
+  a.chip:hover { border-color: var(--steel); color: var(--ink); text-decoration: none; }
+  a.chip.on { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600; }
+  a.chip .n { font-family: 'IBM Plex Mono'; font-size: 10.5px; opacity: .8; margin-left: 4px; }
 
-  select.priority {
-    font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 3px;
-    border: 1px solid var(--line); background: #fff; font-family: 'IBM Plex Mono'; text-align: center;
+  .search { margin-left: auto; display: flex; gap: 6px; }
+  .search input {
+    font-size: 12px; padding: 7px 11px; border: var(--border); border-radius: var(--radius);
+    font-family: 'IBM Plex Sans'; min-width: 230px; color: var(--ink);
   }
-  select.priority.p1 { color: var(--red); border-color: var(--red); background: var(--red-bg); }
-  select.priority.p2 { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
-  select.priority.p3 { color: var(--blue); border-color: var(--blue); background: var(--blue-bg); }
-  select.priority.p4 { color: var(--gray); border-color: var(--line); background: var(--gray-bg); }
-
-  /* ---- queue table ------------------------------------------------------ */
-  table.q { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
-  table.q thead th {
-    background: var(--navy); color: #fff; text-align: left; padding: 9px 12px;
-    font-size: 10px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  .search button {
+    font-size: 12px; padding: 7px 14px; border-radius: var(--radius); border: none;
+    background: var(--navy); color: #fff; cursor: pointer; font-family: 'IBM Plex Sans';
   }
-  table.q tbody tr { border-top: 1px solid var(--line); }
-  table.q tbody tr.ready:hover { background: #fafbfc; }
-  table.q tbody tr.blocked { background: #fbfbfb; opacity: .62; }
-  table.q tbody tr.picked { background: var(--green-bg); }
-  table.q td { padding: 10px 12px; vertical-align: middle; }
+  .search a.clear { font-size: 11px; color: var(--ink-soft); align-self: center; }
 
-  .item-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12px; }
-  tr.blocked .item-code { color: var(--gray); }
-  .amt { font-family: 'IBM Plex Mono'; font-weight: 600; }
-  .qty { font-family: 'IBM Plex Mono'; }
-  .muted { color: var(--ink-soft); }
-
-  .reason-badge { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; display: inline-block; }
-  .reason-badge.ready { background: var(--green-bg); color: var(--green); }
-  .reason-badge.blocked { background: var(--red-bg); color: var(--red); }
-
-  .due { font-size: 11.5px; }
-  .due .days { font-family: 'IBM Plex Mono'; font-weight: 700; display: block; font-size: 12.5px; }
-  .due.crit .days { color: var(--red); }
-  .due.soon .days { color: var(--orange); }
-  .due.ok .days { color: var(--green); }
-
-  .select-box { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); margin: 0; }
-  .select-box:disabled { cursor: not-allowed; }
-
-  .legend { display: flex; gap: 18px; margin: 8px 0 18px; font-size: 11px; color: var(--ink-soft); flex-wrap: wrap; }
-  .legend span { display: flex; align-items: center; gap: 5px; }
-  .ldot { width: 8px; height: 8px; border-radius: 50%; }
-
-  /* ---- sticky selection bar --------------------------------------------- */
-  .selection-bar {
-    position: sticky; bottom: 0; z-index: 50;
-    background: var(--navy); color: #fff; border-radius: 6px; padding: 13px 18px;
-    margin-top: 18px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    box-shadow: 0 -4px 16px rgba(19, 36, 53, .18);
+  /* ---- order table ------------------------------------------------------ */
+  table.so { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12px; }
+  table.so thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 9px 11px;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; font-weight: 600;
   }
-  .selection-bar .sel-count { font-family: 'IBM Plex Mono'; font-size: 16px; font-weight: 700; }
-  .selection-bar .sel-label { font-size: 11px; color: #9db2c4; margin-top: 2px; }
-  .selection-bar .sel-value { font-family: 'IBM Plex Mono'; font-size: 14px; margin-left: auto; text-align: right; }
-  .selection-bar .sel-value .cap { display: block; font-size: 10px; color: #9db2c4; font-family: 'IBM Plex Sans'; text-transform: uppercase; letter-spacing: .04em; }
-  .urgent-check { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #e8b98f; cursor: pointer; }
-  .urgent-check input { accent-color: var(--amber); margin: 0; }
-  .urgent-reason { flex-basis: 100%; display: none; }
-  .urgent-reason.show { display: block; }
-  .urgent-reason textarea {
-    width: 100%; min-height: 54px; resize: vertical; padding: 8px 10px; border-radius: 3px;
-    border: 1px solid var(--amber); font-family: 'IBM Plex Sans'; font-size: 12px; color: var(--ink);
-  }
-  .urgent-reason .hint { font-size: 10.5px; color: #e8b98f; margin-bottom: 4px; }
-  .btn-create {
-    background: var(--green); color: #fff; border: none; padding: 9px 18px; border-radius: 3px;
-    font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: 'IBM Plex Sans';
-  }
-  .btn-create:disabled { background: var(--gray); cursor: not-allowed; }
+  table.so tbody tr { border-top: 1px solid var(--line); }
+  table.so tbody tr:hover { background: #fafbfc; }
+  table.so tbody tr.held { background: var(--gray-bg); opacity: .72; }
+  table.so td { padding: 11px; vertical-align: middle; }
 
-  /* ---- job cards generated ---------------------------------------------- */
-  .section-title { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin: 26px 0 10px; }
-  .jc-result {
-    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--green);
-    border-radius: 3px; padding: 14px 16px; margin-bottom: 10px;
-  }
-  .jc-result.is-urgent { border-left-color: var(--red); }
-  .jc-result .jc-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-  .jc-result .jc-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 14px; }
-  .jc-result .jc-no a { color: var(--ink); }
-  .jc-result .jc-when { font-weight: 400; font-size: 11px; color: var(--ink-soft); }
-  .jc-result .jc-urgent { background: var(--red); color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; margin-left: 8px; }
-  .jc-result .jc-items { font-size: 11.5px; color: var(--ink-soft); }
-  .jc-result .jc-reason { font-size: 11px; color: var(--red); margin-top: 4px; }
-  .jc-result .jc-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .jc-chip { font-size: 10.5px; font-family: 'IBM Plex Mono'; background: var(--green-bg); color: var(--green); padding: 3px 8px; border-radius: 3px; }
+  .so-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12.5px; }
+  .so-no a { color: var(--ink); }
+  .sub { font-size: 10px; color: var(--ink-soft); margin-top: 3px; }
+  .cust { font-weight: 600; }
+  .amt { font-family: 'IBM Plex Mono'; font-weight: 600; white-space: nowrap; }
 
-  .empty-state { text-align: center; padding: 28px; color: var(--ink-soft); font-size: 12px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--card); }
+  .type-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-left: 5px; }
+  .type-tag.new { background: var(--blue-bg); color: var(--blue); }
+  .type-tag.repeat { background: var(--purple-bg, #efe9f7); color: var(--purple, #5b4b8a); }
+
+  .po-chip {
+    font-size: 10px; display: inline-flex; align-items: center; gap: 4px; max-width: 150px;
+    background: #f8f9fb; border: 1px solid var(--line); padding: 3px 7px;
+    border-radius: 3px; color: var(--ink); word-break: break-all;
+  }
+  a.po-chip:hover { border-color: var(--steel); text-decoration: none; }
+  .po-chip.missing { color: var(--gray); border-style: dashed; }
+
+  .mix { font-size: 10.5px; color: var(--ink-soft); line-height: 1.5; }
+  .mix b.rd { color: var(--green); }
+  .mix b.jc { color: var(--blue); }
+  .mix b.bl { color: var(--red); }
+  .bar { height: 6px; border-radius: 20px; overflow: hidden; display: flex; background: var(--gray-bg); margin-top: 6px; width: 130px; }
+  .bar span { height: 100%; display: block; }
+  .bar .b-jc { background: var(--blue); }
+  .bar .b-rd { background: var(--green); }
+  .bar .b-bl { background: var(--red); }
+
+  .due .d { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; display: block; }
+  .due .w { font-size: 10px; color: var(--ink-soft); }
+  .due.crit .d { color: var(--red); }
+  .due.soon .d { color: var(--orange); }
+  .due.ok .d { color: var(--green); }
+
+  .prio { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12px; padding: 3px 9px; border-radius: 3px; display: inline-block; }
+  .prio.p1 { background: var(--red-bg); color: var(--red); }
+  .prio.p2 { background: var(--amber-bg); color: var(--amber); }
+  .prio.p3 { background: var(--blue-bg); color: var(--blue); }
+  .prio.p4 { background: var(--gray-bg); color: var(--gray); }
+
+  .status-pill-sm { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 3px 8px; border-radius: 20px; display: inline-block; line-height: 1.5; }
+  .status-pill-sm.green { background: var(--green-bg); color: var(--green); }
+  .status-pill-sm.amber { background: var(--amber-bg); color: var(--amber); }
+  .status-pill-sm.red   { background: var(--red-bg);   color: var(--red); }
+  .status-pill-sm.gray  { background: var(--gray-bg);  color: var(--gray); }
+  .hold-why { font-size: 10px; color: var(--amber); margin-top: 4px; line-height: 1.4; }
+
+  a.open {
+    font-size: 11.5px; font-weight: 600; white-space: nowrap; color: var(--blue);
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 11px; display: inline-block;
+  }
+  a.open:hover { border-color: var(--blue); text-decoration: none; }
+
+  .empty-state { text-align: center; padding: 34px; color: var(--ink-soft); font-size: 12px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--card); }
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">Production</div>
-  <a href="{% url 'production:dashboard' %}" class="nav-item active">
-    <span class="icon">🏭</span> Ready Queue
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include "production/_sidebar.html" %}{% endblock %}
 
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Production Ready Queue — Item Level</h1>
-    <div class="desc">Select any combination of ready item codes and bundle them into one job card. Priority is set per sales order.</div>
-  </div>
-  <div class="count-strip">
-    <span><b>{{ total_rows }}</b> item codes queued</span>
-    <span><b>{{ ready_total }}</b> ready</span>
-    <span><b>{{ blocked_total }}</b> blocked</span>
-  </div>
-</div>
-
-<div class="info-note">
-  This queue lists <b>individual item codes</b>, not whole Sales Orders. Tick any combination of ready items — from the
-  same or from different SOs — and bundle them into a single Job Card. Blocked items (greyed, checkbox disabled) stay in
-  the queue with their own reason until it clears; they are never hidden.
-</div>
-
-<div class="legend">
-  <span><span class="ldot" style="background:var(--green);"></span>Ready — design approved and material issued, selectable</span>
-  <span><span class="ldot" style="background:var(--gray);"></span>Blocked — waits in the queue, own reason shown</span>
-</div>
-
-{% for g in groups %}
-<div class="so-group">
-  <div class="so-group-head">
-    <span class="so-no">{{ g.order.number }}</span>
-    <span class="cust">({{ g.order.customer.name }})</span>
-    <span class="meta">{{ g.ready_count }} ready / {{ g.rows|length }} queued</span>
-    <span class="meta">
-      Due
-      {% if g.order.expected_delivery %}{{ g.order.expected_delivery|date:"d M Y" }}{% else %}—{% endif %}
-    </span>
-    <span class="spacer"></span>
-    <form method="post" action="{% url 'production:set_priority' %}" class="prio-form">
-      {% csrf_token %}
-      <input type="hidden" name="order" value="{{ g.order.pk }}">
-      <span class="lbl">Priority (1–4)</span>
-      <select class="priority p{{ g.order.priority }}" name="priority">
-        {% for value, label in priorities %}
-        <option value="{{ value }}" {% if value == g.order.priority %}selected{% endif %}>{{ value }}</option>
-        {% endfor %}
-      </select>
-      <noscript><button type="submit" class="btn-create" style="padding:4px 10px; font-size:11px;">Set</button></noscript>
-    </form>
-  </div>
-
-  <div style="overflow-x:auto;">
-  <table class="q">
-    <thead>
-      <tr>
-        <th style="width:3%"></th>
-        <th style="width:13%">Item Code</th>
-        <th style="width:25%">Specification</th>
-        <th style="width:7%">Qty</th>
-        <th style="width:10%">Value</th>
-        <th style="width:19%">Readiness</th>
-        <th style="width:13%">Due Date</th>
-        <th style="width:10%">Job Card</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in g.rows %}
-      <tr class="{% if r.is_ready %}ready{% else %}blocked{% endif %}">
-        <td>
-          <input type="checkbox" class="select-box item-check" form="jcForm"
-                 name="items" value="{{ r.item.pk }}"
-                 data-value="{{ r.value|floatformat:'2u' }}"
-                 data-so="{{ r.order.number }}"
-                 data-code="{{ r.code }}"
-                 {% if not r.is_ready %}disabled{% endif %}>
-        </td>
-        <td><span class="item-code">{{ r.code }}</span></td>
-        <td>{{ r.spec }}</td>
-        <td class="qty">{{ r.qty }} Nos</td>
-        <td class="amt">₹{{ r.value|floatformat:0 }}</td>
-        <td>
-          {% if r.is_ready %}
-          <span class="reason-badge ready">✓ Design + Material Ready</span>
-          {% else %}
-          <span class="reason-badge blocked">⏳ {{ r.reason }}</span>
-          {% endif %}
-        </td>
-        <td>
-          <div class="due {{ r.due_class }}">
-            {% if r.days is None %}
-              <span class="days">—</span>no due date
-            {% else %}
-              <span class="days">{{ r.order.expected_delivery|date:"d M Y" }}</span>
-              {% if r.days < 0 %}overdue{% else %}in {{ r.days }} day{{ r.days|pluralize }}{% endif %}
-            {% endif %}
-          </div>
-        </td>
-        <td class="muted">{% if r.is_ready %}Unassigned{% else %}—{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-{% empty %}
-<div class="empty-state">
-  Nothing is waiting for a job card. Every live item code has either been released to the floor already,
-  or its order is on hold / cancelled.
-</div>
-{% endfor %}
-
-{% if total_rows %}
-<form method="post" action="{% url 'production:create_job_card' %}" id="jcForm" class="selection-bar">
-  {% csrf_token %}
-  <div>
-    <div class="sel-count" id="selCount">0 items selected</div>
-    <div class="sel-label" id="selOrders">Nothing selected yet</div>
-  </div>
-
-  <label class="urgent-check">
-    <input type="checkbox" id="urgentFlag" name="is_urgent_split" value="1">
-    Mark as Urgent / Priority Split (reason logged)
-  </label>
-
-  <div class="sel-value">
-    <span class="cap">Selection value</span>
-    <span id="selValue">₹0</span>
-  </div>
-
-  <button type="submit" class="btn-create" id="createBtn" disabled>Create Job Card from Selection</button>
-
-  <div class="urgent-reason" id="urgentReason">
-    <div class="hint">Why is this batch jumping the queue? The reason is written to the audit trail and shown on the card.</div>
-    <textarea name="urgent_reason" id="urgentReasonText" rows="2"
-              placeholder="e.g. Customer requested priority dispatch on available items while the rest stay blocked."></textarea>
-  </div>
-</form>
-{% endif %}
-
-<div class="section-title">Job Cards Generated</div>
-{% for c in recent_cards %}
-<div class="jc-result {% if c.card.is_urgent_split %}is-urgent{% endif %}">
-  <div class="jc-head">
-    <div class="jc-no">
-      <a href="{% url 'production:job_card' jc_no=c.card.number %}">{{ c.card.number }}</a>
-      <span class="jc-when">— created {{ c.card.created_at|date:"d M Y" }}</span>
-      {% if c.card.is_urgent_split %}<span class="jc-urgent">Urgent Split</span>{% endif %}
+    <h1>Production — Sales Orders</h1>
+    <div class="desc">
+      Every live sales order, newest first. Open one to work its item codes and raise job cards.
+      Priority is set on the <a href="{% url 'production:priority_board' %}">Priority Board</a>.
     </div>
-    <div class="jc-items">P{{ c.card.priority }} · {{ c.card.progress_percent }}% complete</div>
-  </div>
-  <div class="jc-items">
-    Linked SO: {{ c.orders }} · Status: {{ c.state }} · {{ c.codes|length }} item code{{ c.codes|length|pluralize }}
-  </div>
-  {% if c.card.is_urgent_split and c.card.urgent_reason %}
-  <div class="jc-reason">Reason logged: {{ c.card.urgent_reason }}</div>
-  {% endif %}
-  <div class="jc-chips">
-    {% for code in c.codes %}<span class="jc-chip">{{ code }}</span>{% endfor %}
   </div>
 </div>
-{% empty %}
-<div class="empty-state">
-  No job cards yet — select ready item codes above and click “Create Job Card from Selection”.
+
+<div class="summary">
+  <div class="s"><div class="l">Open Orders</div><div class="v">{{ summary.orders }}</div></div>
+  <div class="s ready"><div class="l">Orders with Ready Items</div><div class="v">{{ summary.with_ready }}</div></div>
+  <div class="s ready"><div class="l">Item Codes Ready</div><div class="v">{{ summary.items_ready }}</div></div>
+  <div class="s blocked"><div class="l">Item Codes Blocked</div><div class="v">{{ summary.items_blocked }}</div></div>
 </div>
-{% endfor %}
-{% endblock %}
 
-{% block extra_js %}
-<script>
-  // Priority 1-4: swap the colour class live, then POST so the value lands on
-  // the sales order (the job card copies it when minted).
-  document.querySelectorAll('select.priority').forEach(function (sel) {
-    sel.addEventListener('change', function () {
-      this.classList.remove('p1', 'p2', 'p3', 'p4');
-      this.classList.add('p' + this.value);
-      if (this.form) { this.form.submit(); }
-    });
-  });
+<div class="toolbar">
+  {% for chip in chips %}
+  <a class="chip {% if chip.active %}on{% endif %}" href="{{ chip.url }}">{{ chip.label }}<span class="n">{{ chip.count }}</span></a>
+  {% endfor %}
+  <form class="search" method="get" action="{% url 'production:dashboard' %}">
+    {% if active_filter != 'all' %}<input type="hidden" name="f" value="{{ active_filter }}">{% endif %}
+    <input type="text" name="q" value="{{ q }}" placeholder="Search SO no., customer or QTN…">
+    <button type="submit">Search</button>
+    {% if q %}<a class="clear" href="?{% if active_filter != 'all' %}f={{ active_filter }}{% endif %}">Clear</a>{% endif %}
+  </form>
+</div>
 
-  (function () {
-    var form = document.getElementById('jcForm');
-    if (!form) { return; }
-
-    var checks = Array.prototype.slice.call(document.querySelectorAll('.item-check'));
-    var selCount = document.getElementById('selCount');
-    var selOrders = document.getElementById('selOrders');
-    var selValue = document.getElementById('selValue');
-    var createBtn = document.getElementById('createBtn');
-    var urgentFlag = document.getElementById('urgentFlag');
-    var urgentBox = document.getElementById('urgentReason');
-    var urgentText = document.getElementById('urgentReasonText');
-
-    function money(n) {
-      return '₹' + Math.round(n).toLocaleString('en-IN');
-    }
-
-    function update() {
-      var count = 0, value = 0, orders = [];
-      checks.forEach(function (c) {
-        var row = c.closest('tr');
-        if (c.checked) {
-          count += 1;
-          value += parseFloat(c.dataset.value || '0') || 0;
-          if (orders.indexOf(c.dataset.so) === -1) { orders.push(c.dataset.so); }
-          if (row) { row.classList.add('picked'); }
-        } else if (row) {
-          row.classList.remove('picked');
-        }
-      });
-
-      selCount.textContent = count + (count === 1 ? ' item selected' : ' items selected');
-      selValue.textContent = money(value);
-      selOrders.textContent = count
-        ? 'from ' + orders.sort().join(', ')
-        : 'Nothing selected yet';
-      createBtn.disabled = count === 0;
-    }
-
-    checks.forEach(function (c) { c.addEventListener('change', update); });
-
-    // The urgent flag is worthless without a reason — reveal it and make the
-    // browser insist, on top of the server-side check.
-    function syncUrgent() {
-      var on = urgentFlag.checked;
-      urgentBox.classList.toggle('show', on);
-      urgentText.required = on;
-      if (on) { urgentText.focus(); }
-    }
-    urgentFlag.addEventListener('change', syncUrgent);
-
-    form.addEventListener('submit', function (e) {
-      if (createBtn.disabled) { e.preventDefault(); return; }
-      if (urgentFlag.checked && !urgentText.value.trim()) {
-        e.preventDefault();
-        urgentText.focus();
-      }
-    });
-
-    update();
-    syncUrgent();
-  })();
-</script>
+<div class="table-wrap">
+<table class="so">
+  <thead>
+    <tr>
+      <th style="width:10%">SO No.</th>
+      <th style="width:17%">Customer</th>
+      <th style="width:11%">PO</th>
+      <th style="width:9%">Order Value</th>
+      <th style="width:17%">Items</th>
+      <th style="width:11%">Expected Delivery</th>
+      <th style="width:6%">Priority</th>
+      <th style="width:12%">Status</th>
+      <th style="width:7%"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr class="{% if r.on_hold %}held{% endif %}">
+      <td>
+        <div class="so-no"><a href="{{ r.detail_url }}">{{ r.order.number }}</a></div>
+        <div class="sub">{% if r.order.booked_on %}Booked {{ r.order.booked_on|date:"d M Y" }}{% else %}Not booked{% endif %}</div>
+      </td>
+      <td>
+        <div class="cust">{{ r.order.customer.name }}</div>
+        <div class="sub">
+          Ref {{ r.order.quotation.number }}
+          <span class="type-tag {% if r.is_repeat %}repeat{% else %}new{% endif %}">{{ r.order.get_order_type_display }}</span>
+        </div>
+      </td>
+      <td>
+        {% if r.po.url %}
+        <a class="po-chip" href="{{ r.po.url }}" title="{{ r.po.name }}">📄 {{ r.po.name }}</a>
+        {% elif r.po.name %}
+        <span class="po-chip" title="PO number on file, no scan attached">📄 {{ r.po.name }}</span>
+        {% else %}
+        <span class="po-chip missing">📄 No PO</span>
+        {% endif %}
+      </td>
+      <td class="amt">₹{{ r.order.order_value|floatformat:0 }}</td>
+      <td>
+        <div class="mix">
+          <b class="rd">{{ r.counts.ready }}</b> of {{ r.counts.total }} ready ·
+          <b class="jc">{{ r.counts.carded }}</b> on job cards ·
+          <b class="bl">{{ r.counts.blocked }}</b> blocked
+        </div>
+        <div class="bar" title="{{ r.counts.carded }} carded / {{ r.counts.ready }} ready / {{ r.counts.blocked }} blocked">
+          <span class="b-jc" style="width:{{ r.counts.carded_pct }}%"></span>
+          <span class="b-rd" style="width:{{ r.counts.ready_pct }}%"></span>
+          <span class="b-bl" style="width:{{ r.counts.blocked_pct }}%"></span>
+        </div>
+      </td>
+      <td>
+        <div class="due {{ r.due_class }}">
+          {% if r.days is None %}
+            <span class="d">—</span><span class="w">no due date</span>
+          {% else %}
+            <span class="d">{{ r.order.expected_delivery|date:"d M Y" }}</span>
+            <span class="w">{% if r.days < 0 %}overdue by {{ r.days|stringformat:"d"|cut:"-" }} day{% else %}in {{ r.days }} day{{ r.days|pluralize }}{% endif %}</span>
+          {% endif %}
+        </div>
+      </td>
+      <td><span class="prio p{{ r.order.priority }}">P{{ r.order.priority }}</span></td>
+      <td>
+        <span class="status-pill-sm {{ r.order.health|lower }}">{{ r.order.get_status_display }}</span>
+        {% if r.on_hold %}<div class="hold-why">{{ r.order.hold_reason|default:"On hold — no reason recorded" }}</div>{% endif %}
+      </td>
+      <td><a class="open" href="{{ r.detail_url }}">Open →</a></td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="9">
+        <div class="empty-state">
+          {% if q or active_filter != 'all' %}
+            No live sales order matches this filter. <a href="{% url 'production:dashboard' %}">Show all live orders</a>.
+          {% else %}
+            No live sales orders. Everything booked has been dispatched or cancelled.
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
 {% endblock %}

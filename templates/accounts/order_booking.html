@@ -54,6 +54,10 @@
 
   /* File chips */
   .files { display: flex; flex-direction: column; gap: 5px; }
+  .po-no {
+    font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 600;
+    color: var(--ink); letter-spacing: .01em;
+  }
   .file-chip {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; padding: 4px 8px; border-radius: 3px; border: 1px solid var(--line);
@@ -334,6 +338,8 @@
       </td>
       <td>
         <div class="files">
+          {# Customer's PO number — the filename is whatever they called it. #}
+          {% if row.po.number %}<div class="po-no">{{ row.po.number }}</div>{% endif %}
           <div class="file-chip po"><span class="ic">PO</span><span class="name"{% if row.po.url %} title="{{ row.po.name }}"{% endif %}>{% if row.po.url %}<a href="{{ row.po.url }}">{{ row.po.name }}</a>{% else %}{{ row.po.name }}{% endif %}</span></div>
           <div class="file-chip dwg"><span class="ic">DW</span><span class="name">{% if row.drawing.url %}<a href="{{ row.drawing.url }}">{{ row.drawing.name }}</a>{% else %}{{ row.drawing.name }}{% endif %}</span>{% if row.drawing.rev %}<span class="rev">{{ row.drawing.rev }}</span>{% endif %}</div>
         </div>

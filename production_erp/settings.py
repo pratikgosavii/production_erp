@@ -74,6 +74,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # Topbar bell + the Sales query-inbox badge (§7.1, §9).
+                'core.context_processors.badges',
             ],
         },
     },

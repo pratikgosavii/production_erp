@@ -131,6 +131,7 @@
 {% endblock %}
 
 {% block sidebar_content %}
+{% if can_manage %}
 <div class="nav-section">
   <div class="nav-label">Stores</div>
   <a href="{% url 'stores:dashboard' %}" class="nav-item active">
@@ -146,6 +147,30 @@
     <span class="icon">🚚</span> Dispatch / Outward
   </a>
 </div>
+{% elif user.is_designer %}
+<div class="nav-section">
+  <div class="nav-label">Design</div>
+  <a href="{% url 'design:queue' %}" class="nav-item">
+    <span class="icon">📋</span> Design Queue
+  </a>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item active">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+</div>
+{% else %}
+<div class="nav-section">
+  <div class="nav-label">Production</div>
+  <a href="{% url 'production:dashboard' %}" class="nav-item">
+    <span class="icon">🏭</span> Sales Orders
+  </a>
+  <a href="{% url 'production:priority_board' %}" class="nav-item">
+    <span class="icon">🎯</span> Priority Board
+  </a>
+  <a href="{% url 'stores:dashboard' %}" class="nav-item active">
+    <span class="icon">📦</span> Material Inventory
+  </a>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -186,8 +211,10 @@
     <a class="chip {% if chip == 'reserved' %}active{% endif %}" href="?status=reserved{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Reserved</a>
     <a class="chip {% if chip == 'issued' %}active{% endif %}" href="?status=issued{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Issued</a>
     <a class="chip {% if chip == 'low' %}active{% endif %}" href="?status=low{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if material_id %}&amp;material={{ material_id }}{% endif %}{% if kind %}&amp;kind={{ kind }}{% endif %}">Low Stock</a>
+    {% if can_manage %}
     <a href="{% url 'stores:scan' %}" class="btn-scan">📷 Scan Sheet QR</a>
     <a href="{% url 'stores:log_sheet' %}" class="btn-add">+ Log New Sheet</a>
+    {% endif %}
   </form>
 </div>
 
@@ -240,7 +267,10 @@
       <td class="loc">{{ sheet.rack.name|default:"—" }}</td>
       <td style="font-size:11px;">{{ sheet.received_on|date:"d M Y"|default:"—" }}</td>
       <td>
-        {% if sheet.status == 'RESERVED' and res %}
+        {% if not can_manage %}
+          {# Design/Production are looking, not acting — issuing is Stores' call. #}
+          <span class="cell-note">—</span>
+        {% elif sheet.status == 'RESERVED' and res %}
           <form method="post" class="inline-form" action="{% url 'stores:issue_sheet' sheet.uid %}">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -315,11 +345,13 @@
       <td>
         {% if rec.is_dispatched %}
           <span class="cell-note">{{ rec.dispatched_at|date:"d M" }} — {{ rec.dispatched_by.short_name|default:"—" }}</span>
-        {% else %}
+        {% elif can_manage %}
           <form method="post" class="inline-form" action="{% url 'stores:mark_dispatched' rec.pk %}">
             {% csrf_token %}
             <button type="submit" class="btn-dispatch">Mark Dispatched</button>
           </form>
+        {% else %}
+          <span class="cell-note">Awaiting Stores</span>
         {% endif %}
       </td>
     </tr>

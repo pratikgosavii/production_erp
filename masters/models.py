@@ -141,7 +141,7 @@ class Rack(NamedMaster):
 
 
 class Customer(TimeStampedModel):
-    """§3.2 Bill-To. Email matters: 'Send to Customer' mails the quote PDF here."""
+    """§3.2 Bill-To — printed at the top of the quotation PDF."""
 
     name = models.CharField(max_length=150, unique=True)
     address = models.CharField(max_length=250, blank=True)

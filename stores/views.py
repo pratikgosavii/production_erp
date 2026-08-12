@@ -30,6 +30,15 @@ from .models import DispatchRecord, Sheet
 
 STORES = role_required('is_stores')
 
+# Design and the Production Manager need to SEE stock — a designer picking a
+# sheet wants the whole list, not just the few offered on their job. They get
+# the inventory read-only; issuing, logging and dispatch stay with Stores.
+STORES_READONLY = role_required('is_stores', 'is_designer', 'is_production_manager')
+
+
+def _can_manage_stock(user):
+    return bool(user.is_superuser or getattr(user, 'is_stores', False))
+
 # Chip -> queryset filter on the inventory table.
 STATUS_CHIPS = {
     'available': SheetStatus.AVAILABLE,
@@ -66,9 +75,12 @@ def _below_reorder():
     return rows
 
 
-@STORES
+@STORES_READONLY
 def dashboard(request):
-    """Material inventory + the outward dispatch queue."""
+    """Material inventory + the outward dispatch queue.
+
+    Readable by Design and the Production Manager; only Stores can act on it.
+    """
     sheets = _sheet_queryset()
 
     q = (request.GET.get('q') or '').strip()
@@ -132,6 +144,9 @@ def dashboard(request):
         'materials': active_lookups()['materials'],
         'q': q, 'material_id': material_id, 'kind': kind, 'chip': chip,
         'unassigned': UNASSIGNED,
+        # Design/Production see the same stock, read-only.
+        'can_manage': _can_manage_stock(request.user),
+        'is_designer_view': not _can_manage_stock(request.user),
     })
 
 

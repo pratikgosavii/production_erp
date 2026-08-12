@@ -143,11 +143,22 @@ def _dots(stage):
 
 
 def _po_chip(quotation):
+    """The PO chip.
+
+    `number` is carried separately from `name`: Accounts reconcile against the
+    customer's own PO number, and the uploaded file is called whatever the
+    customer happened to name it.
+    """
+    number = quotation.po_number or ''
     if quotation.po_file:
-        return {'name': _basename(quotation.po_file.name), 'url': quotation.po_file.url}
-    if quotation.po_number:
-        return {'name': quotation.po_number, 'url': ''}
-    return {'name': '—', 'url': ''}
+        return {
+            'name': _basename(quotation.po_file.name),
+            'url': quotation.po_file.url,
+            'number': number,
+        }
+    if number:
+        return {'name': number, 'url': '', 'number': ''}
+    return {'name': '—', 'url': '', 'number': ''}
 
 
 def _drawing_chip(quotation, order=None):
@@ -218,6 +229,10 @@ def _quotation_row(quotation):
         book_url=reverse('accounts:book_order', args=[quotation.pk]),
         reject_url=reverse('accounts:reject_po', args=[quotation.pk]),
         drawing_url=reverse('accounts:request_drawing', args=[quotation.pk]),
+        # No Sales Order exists yet, so "View" opens the QUOTATION — Accounts
+        # need its line items and rates to decide whether the PO matches.
+        detail_url=reverse('sales:quotation_detail', args=[quotation.pk]),
+        detail_label='\U0001f441 View',
     )
 
 
@@ -287,10 +302,10 @@ def _build_rows():
     )
 
     rows = [_quotation_row(q) for q in quotations] + [_order_row(o) for o in orders]
-    # Un-booked quotations first — they are the ones waiting on Accounts —
-    # then everything else newest first.
+    # Newest first, quotations and orders interleaved by date. The "Pending
+    # booking" chip is how Accounts find what needs them, so the list itself
+    # does not need to hoist un-booked quotations to the top.
     rows.sort(key=lambda r: (
-        0 if r.kind == 'QTN' else 1,
         -(r.date.toordinal() if r.date else 0),
         r.number,
     ))

@@ -1,0 +1,19 @@
+{% comment %}
+Production Manager navigation. Deliberately NOT included by job_card.html:
+that template is the Floor Manager's sheet (role_required('is_floor_manager')),
+and its sidebar must stay on the floor's own footing.
+{% endcomment %}
+<div class="nav-section">
+  <div class="nav-label">Production</div>
+  <a href="{% url 'production:dashboard' %}" class="nav-item {% if nav == 'orders' %}active{% endif %}">
+    <span class="icon">🏭</span> Sales Orders
+  </a>
+  <a href="{% url 'production:priority_board' %}" class="nav-item {% if nav == 'priority' %}active{% endif %}">
+    <span class="icon">🎯</span> Priority Board
+  </a>
+  {% if nav_order %}
+  <a href="{% url 'production:order_detail' so_no=nav_order %}" class="nav-item active">
+    <span class="icon">🧾</span> {{ nav_order }}
+  </a>
+  {% endif %}
+</div>

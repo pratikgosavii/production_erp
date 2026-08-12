@@ -106,7 +106,9 @@ def _design_orders(user):
         orders = orders.filter(
             Q(assigned_designer=user) | Q(assigned_designer__isnull=True)
         )
-    return orders.order_by('expected_delivery', 'number')
+    # Newest job first — the designer wants what just landed, not the oldest
+    # due date. Urgency is already visible on each card as Expected Delivery.
+    return orders.order_by('-booked_on', '-number')
 
 
 def _open_query(order, item=None):

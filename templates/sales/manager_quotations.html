@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}All Quotations — Sales Manager{% endblock %}
+{% block topbar_sub %}Sales Manager — All Quotations{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">{{ role_label }}</span>
+  <span class="name">{{ user_name }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+  }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .page-head .breadcrumb { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar input[type=text] {
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 3px;
+    font-size: 12.5px; width: 230px; font-family: 'IBM Plex Sans';
+  }
+  .toolbar input[type=text]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); }
+
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip {
+    padding: 5px 11px; border: 1px solid var(--line); border-radius: 20px;
+    font-size: 11.5px; background: #fff; color: var(--ink-soft);
+    text-decoration: none; display: inline-block; white-space: nowrap;
+  }
+  .chip:hover { text-decoration: none; border-color: var(--steel); color: var(--ink); }
+  .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  .result-line { font-size: 11px; color: var(--ink-soft); margin: 0 0 8px; font-style: italic; }
+
+  table.q { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  table.q thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 10px 12px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  table.q tbody tr { border-top: 1px solid var(--line); }
+  table.q tbody tr:hover { background: #fafbfc; }
+  table.q td { padding: 11px 12px; vertical-align: top; }
+
+  .qno { font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 12px; }
+  .qno a { color: var(--ink); text-decoration: none; }
+  .qno a:hover { color: var(--blue); text-decoration: underline; }
+  .qno .ver { font-size: 10px; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
+  .cust { font-weight: 600; }
+  .cust .sub { font-weight: 400; font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .amt { font-family: 'IBM Plex Mono'; font-weight: 600; text-align: right; display: block; }
+  .when { font-size: 11.5px; font-family: 'IBM Plex Mono'; color: var(--ink-soft); }
+
+  /* The manager's own decision, kept visible — this screen exists for it. */
+  .decision { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+  .decision b { color: var(--ink); font-weight: 600; }
+  .decision.rejected { color: var(--red); }
+  .comment { font-style: italic; }
+
+  tr.empty td {
+    padding: 34px 20px; text-align: center; color: var(--ink-soft);
+    font-size: 12.5px; background: #fafbfc;
+  }
+
+  /* Action column — an explicit button, not just a linked number. */
+  .btn-view, .btn-decide {
+    display: block; text-align: center; white-space: nowrap;
+    font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 3px;
+    text-decoration: none;
+  }
+  .btn-view {
+    border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+  }
+  .btn-view:hover { border-color: var(--steel); color: var(--ink); text-decoration: none; }
+  .btn-decide {
+    border: 1px solid var(--amber); background: var(--amber-bg); color: var(--amber);
+    margin-top: 5px;
+  }
+  .btn-decide:hover { background: #fbe6c8; text-decoration: none; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Sales Manager</div>
+  <a href="{% url 'sales:manager_approvals' %}" class="nav-item">
+    <span class="icon">✅</span> Approval Queue
+  </a>
+  <a href="{% url 'sales:manager_quotations' %}" class="nav-item active">
+    <span class="icon">📄</span> All Quotations
+  </a>
+  <a href="{% url 'masters:customers' %}" class="nav-item">
+    <span class="icon">🏢</span> Customers
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+{% for message in messages %}
+  <div class="flash {{ message.tags }}">{{ message }}</div>
+{% endfor %}
+
+<div class="page-head">
+  <div>
+    <h1>All Quotations</h1>
+    <div class="breadcrumb">Sales Manager → All Quotations — every quotation, whoever raised it</div>
+  </div>
+  <form class="toolbar" method="get">
+    {% if active_status != 'all' %}<input type="hidden" name="status" value="{{ active_status }}">{% endif %}
+    <input type="text" name="q" value="{{ search }}" placeholder="Search QTN / customer / salesperson">
+  </form>
+</div>
+
+<div class="chips">
+  {% for value, label, count in chips %}
+    <a class="chip {% if value == active_status %}active{% endif %}"
+       href="?status={{ value }}{% if search %}&q={{ search }}{% endif %}">{{ label }} ({{ count }})</a>
+  {% endfor %}
+</div>
+
+<div class="result-line">Showing {{ total_shown }} quotation{{ total_shown|pluralize }}, newest first.</div>
+
+<div style="overflow-x:auto;">
+<table class="q">
+  <thead>
+    <tr>
+      <th style="width:11%">Quotation No.</th>
+      <th style="width:17%">Customer</th>
+      <th style="width:10%">Sales Person</th>
+      <th style="width:18%">Material / Spec</th>
+      <th style="width:10%">Grand Total</th>
+      <th style="width:8%">Quote Date</th>
+      <th style="width:22%">Status &amp; Decision</th>
+      <th style="width:7%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for q in rows %}
+    <tr>
+      <td>
+        <div class="qno">
+          <a href="{% url 'sales:quotation_detail' q.pk %}">{{ q.number }}</a>
+          <div class="ver">v{{ q.version }}{% if q.supersedes %} (resubmitted){% endif %}</div>
+        </div>
+      </td>
+      <td><div class="cust">{{ q.customer.name }}</div></td>
+      <td style="font-size:11.5px;">{{ q.salesperson.short_name }}</td>
+      <td style="font-size:11.5px;">{{ q.spec_display|default:"—" }}</td>
+      <td><span class="amt">{{ q.total_display }}</span></td>
+      <td><span class="when">{{ q.quote_date|date:"d M Y" }}</span></td>
+      <td>
+        <span class="badge {{ q.badge_class }}">{{ q.get_status_display }}</span>
+        {% if q.approved_by %}
+          <div class="decision {% if q.status == 'REJECTED' %}rejected{% endif %}">
+            {% if q.status == 'REJECTED' %}Rejected{% else %}Approved{% endif %}
+            by <b>{{ q.approved_by.short_name }}</b>
+            {% if q.approved_at %}on {{ q.approved_at|date:"d M Y" }}{% endif %}
+            {% if q.manager_comment %}<br><span class="comment">"{{ q.manager_comment }}"</span>{% endif %}
+          </div>
+        {% elif q.submitted_at %}
+          <div class="decision">Submitted {{ q.submitted_at|date:"d M Y" }} — no decision yet</div>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'sales:quotation_detail' q.pk %}" class="btn-view">👁 View</a>
+        {% if q.status == 'PENDING_APPROVAL' %}
+          <a href="{% url 'sales:manager_approvals' %}" class="btn-decide">Decide →</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr class="empty">
+      <td colspan="8">
+        No quotations match this filter.
+        {% if search %}Try clearing the search.{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

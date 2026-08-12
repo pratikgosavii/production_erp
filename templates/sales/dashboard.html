@@ -86,9 +86,11 @@
   .file-mini { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
   .file-mini span { color: var(--ink); font-weight: 500; }
   .file-mini .missing { color: var(--amber); font-weight: 600; }
-
-  /* Sent-to-customer confirmation stamp */
-  .sent-flag { font-size: 10.5px; color: var(--green); margin-top: 4px; }
+  /* The customer's PO number — what they quote back at you on the phone. */
+  .po-no {
+    font-family: 'IBM Plex Mono'; font-size: 10.5px; font-weight: 600;
+    color: var(--ink); margin-top: 3px;
+  }
 
   /* Rejection note raised by ACCOUNTS on the PO (distinct from the manager
      quotation-rejection .comment-flag above) */
@@ -168,8 +170,8 @@
   <a href="{% url 'sales:dashboard' %}" class="nav-item active">
     <span class="icon">📋</span> My Quotations
   </a>
-  <a href="{% url 'sales:quotation_create' %}" class="nav-item">
-    <span class="icon">✏️</span> New Quotation
+  <a href="{% url 'sales:queries' %}" class="nav-item">
+    <span class="icon">❓</span> Design Queries{% if open_query_count %} ({{ open_query_count }}){% endif %}
   </a>
   <a href="{% url 'masters:customers' %}" class="nav-item">
     <span class="icon">🏢</span> Customers
@@ -266,9 +268,14 @@
           <div class="po-status waiting">Awaiting PO from customer</div>
         {% elif q.action_kind == 'convertible' %}
           <div class="po-status received">PO &amp; drawing received</div>
+          {% if q.po_number %}<div class="po-no">{{ q.po_number }}</div>{% endif %}
           <div class="file-mini">📎 <span>{{ q.po_file.name|cut:"po/" }}</span> · 📐 <span>{{ q.drawing_file.name|cut:"drawings/" }}</span></div>
+        {% elif q.action_kind == 'with_accounts' %}
+          <div class="po-status waiting">With Accounts — awaiting PO approval</div>
+          <div class="file-mini">Sent {{ q.sent_to_accounts_at|date:"d M Y, h:i A" }}</div>
         {% elif q.action_kind == 'no_drawing' %}
           <div class="po-status waiting">Awaiting drawing — cannot enter Design queue</div>
+          {% if q.po_number %}<div class="po-no">{{ q.po_number }}</div>{% endif %}
           <div class="file-mini">📎 <span>{{ q.po_file.name|cut:"po/"|default:"PO on file" }}</span> · 📐 <span class="missing">Drawing not uploaded</span></div>
         {% elif q.action_kind == 'po_rejected' %}
           <div class="po-status rejected">Returned by Accounts — re-upload required</div>
@@ -278,11 +285,8 @@
             <span class="who">✕ {{ q.po_rejected_by.short_name|default:"Accounts" }} · Accounts · {{ q.po_rejected_at|date:'d M Y' }}</span>
           </div>
           {% endif %}
+          {% if q.po_number %}<div class="po-no">{{ q.po_number }}</div>{% endif %}
           <div class="file-mini">📎 <span>{{ q.po_file.name|cut:"po/"|default:"—" }}</span>{% if q.has_drawing %} · 📐 <span>{{ q.drawing_file.name|cut:"drawings/" }}</span>{% endif %}</div>
-        {% endif %}
-
-        {% if q.sent_to_customer_at %}
-          <div class="sent-flag">✉ Quote PDF sent {{ q.sent_to_customer_at|date:'d M Y' }}{% if q.customer.email %} · {{ q.customer.email }}{% endif %}</div>
         {% endif %}
       </td>
 
@@ -298,13 +302,8 @@
           </form>
 
         {% elif q.action_kind == 'awaiting_po' %}
+          {# The quote is out with the customer — recording the PO is the whole job. #}
           <div class="action-stack">
-            <form method="post" action="{% url 'sales:quotation_send' q.pk %}">
-              {% csrf_token %}
-              <button type="submit" class="action-btn primary" onclick="return sendToCustomer(this)">
-                {% if q.sent_to_customer_at %}Resend to Customer{% else %}Send to Customer{% endif %}
-              </button>
-            </form>
             <button type="button" class="action-btn upload" onclick="openPoModal(this, 'upload')">+ Upload PO / Drawing</button>
           </div>
 
@@ -315,7 +314,15 @@
               <button type="submit" class="action-btn convert">Convert to Sales Order →</button>
             </form>
             {% if q.po_file %}
-              <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PDF</a>
+              <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
+            {% endif %}
+          </div>
+
+        {% elif q.action_kind == 'with_accounts' %}
+          {# Already handed over — nothing for Sales to do but watch. #}
+          <div class="action-stack">
+            {% if q.po_file %}
+              <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
             {% endif %}
           </div>
 
@@ -341,7 +348,9 @@
           <span class="action-note">Booked by Accounts</span>
         {% endif %}
 
-        {# Every row reaches the read-only full detail, whatever its status. #}
+        {# Every row reaches the read-only full detail AND the printed
+           quotation, whatever its status — a draft included. #}
+        <a href="{% url 'sales:quotation_pdf' q.pk %}" target="_blank" class="action-btn">View Quotation</a>
         <a href="{% url 'sales:quotation_detail' q.pk %}" class="action-btn">View</a>
         </div>
       </td>
@@ -528,17 +537,5 @@
 
   // The modal now posts itself (multipart) to sales:quotation_po — the row is
   // re-rendered from the database on the redirect, not patched in the DOM.
-
-  // ---- Send the quotation PDF to the customer -----------------------------
-  // Confirms, then lets the surrounding POST form submit for real.
-  function sendToCustomer(btn) {
-    const row   = btn.closest('tr');
-    const qno   = row.dataset.qno;
-    const cust  = row.dataset.cust;
-    const email = row.dataset.email || '(no email on the customer master)';
-
-    return confirm('Email the approved quotation PDF?\n\n' + qno + ' — ' + cust + '\nTo: ' + email +
-                   '\nAttachment: ' + qno + '.pdf\n\nThe customer is emailed automatically on confirm.');
-  }
 </script>
 {% endblock %}

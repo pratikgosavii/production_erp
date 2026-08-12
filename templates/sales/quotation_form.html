@@ -914,15 +914,19 @@
     const container = document.getElementById('itemsContainer');
     if (container.querySelectorAll('.item-card:not([hidden])').length <= 1) return;
 
-    const pk = card.querySelector('input[name="items-' + card.dataset.formIndex + '-id"]');
-    if (pk && pk.value) {
-      const flag = card.querySelector('.item-delete');
-      if (flag) flag.value = 'on';
-      card.hidden = true;
-      card.dataset.codeState = '';
-    } else {
-      card.remove();
-    }
+    // HIDE, never remove. Pulling the card out of the DOM takes its nested
+    // tier management inputs with it while items-TOTAL_FORMS still counts it,
+    // so Django goes looking for items-<n>-tiers-TOTAL_FORMS and reports
+    // "(Hidden field TOTAL_FORMS) This field is required" against a different
+    // item than the one that was deleted. Ticking DELETE keeps the indices
+    // contiguous and lets the formset drop the row server-side.
+    const flag = card.querySelector('.item-delete');
+    if (flag) flag.value = 'on';
+    card.hidden = true;
+    card.dataset.codeState = '';
+    // A row on its way out must not block submit with half-filled values.
+    card.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
+
     renumberItems();
     recalcTotals();
   }

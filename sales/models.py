@@ -69,6 +69,12 @@ class Quotation(TimeStampedModel):
 
     sent_to_customer_at = models.DateTimeField(null=True, blank=True)
 
+    # Handed to Accounts for booking. The status stays PO_UPLOADED — that is
+    # what the Order Booking queue reads — but this stamp is what stops the
+    # salesperson re-sending it and keeps "Convert to Sales Order" from
+    # sitting there after it has already gone.
+    sent_to_accounts_at = models.DateTimeField(null=True, blank=True)
+
     # PO capture (§3.3 — this screen is the origin of these fields)
     po_number = models.CharField(max_length=60, blank=True)
     po_file = models.FileField(upload_to='po/', blank=True)
@@ -128,6 +134,12 @@ class Quotation(TimeStampedModel):
         return bool(self.drawing_file)
 
     @property
+    def is_with_accounts(self):
+        """Handed over and waiting on Accounts to confirm the PO."""
+        return (self.status == QuotationStatus.PO_UPLOADED
+                and self.sent_to_accounts_at is not None)
+
+    @property
     def unapproved_items(self):
         """Line items whose item code still needs the manager's sign-off."""
         return [i for i in self.items.select_related('item_code') if i.needs_code_approval]
@@ -177,10 +189,15 @@ class Quotation(TimeStampedModel):
 
     @transaction.atomic
     def approve(self, user):
-        """Approving the quote signs off the RATE BAND behind every line.
+        """Approving the quote signs off EVERY slab the salesperson quoted.
 
-        Only the bands this quotation actually quotes are touched; every other
-        band on the same item code is left exactly as it was, because an
+        The whole ladder is locked in, not just the band the quoted quantity
+        happens to land in. A salesperson who types 1-100 / 101-200 / 201-300
+        has priced all three, the manager has seen all three, and the customer
+        was given all three — so a later PO for 250 must not come back for
+        another approval.
+
+        Bands this quotation does NOT mention are left exactly as they are; an
         approved band is permanent.
 
         A quote carrying a straddling slab is refused outright, before the
@@ -198,18 +215,18 @@ class Quotation(TimeStampedModel):
 
         for item in self.items.select_related('item_code').prefetch_related('tiers'):
             code = item.item_code
-            if code is None or not item.quantity:
+            if code is None:
                 continue
-            tier = item.applicable_tier
-            if tier is None:
-                # No slab covers the quantity — there is no rate to approve.
-                continue
-            band, kind = code.add_or_revise_band(
-                tier.qty_from, tier.qty_to, item.effective_rate,
-                reason=f'Quoted on {self.number}',
-            )
-            if kind != 'unchanged':
-                band.approve(user, self.number)
+            for tier in item.tiers.all():
+                if not tier.rate_per_unit:
+                    # A blank slab row the salesperson never filled in.
+                    continue
+                band, kind = code.add_or_revise_band(
+                    tier.qty_from, tier.qty_to, tier.rate_per_unit,
+                    reason=f'Quoted on {self.number}',
+                )
+                if kind != 'unchanged':
+                    band.approve(user, self.number)
             code.refresh_approved_rate()
 
         self.status = QuotationStatus.APPROVED
@@ -308,39 +325,56 @@ class QuotationItem(TimeStampedModel):
         return (self.effective_rate * self.quantity).quantize(Decimal('0.01'))
 
     @property
-    def needs_code_approval(self):
-        """True when this line would add to, or change, the customer's rate card.
+    def unapproved_tiers(self):
+        """Every quoted slab that is not already on the rate card at that rate.
 
-        The band covering the quoted quantity is what matters: if it is already
-        approved at this rate the line is auto-priced and needs no sign-off, no
-        matter what any other band on the code is doing.
+        approve() writes the whole ladder, so the manager is signing off every
+        slab — not merely the one the quoted quantity happens to land in.
         """
-        if not self.item_code or not self.quantity:
+        code = self.item_code
+        if code is None:
+            return []
+        pending = []
+        for tier in self.tiers.all():
+            if not tier.rate_per_unit:
+                continue
+            band = code.band_for(tier.qty_from)
+            same_range = (band is not None
+                          and band.qty_from == tier.qty_from
+                          and band.qty_to == tier.qty_to)
+            if not same_range or not band.is_approved \
+                    or band.approved_rate != tier.rate_per_unit:
+                pending.append(tier)
+        return pending
+
+    @property
+    def needs_code_approval(self):
+        """True when any quoted slab would add to, or change, the rate card."""
+        if not self.item_code:
             return False
-        band = self.item_code.approved_band_for(self.quantity)
-        if band is None:
-            return True
-        return band.approved_rate != self.effective_rate
+        return bool(self.unapproved_tiers)
 
     @property
     def band_conflicts(self):
-        """[(tier, conflicting_band)] — the slab that would straddle the rate card.
+        """[(tier, conflicting_band)] — quoted slabs that straddle the rate card.
 
-        Only the APPLICABLE tier is checked, because that is the only one
-        approve() ever writes to the rate card. Blocking on the other slabs
-        punishes a quote for rows that will never be committed — a quote of 200
-        against a clean 101-300 band was being refused because some unrelated
-        301+ row overlapped an existing 301-1000 band.
+        EVERY tier is checked, because approve() now writes every tier. Checking
+        only the applicable one would let a straddling slab through the submit
+        gate and then blow up mid-approval.
 
         An exact range match is fine (that is a revision of that band) and so
         is a range that touches nothing (that is a new band).
         """
         code = self.item_code
-        tier = self.applicable_tier
-        if code is None or tier is None:
+        if code is None:
             return []
-        return [(tier, band)
-                for band in code.overlapping_bands(tier.qty_from, tier.qty_to)]
+        found = []
+        for tier in self.tiers.all():
+            if not tier.rate_per_unit:
+                continue
+            for band in code.overlapping_bands(tier.qty_from, tier.qty_to):
+                found.append((tier, band))
+        return found
 
     @property
     def has_band_conflict(self):

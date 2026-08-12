@@ -10,6 +10,7 @@ from django.shortcuts import redirect
 urlpatterns = [
     path('', lambda req: redirect('users:login'), name='home'),
     path('admin/', admin.site.urls),
+    path('', include('core.urls')),
     path('users/', include('users.urls')),
     path('sales/', include('sales.urls')),
     path('accounts/', include('accounts.urls')),
