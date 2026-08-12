@@ -251,6 +251,16 @@
   .line-items-preview td {
     padding: 8px 12px; border-top: 1px solid var(--line); background: #fff;
   }
+  .line-items-preview th.r, .line-items-preview td.r { text-align: right; }
+  /* Area and rate-per-sq-inch: derived, so they read as figures not fields. */
+  .line-items-preview td.area,
+  .line-items-preview td.persq { font-family: 'IBM Plex Mono'; white-space: nowrap; }
+  .line-items-preview td.persq { font-weight: 700; color: var(--steel); }
+  .line-items-preview .unit {
+    display: block; font-size: 9px; color: var(--ink-soft);
+    font-family: 'IBM Plex Sans'; font-weight: 400; margin-top: 1px;
+  }
+  .line-items-preview .na { color: var(--gray); }
 </style>
 {% endblock %}
 
@@ -414,7 +424,13 @@
           <div class="line-items-preview">
             <table>
               <thead>
-                <tr><th>#</th><th>Item Code</th><th>Description</th><th>Material</th><th>Size</th><th>Qty Tier</th><th>Rate/Unit</th><th>Tooling</th></tr>
+                <tr>
+                  <th>#</th><th>Item Code</th><th>Description</th><th>Material</th><th>Size</th>
+                  <th class="r">Area / Plate</th>
+                  <th>Qty Tier</th><th class="r">Rate/Unit</th>
+                  <th class="r">Rate / sq.in</th>
+                  <th class="r">Tooling</th>
+                </tr>
               </thead>
               <tbody>
                 {% for item in q.line_items %}
@@ -439,16 +455,25 @@
                   <td style="font-weight:600;">{{ item.description|default:"—" }}</td>
                   <td>{{ item.material.name|default:"—" }}{% if item.thickness %}, {{ item.thickness.name }}{% endif %}</td>
                   <td>{{ item.size|default:"—" }}</td>
+                  <td class="r area">
+                    {% if item.area_sq_in %}{{ item.area_sq_in }}<span class="unit">sq.in</span>
+                    {% else %}<span class="na">—</span>{% endif %}
+                  </td>
                   <td>
                     {% for tier in item.tiers.all %}
                       {{ tier.qty_from }}–{{ tier.qty_to|default:"∞" }}: ₹{{ tier.rate_per_unit|floatformat:0 }}{% if not forloop.last %}<br>{% endif %}
                     {% empty %}—{% endfor %}
                   </td>
-                  <td>₹{{ item.effective_rate|floatformat:2 }}</td>
-                  <td>₹{{ item.tooling_charge|floatformat:0 }}</td>
+                  <td class="r">₹{{ item.effective_rate|floatformat:2 }}</td>
+                  {# Normalised rate — the only way to compare plates of different sizes. #}
+                  <td class="r persq">
+                    {% if item.rate_per_sq_in %}{{ item.rate_per_sq_in }}
+                    {% else %}<span class="na">—</span>{% endif %}
+                  </td>
+                  <td class="r">₹{{ item.tooling_charge|floatformat:0 }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" style="font-style:italic; color:var(--ink-soft);">No line items on this quotation.</td></tr>
+                <tr><td colspan="10" style="font-style:italic; color:var(--ink-soft);">No line items on this quotation.</td></tr>
                 {% endfor %}
               </tbody>
             </table>

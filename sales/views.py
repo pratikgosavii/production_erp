@@ -4,6 +4,7 @@ Everything that changes state is a POST followed by a redirect (§9 audit), and
 every view is gated by the role flags in core.decorators — hiding a button is
 not access control.
 """
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -94,6 +95,43 @@ def _money(value):
 def _rate(value):
     """_money, but per-unit rates keep their paise."""
     return f'₹{Decimal(value or 0):,.2f}'
+
+
+MM2_PER_SQ_INCH = Decimal('645.16')          # 25.4mm squared
+
+
+def _plate_area_sq_in(size_text):
+    """'150 x 110' (mm) -> 25.58 sq.in, or None when the size is unparseable.
+
+    Sizes are free text, so anything that is not two numbers separated by an x
+    returns None and the caller shows a dash rather than a wrong figure.
+    """
+    if not size_text:
+        return None
+    parts = re.findall(r'\d+(?:\.\d+)?', str(size_text))
+    if len(parts) < 2:
+        return None
+    length, width = Decimal(parts[0]), Decimal(parts[1])
+    if length <= 0 or width <= 0:
+        return None
+    return (length * width / MM2_PER_SQ_INCH).quantize(Decimal('0.01'))
+
+
+def _rate_per_sq_in(rate, area):
+    """The quoted rate normalised by plate area — comparable across sizes."""
+    if not area or area <= 0 or not rate:
+        return None
+    return (Decimal(rate) / area).quantize(Decimal('0.01'))
+
+
+def _area_metrics(item):
+    """Area and rate-per-sq-inch for one line item, ready for the template."""
+    area = _plate_area_sq_in(item.size or (item.item_code.size if item.item_code else ''))
+    per_sq_in = _rate_per_sq_in(item.effective_rate, area)
+    return {
+        'area': f'{area}' if area else '',
+        'rate_per_sq_in': _rate(per_sq_in) if per_sq_in else '',
+    }
 
 
 def _spec_line(quotation):
@@ -831,6 +869,13 @@ def _code_rows(quotation):
 
 def _decorate_for_manager(quotation):
     items = list(quotation.items.all())
+    # Area and rate-per-sq-inch let the manager compare a small plate against a
+    # large one on the same footing; the raw rate alone cannot say whether
+    # Rs.1,382 for a 200x150 is better or worse than Rs.380 for a 150x110.
+    for item in items:
+        metrics = _area_metrics(item)
+        item.area_sq_in = metrics['area']
+        item.rate_per_sq_in = metrics['rate_per_sq_in']
     quotation.line_items = items
     quotation.spec_display = _spec_line(quotation)
     quotation.total_qty = sum(i.quantity for i in items)
