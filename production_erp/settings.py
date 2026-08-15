@@ -51,6 +51,12 @@ INSTALLED_APPS = [
 
 AUTH_USER_MODEL = 'users.User'
 
+# Without this Django sends anyone who is signed out to its default
+# /accounts/login/ — which here is the Accounts *department*, not a login page,
+# so the redirect 404s. The login screen lives in the users app.
+LOGIN_URL = 'users:login'
+LOGOUT_REDIRECT_URL = 'users:login'
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

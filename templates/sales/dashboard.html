@@ -311,7 +311,10 @@
           <div class="action-stack">
             <form method="post" action="{% url 'sales:quotation_convert' q.pk %}">
               {% csrf_token %}
-              <button type="submit" class="action-btn convert">Convert to Sales Order →</button>
+              {% comment %} Sales hands over; Accounts approves the PO and mints
+              the SO number. Labelling this "Convert to Sales Order" promised an
+              action this role does not perform. {% endcomment %}
+              <button type="submit" class="action-btn convert">Send to Accounts →</button>
             </form>
             {% if q.po_file %}
               <a href="{{ q.po_file.url }}" target="_blank" class="action-btn">View PO</a>
@@ -329,7 +332,7 @@
         {% elif q.action_kind == 'no_drawing' %}
           <div class="action-stack">
             <button type="button" class="action-btn upload" onclick="openPoModal(this, 'drawing')">+ Upload Drawing</button>
-            <button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Convert to Sales Order →</button>
+            <button class="action-btn disabled" disabled title="Blocked: a drawing is required before this order can be booked and sent to Design.">Send to Accounts →</button>
             <div class="action-note">Blocked until drawing is supplied</div>
           </div>
 
@@ -348,8 +351,8 @@
           <span class="action-note">Booked by Accounts</span>
         {% endif %}
 
-        {# Every row reaches the read-only full detail AND the printed
-           quotation, whatever its status — a draft included. #}
+        {% comment %} Every row reaches the read-only full detail AND the
+        printed quotation, whatever its status — a draft included. {% endcomment %}
         <a href="{% url 'sales:quotation_pdf' q.pk %}" target="_blank" class="action-btn">View Quotation</a>
         <a href="{% url 'sales:quotation_detail' q.pk %}" class="action-btn">View</a>
         </div>

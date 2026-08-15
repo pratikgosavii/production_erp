@@ -460,6 +460,33 @@ def _drawing(item):
     }
 
 
+def _material(item):
+    """The sheet Stores holds against this item, and how far along it is.
+
+    Two-step by design (§10.1·3): Design RESERVES a sheet, Stores later ISSUES
+    it, and only the issue lets the floor start. Showing just "reserved" would
+    read as done when the material is still on the rack, so the state is
+    always spelled out next to the sheet.
+    """
+    res = next(
+        (r for r in item.reservations.all() if r.released_at is None), None,
+    )
+    if res is None:
+        return {'uid': '', 'state': 'Not reserved', 'css': 'none', 'when': None}
+
+    # Deliberately no link to stores:sheet_detail — that screen is
+    # role_required('is_stores'), so linking it from here would hand Accounts,
+    # Sales Manager and Production a straight 403.
+    issued = res.issued_at is not None
+    return {
+        'uid': res.sheet.uid,
+        'state': 'Issued to floor' if issued else 'Reserved — not issued',
+        'css': 'issued' if issued else 'reserved',
+        'when': res.issued_at or res.created_at,
+        'is_offcut': res.sheet.is_offcut,
+    }
+
+
 def _item_rows(order):
     rows, totals = [], {
         'amount': Decimal('0'),
@@ -491,6 +518,7 @@ def _item_rows(order):
             'rate': _money(qi.effective_rate),
             'amount': _money(amount),
             'drawing': _drawing(item),
+            'material': _material(item),
             'status_label': label,
             'status_class': css,
             'status_icon': icon,

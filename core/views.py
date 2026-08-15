@@ -5,13 +5,15 @@ are what finally lets a user act on them. Both are POST + redirect, like every
 other state change in the ERP, and both are role-agnostic — a notification is
 addressed to a person, not to a department.
 """
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, redirect
+from django.contrib.auth.views import redirect_to_login
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from core.decorators import landing_url_name
+from core.decorators import landing_url_name, role_label
 from core.models import Notification
 
 
@@ -43,3 +45,20 @@ def notification_read(request, pk):
 def notification_read_all(request):
     Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
     return redirect(_safe_next(request, request.META.get('HTTP_REFERER')))
+
+
+def permission_denied(request, exception=None):
+    """The 'No access' screen behind every role_required refusal.
+
+    Django's stock handler renders 403.html with nothing but the exception, so
+    the page could not say who you are signed in as or offer a way back. This
+    adds both. Signed-out callers are sent to the login page instead — being
+    told 'no access' when the real problem is 'not signed in' is a dead end.
+    """
+    if not request.user.is_authenticated:
+        return redirect_to_login(request.get_full_path(), reverse(settings.LOGIN_URL))
+
+    return render(request, '403.html', {
+        'role_label': role_label(request.user),
+        'landing_url': reverse(landing_url_name(request.user)),
+    }, status=403)

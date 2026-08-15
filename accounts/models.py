@@ -326,8 +326,60 @@ class SOItem(TimeStampedModel):
 
     @property
     def is_ready(self):
-        """§4 gate at item level — drawing approved AND material issued."""
+        """§4 gate at item level — drawing approved AND material issued.
+
+        This is the FLOOR gate: what has to be true before work actually
+        starts. Planning does not use it — see `is_plannable`.
+        """
         return bool(self.design_approved and self.material_issued)
+
+    @property
+    def is_plannable(self):
+        """What the Production Manager needs to put an item on a job card.
+
+        Deliberately does NOT require material to be issued. Planning happens
+        ahead of the stores trolley: the PM schedules and prioritises off the
+        approved drawing, and Stores issues against the card that already
+        exists. Gating the PM on issue made him wait on Stores to do work that
+        does not touch material at all. The material gate did not disappear —
+        it moved to the floor, where `JobCard.start_work` enforces it.
+        """
+        return bool(self.design_approved and not self.blocked_reason_for_planning)
+
+    @property
+    def awaiting_material(self):
+        """Plannable, drawing done, but Stores has not issued yet."""
+        return bool(self.design_approved and not self.material_issued)
+
+    @property
+    def blocked_reason_for_planning(self):
+        """Why the PM cannot card this item yet — material is not a reason.
+
+        Same escalation order as `blocked_reason`, stopping short of stores.
+        """
+        from core.constants import OrderStatus, QueryStatus
+
+        order = self.order
+        if order.status == OrderStatus.ON_HOLD:
+            return 'Order on hold'
+        if order.status == OrderStatus.CANCELLED:
+            return 'Order cancelled'
+
+        open_on_item = self.queries.exclude(status=QueryStatus.CLOSED).exists()
+        open_on_order = order.queries.filter(so_item__isnull=True) \
+                                     .exclude(status=QueryStatus.CLOSED).exists()
+        if open_on_item or open_on_order:
+            return 'Design query open'
+
+        if self.current_drawing is None:
+            return 'Awaiting drawing from Design'
+        if not self.design_approved:
+            return 'Design not approved'
+
+        card = self.current_job_card
+        if card:
+            return f'On job card {card.number}'
+        return ''
 
     @property
     def blocked_reason(self):

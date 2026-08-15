@@ -406,9 +406,30 @@ def upload_revision(request, so_no):
 def reserve_sheet(request, so_no):
     """Design reserves. Stores issues later — that second step is the real gate."""
     order, item = _acted_item(request, so_no)
+
+    # A reservation may be swapped freely UNTIL Stores issues it: the sheet is
+    # still on the rack, so changing his mind costs nothing. Once issued the
+    # plate is physically on the floor and the choice is final.
+    existing = item.reservations.filter(released_at__isnull=True).first()
+    if existing is not None and existing.issued_at:
+        messages.error(
+            request,
+            f'{existing.sheet.uid} has already been issued to production for '
+            f'{item_label(item)} — the material is on the floor, so it can no '
+            f'longer be changed here. Ask Stores if the plate must come back.',
+        )
+        return _redirect_to_job(order, item)
+
     form = ReserveSheetForm(request.POST, item=item)
     if form.is_valid():
         sheet = form.cleaned_data['sheet']
+        if existing is not None:
+            # Swap: the old sheet goes back into available stock, or it would
+            # sit RESERVED forever against a job that no longer wants it.
+            previous = existing.sheet.uid
+            existing.release()
+            log(request.user, 'MaterialReservation', order.number,
+                f'{previous} released', detail=f'{item_label(item)} · swapped for {sheet.uid}')
         MaterialReservation.objects.create(
             so_item=item, sheet=sheet, reserved_by=request.user,
         )

@@ -22,3 +22,6 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Every role_required refusal lands here (see core.views.permission_denied).
+handler403 = 'core.views.permission_denied'

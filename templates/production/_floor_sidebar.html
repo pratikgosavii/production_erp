@@ -1,0 +1,35 @@
+{% comment %}
+The floor's navigation. The Sales Orders and Priority Board links are
+role_required('is_production_manager'), so they are shown only to him —
+offering them to floor staff would be links that lead to "No access".
+{% endcomment %}
+<div class="nav-section">
+  <div class="nav-label">Shop Floor</div>
+  <a href="{% url 'production:floor_queue' %}" class="nav-item {% if nav == 'floor' %}active{% endif %}">
+    <span class="icon">📋</span> Job Card Queue
+  </a>
+  {% if nav_card %}
+  <a href="{% url 'production:job_card' jc_no=nav_card %}" class="nav-item active">
+    <span class="icon">🔧</span> {{ nav_card }}
+  </a>
+  {% endif %}
+</div>
+
+{% if can_open_order %}
+{% comment %} The Production Manager reads this screen too, and without these
+he is stranded on it — his own screens have no link from here. {% endcomment %}
+<div class="nav-section">
+  <div class="nav-label">Production</div>
+  <a href="{% url 'production:dashboard' %}" class="nav-item">
+    <span class="icon">🏭</span> Sales Orders
+  </a>
+  <a href="{% url 'production:priority_board' %}" class="nav-item">
+    <span class="icon">🎯</span> Priority Board
+  </a>
+  {% if nav_order %}
+  <a href="{% url 'production:order_detail' so_no=nav_order %}" class="nav-item">
+    <span class="icon">🧾</span> {{ nav_order }}
+  </a>
+  {% endif %}
+</div>
+{% endif %}

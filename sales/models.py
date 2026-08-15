@@ -225,7 +225,11 @@ class Quotation(TimeStampedModel):
                     tier.qty_from, tier.qty_to, tier.rate_per_unit,
                     reason=f'Quoted on {self.number}',
                 )
-                if kind != 'unchanged':
+                # 'unchanged' — that exact band is already approved at that rate.
+                # 'covered'   — a narrower slab inside an approved band at the
+                #               same price; the rate card is untouched, so there
+                #               is nothing to sign off.
+                if kind not in ('unchanged', 'covered') and band is not None:
                     band.approve(user, self.number)
             code.refresh_approved_rate()
 
@@ -338,6 +342,11 @@ class QuotationItem(TimeStampedModel):
         for tier in self.tiers.all():
             if not tier.rate_per_unit:
                 continue
+            # Auto-approved: the slab falls inside approved bands that already
+            # carry this exact price, so the rate card does not change and
+            # there is no decision for the Sales Manager to make.
+            if code.covered_at_rate(tier.qty_from, tier.qty_to, tier.rate_per_unit):
+                continue
             band = code.band_for(tier.qty_from)
             same_range = (band is not None
                           and band.qty_from == tier.qty_from
@@ -371,6 +380,16 @@ class QuotationItem(TimeStampedModel):
         found = []
         for tier in self.tiers.all():
             if not tier.rate_per_unit:
+                continue
+            # A slab sitting wholly inside approved bands at the same price is
+            # not straddling anything — approve() writes nothing for it.
+            if code.covered_at_rate(tier.qty_from, tier.qty_to, tier.rate_per_unit):
+                continue
+            # Inside one approved band at a different price: approvable by
+            # carving that band, so it goes to the manager rather than being
+            # refused at submit. Only a slab crossing a band boundary is a
+            # genuine straddle.
+            if code.containing_approved_band(tier.qty_from, tier.qty_to):
                 continue
             for band in code.overlapping_bands(tier.qty_from, tier.qty_to):
                 found.append((tier, band))

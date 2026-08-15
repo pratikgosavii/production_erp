@@ -12,5 +12,6 @@ urlpatterns = [
     path('scan/open/', views.scan_open, name='scan_open'),
     path('sheet/<str:uid>/', views.sheet_detail, name='sheet_detail'),
     path('sheet/<str:uid>/issue/', views.issue_sheet, name='issue_sheet'),
+    path('sheet/<str:uid>/log-cut/', views.log_cut, name='log_cut'),
     path('dispatch/<int:pk>/dispatched/', views.mark_dispatched, name='mark_dispatched'),
 ]

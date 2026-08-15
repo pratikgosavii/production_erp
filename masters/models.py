@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 
 from core.constants import ApprovalSource, ItemCodeApproval
 from core.models import TimeStampedModel
@@ -298,6 +298,120 @@ class ItemCode(TimeStampedModel):
                 clashes.append(other)
         return sorted(clashes, key=lambda b: b.qty_from)
 
+    def covered_at_rate(self, qty_from, qty_to, rate):
+        """True when this slab is already approved, at this exact rate.
+
+        The rule (as the business states it): a narrower slab quoted at the
+        SAME price as the approved band it falls inside needs no new approval,
+        because nothing about the rate card would change. Quote 201–301 @ 95
+        against an approved 201–500 @ 95 and the customer is being given the
+        price already signed off — asking a manager to re-approve their own
+        figure is friction with no decision in it.
+
+        The test generalises past a single band: EVERY quantity in the slab has
+        to be covered by an approved band, and EVERY band it touches has to
+        carry exactly `rate`. So 101–300 against 101–200 @ 111 + 201–500 @ 95
+        is NOT covered — one slab cannot honour two different approved prices,
+        and which one the customer gets is a decision, so it goes for approval.
+        """
+        if rate is None:
+            return False
+        rate = Decimal(rate)
+        qty_from, qty_to = normalise_band_range(qty_from, qty_to)
+        upper = BAND_OPEN_END if qty_to is None else qty_to
+
+        covering = sorted(
+            (b for b in self.approved_bands
+             if qty_from <= b.upper_bound and b.qty_from <= upper),
+            key=lambda b: b.qty_from,
+        )
+        if not covering:
+            return False
+
+        # Every band the slab touches must already be at this price.
+        if any(b.approved_rate != rate for b in covering):
+            return False
+
+        # ...and together they must leave no quantity in the slab uncovered.
+        cursor = qty_from
+        for band in covering:
+            if band.qty_from > cursor:
+                return False                      # a gap the rate card never priced
+            cursor = max(cursor, band.upper_bound + 1)
+            if cursor > upper:
+                return True
+        return cursor > upper
+
+    def containing_approved_band(self, qty_from, qty_to):
+        """The single approved band that wholly contains this slab, or None.
+
+        Containment is what makes a differently-priced slab approvable: the
+        manager is being asked to carve a narrower, cheaper (or dearer) range
+        out of one band he already signed off. A slab that crosses a band
+        boundary is not this — that is restructuring the ladder, and it is
+        still refused so the salesperson quotes the whole ladder instead.
+        """
+        qty_from, qty_to = normalise_band_range(qty_from, qty_to)
+        upper = BAND_OPEN_END if qty_to is None else qty_to
+        for band in self.approved_bands:
+            if band.qty_from <= qty_from and upper <= band.upper_bound:
+                return band
+        return None
+
+    @transaction.atomic
+    def split_approved_band(self, parent, qty_from, qty_to, rate, reason=''):
+        """Carve `qty_from..qty_to` @ `rate` out of the approved `parent`.
+
+        `201-500 @ 95` with `201-301 @ 90` quoted becomes
+        `201-301 @ 90` (PENDING) + `302-500 @ 95` (still approved).
+
+        The remnants inherit the parent's approval stamp: they are the same
+        price the manager already approved, only narrower, so re-approving
+        them would be asking about a decision nobody changed. Only the carved
+        slab goes PENDING — that is the sole new decision on the card.
+
+        The parent is deleted BEFORE the pieces are written: `ItemCodeRate.save`
+        runs full_clean, and every piece overlaps the parent until it is gone.
+        """
+        qty_from, qty_to = normalise_band_range(qty_from, qty_to)
+        upper = BAND_OPEN_END if qty_to is None else qty_to
+
+        keep = {
+            'rate': parent.approved_rate,
+            'approved_on': parent.approved_on,
+            'approved_by': parent.approved_by,
+            'approved_via': parent.approved_via,
+            'approval_source': parent.approval_source,
+        }
+        p_from, p_upper, p_to = parent.qty_from, parent.upper_bound, parent.qty_to
+        parent.delete()
+
+        def remnant(lo, hi):
+            band = ItemCodeRate.objects.create(
+                item_code=self, qty_from=lo, qty_to=hi,
+                rate_per_unit=keep['rate'], approved_rate=keep['rate'],
+                proposed_rate=None,
+                approval_state=ItemCodeApproval.APPROVED,
+                approved_on=keep['approved_on'], approved_by=keep['approved_by'],
+                approved_via=keep['approved_via'],
+                approval_source=keep['approval_source'],
+                revision_reason=f'Remnant after {band_range_label(qty_from, qty_to)} was carved out',
+            )
+            return band
+
+        if p_from < qty_from:
+            remnant(p_from, qty_from - 1)
+        if upper < p_upper:
+            # An open-ended parent stays open-ended on its right remnant.
+            remnant(upper + 1, None if p_to is None else p_to)
+
+        return ItemCodeRate.objects.create(
+            item_code=self, qty_from=qty_from, qty_to=qty_to,
+            rate_per_unit=rate, proposed_rate=rate,
+            approval_state=ItemCodeApproval.PENDING,
+            revision_reason=reason,
+        )
+
     def add_or_revise_band(self, qty_from, qty_to, rate, reason=''):
         """Put `rate` on the band `qty_from..qty_to`, returning (band, kind).
 
@@ -318,6 +432,18 @@ class ItemCode(TimeStampedModel):
 
         band = self.rate_bands.filter(qty_from=qty_from, qty_to=qty_to).first()
         if band is None:
+            # A narrower slab at the already-approved price changes nothing on
+            # the rate card, so it is neither a collision nor a new band — the
+            # approved band it sits inside keeps pricing it.
+            if self.covered_at_rate(qty_from, qty_to, rate):
+                return self.approved_band_for(qty_from), 'covered'
+            # Inside one approved band but at a different price: carve it out
+            # rather than refuse. The remnants keep the old approved rate.
+            parent = self.containing_approved_band(qty_from, qty_to)
+            if parent is not None:
+                band = self.split_approved_band(
+                    parent, qty_from, qty_to, rate, reason)
+                return band, 'split'
             clashes = self.overlapping_bands(qty_from, qty_to)
             if clashes:
                 raise BandOverlapError(

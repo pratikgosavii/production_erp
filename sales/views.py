@@ -4,7 +4,6 @@ Everything that changes state is a POST followed by a redirect (§9 audit), and
 every view is gated by the role flags in core.decorators — hiding a button is
 not access control.
 """
-import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -22,7 +21,7 @@ from django.views.decorators.http import require_POST
 from core.constants import ItemCodeApproval, OrderType, QuotationStatus, QueryStatus
 from core.decorators import landing_url_name, role_required
 from core.models import AuditLog
-from core.services import log, notify
+from core.services import log, notify, plate_area_sq_in
 from design.models import DesignQuery
 from masters.models import Customer, Finish, ItemCode, Material, Thickness
 from sales.forms import (
@@ -97,24 +96,10 @@ def _rate(value):
     return f'₹{Decimal(value or 0):,.2f}'
 
 
-MM2_PER_SQ_INCH = Decimal('645.16')          # 25.4mm squared
-
-
-def _plate_area_sq_in(size_text):
-    """'150 x 110' (mm) -> 25.58 sq.in, or None when the size is unparseable.
-
-    Sizes are free text, so anything that is not two numbers separated by an x
-    returns None and the caller shows a dash rather than a wrong figure.
-    """
-    if not size_text:
-        return None
-    parts = re.findall(r'\d+(?:\.\d+)?', str(size_text))
-    if len(parts) < 2:
-        return None
-    length, width = Decimal(parts[0]), Decimal(parts[1])
-    if length <= 0 or width <= 0:
-        return None
-    return (length * width / MM2_PER_SQ_INCH).quantize(Decimal('0.01'))
+# Plate area lives in core.services — Stores' cut logging parses the very same
+# '150 x 110' free text, and one copy of the maths is the only way the two
+# screens stay in agreement.
+_plate_area_sq_in = plate_area_sq_in
 
 
 def _rate_per_sq_in(rate, area):
@@ -741,6 +726,18 @@ def _quotation_form(request, quotation):
     })
 
     customer = quotation.customer if quotation else None
+    # A failed POST re-renders this form. For a NEW quotation there is no
+    # `quotation` yet, so falling back to it would blank the customer the
+    # salesperson picked — and an unscoped item code can no longer find its
+    # approved bands, which silently hides the slab-overlap warning too.
+    # Echo back exactly what was posted instead.
+    if request.method == 'POST':
+        customer_id_value = (request.POST.get('customer') or '').strip()
+        customer_name_value = (request.POST.get('customer_name') or '').strip()
+    else:
+        customer_id_value = str(customer.pk) if customer else ''
+        customer_name_value = customer.name if customer else ''
+
     context = {
         'quotation': quotation,
         'form': form,
@@ -761,8 +758,8 @@ def _quotation_form(request, quotation):
         'customer_master': _customer_master(),
         'item_code_master': _item_code_master(),
         'customer_names': {str(c.pk): c.name for c in Customer.objects.filter(is_active=True)},
-        'customer_id_value': str(customer.pk) if customer else '',
-        'customer_name_value': customer.name if customer else '',
+        'customer_id_value': customer_id_value,
+        'customer_name_value': customer_name_value,
         'delivery_choices': ['Ex-Works', 'FOB', 'CIF'],
     }
     context.update(_user_context(request, 'Sales'))

@@ -28,6 +28,125 @@
   .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
   .so-title { font-family: 'IBM Plex Mono'; font-size: 22px; font-weight: 700; }
   .so-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.5; }
+  /* Stage instructions, written as the card is raised. */
+  .stage-panel {
+    grid-column: 1 / -1; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius); margin-top: 14px; overflow: hidden;
+  }
+  .sp-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 14px; padding: 15px 18px; border-bottom: 1px solid var(--line);
+    background: var(--paper); flex-wrap: wrap;
+  }
+  .sp-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .sp-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; line-height: 1.6; max-width: 640px; }
+  .sp-sub b { font-family: 'IBM Plex Mono'; color: var(--ink); }
+  .sp-skip {
+    font-size: 11px; padding: 6px 12px; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: #fff; color: var(--ink-soft); font-family: 'IBM Plex Sans';
+  }
+  .sp-skip:hover { border-color: var(--steel); color: var(--ink); }
+  .sp-list { max-height: 52vh; overflow-y: auto; padding: 4px 18px; }
+  .sp-row { display: grid; grid-template-columns: 30px 1fr; gap: 11px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .sp-row:last-child { border-bottom: none; }
+  .sp-seq {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--paper);
+    border: 2px solid var(--line); color: var(--ink-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 700;
+  }
+  .sp-name { font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+  .sp-grp { font-size: 9.5px; font-weight: 600; color: var(--steel); background: var(--paper); border: 1px solid var(--line); padding: 1px 6px; border-radius: 3px; margin-left: 5px; }
+  .sp-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: var(--radius); font-size: 12px; font-family: 'IBM Plex Sans';
+    line-height: 1.55; resize: vertical; color: var(--ink);
+  }
+  .sp-row textarea:focus { outline: none; border-color: var(--steel); }
+  .sp-empty { padding: 24px; text-align: center; color: var(--ink-soft); font-size: 12px; }
+  .sp-foot {
+    padding: 13px 18px; border-top: 1px solid var(--line);
+    display: flex; justify-content: flex-end; gap: 9px; background: var(--paper);
+  }
+
+  .jc-edit, .jc-del {
+    font-size: 11px; font-weight: 600; padding: 6px 12px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: #fff; font-family: 'IBM Plex Sans';
+  }
+  .jc-edit { color: var(--ink); }
+  .jc-del  { color: var(--red); border-color: #e7c9c4; }
+  .jc-edit:hover { border-color: var(--steel); }
+  .jc-del:hover  { border-color: var(--red); background: var(--red-bg); }
+
+  .jc-modal {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 60; align-items: center; justify-content: center; padding: 20px;
+  }
+  .jc-modal.show { display: flex; }
+  .jc-box {
+    background: #fff; width: 100%; max-width: 520px; border: 1px solid var(--line);
+    max-height: 90vh; display: flex; flex-direction: column;
+  }
+  .jc-head {
+    padding: 15px 20px; border-bottom: 1px solid var(--line);
+    font-size: 13.5px; font-weight: 700;
+  }
+  .jc-head span { font-family: 'IBM Plex Mono'; }
+  .jc-body { padding: 16px 20px; overflow-y: auto; }
+  .jc-foot {
+    padding: 13px 20px; border-top: 1px solid var(--line);
+    display: flex; justify-content: flex-end; gap: 9px;
+  }
+  .jc-note {
+    font-size: 11.5px; line-height: 1.6; color: var(--ink-soft);
+    background: var(--paper); border-left: 3px solid var(--steel);
+    padding: 9px 12px; margin-bottom: 14px;
+  }
+  .jc-note.danger { background: var(--red-bg); color: var(--red); border-left-color: var(--red); }
+  .jc-note b { font-family: 'IBM Plex Mono'; }
+  .jc-field { margin-bottom: 14px; }
+  .jc-field > label {
+    display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); font-weight: 700; margin-bottom: 6px;
+  }
+  .jc-field > label.inline {
+    display: flex; align-items: center; gap: 7px; text-transform: none;
+    font-size: 12px; letter-spacing: 0; color: var(--ink); margin-bottom: 8px;
+  }
+  .jc-field select, .jc-field input[type=text] {
+    width: 100%; font-size: 12.5px; padding: 8px 10px;
+    border: var(--border); border-radius: var(--radius); font-family: 'IBM Plex Sans';
+  }
+  .jc-pick {
+    display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px;
+    border: 1px solid var(--line); margin-bottom: 6px; cursor: pointer;
+  }
+  .jc-pick:hover { border-color: var(--steel); }
+  .jc-pick b { font-family: 'IBM Plex Mono'; font-size: 11.5px; display: block; }
+  .jc-pick i { font-style: normal; font-size: 10.5px; color: var(--ink-soft); }
+  .jc-recap { font-size: 12px; }
+  .jc-recap div { display: flex; gap: 10px; padding: 5px 0; }
+  .jc-recap b { min-width: 108px; font-weight: 500; color: var(--ink-soft); font-size: 11px; }
+  .btn-danger { background: var(--red); border: 1px solid var(--red); color: #fff; }
+
+  .jc-act { margin-top: 10px; display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .jc-act a {
+    font-size: 11px; font-weight: 600; padding: 6px 12px; display: inline-block;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: #fff; color: var(--ink); text-decoration: none;
+  }
+  .jc-act a:hover { border-color: var(--steel); text-decoration: none; }
+
+  .head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .view-so {
+    font-size: 11.5px; font-weight: 600; padding: 7px 14px; white-space: nowrap;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: #fff; color: var(--ink); text-decoration: none;
+  }
+  .view-so:hover { border-color: var(--steel); text-decoration: none; }
+
   .overall-badge {
     font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
     padding: 8px 16px; border-radius: 20px; white-space: nowrap;
@@ -90,6 +209,8 @@
   .reason-badge.ready { background: var(--green-bg); color: var(--green); }
   .reason-badge.blocked { background: var(--red-bg); color: var(--red); }
   .reason-badge.carded { background: var(--blue-bg); color: var(--blue); }
+  /* Selectable, but the floor waits on Stores — amber, not red. */
+  .reason-badge.waiting { background: var(--amber-bg); color: var(--amber); }
 
   .due .d { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; display: block; }
   .due .w { font-size: 10px; color: var(--ink-soft); }
@@ -172,7 +293,13 @@
         {% if order.booked_on %} · Booked {{ order.booked_on|date:"d M Y" }}{% endif %}
       </div>
     </div>
-    <span class="overall-badge {{ order.health|lower }}">{{ order.get_status_display }}</span>
+    {% comment %} This screen is the PLANNING view — item codes and job cards.
+    The full commercial sales order lives on the Accounts screen, which
+    is_production_manager may open (accounts.views.order_detail). {% endcomment %}
+    <div class="head-actions">
+      <a class="view-so" href="{% url 'accounts:order_detail' order.number %}">View Sales Order →</a>
+      <span class="overall-badge {{ order.health|lower }}">{{ order.get_status_display }}</span>
+    </div>
   </div>
 
   <div class="header-meta">
@@ -251,7 +378,12 @@
       <td class="qty">{{ r.qty }} Nos</td>
       <td class="amt">₹{{ r.value|floatformat:0 }}</td>
       <td>
-        {% if r.state == 'ready' %}
+        {% comment %} Awaiting material is a caveat, not a block: the PM can
+        card and prioritise it, and the floor holds it until Stores issues.
+        {% endcomment %}
+        {% if r.awaiting_material %}
+        <span class="reason-badge waiting">✓ Design approved · awaiting material</span>
+        {% elif r.state == 'ready' %}
         <span class="reason-badge ready">✓ Design + Material Ready</span>
         {% elif r.state == 'carded' %}
         <span class="reason-badge carded">▶ On {{ r.card.number }}</span>
@@ -303,12 +435,53 @@
     <span id="selValue">₹0</span>
   </div>
 
-  <button type="submit" class="btn-create" id="createBtn" disabled>Create Job Card from Selection</button>
+  {% comment %} Opens the stage instructions rather than submitting straight
+  away — the card is created once, with its instructions already on it.
+  {% endcomment %}
+  <button type="button" class="btn-create" id="createBtn" disabled>Create Job Card from Selection</button>
 
   <div class="urgent-reason" id="urgentReason">
     <div class="hint">Why is this batch jumping the queue? The reason is written to the audit trail and shown on the card.</div>
     <textarea name="urgent_reason" id="urgentReasonText" rows="2"
               placeholder="e.g. Customer requested priority dispatch on available items while the rest stay blocked."></textarea>
+  </div>
+
+  {% comment %} Stage instructions. Part of jcForm, so they post with the
+  selection in one go — the card and its instructions are created together.
+  {% endcomment %}
+  <div class="stage-panel" id="stagePanel" hidden>
+    <div class="sp-head">
+      <div>
+        <div class="sp-title">Instructions for this job</div>
+        <div class="sp-sub">
+          Write what the operator needs to know at each stage of
+          <b id="spCodes">—</b>. Anything you leave blank simply shows nothing
+          at that stage. These belong to this card only — the next job for a
+          different material gets its own.
+        </div>
+      </div>
+      <button type="button" class="sp-skip" id="spSkip">Skip &amp; create without instructions</button>
+    </div>
+
+    <div class="sp-list">
+      {% for st in station_master %}
+      <div class="sp-row">
+        <div class="sp-seq">{{ st.sequence }}</div>
+        <div class="sp-body">
+          <div class="sp-name">{{ st.name }}{% if st.group %} <span class="sp-grp">{{ st.group }}</span>{% endif %}</div>
+          <textarea name="desc_{{ st.pk }}" rows="2"
+                    placeholder="What to check, what to do, what to verify before the batch moves on."></textarea>
+        </div>
+      </div>
+      {% empty %}
+      <div class="sp-empty">No active process stations in the master.</div>
+      {% endfor %}
+    </div>
+
+    <div class="sp-foot">
+      <button type="button" class="btn btn-outline btn-sm" id="spBack">Back</button>
+      <button type="submit" class="btn-create" id="spCreate">Create Job Card</button>
+    </div>
   </div>
 </form>
 {% endif %}
@@ -340,6 +513,25 @@
       {% for code in c.codes %}<span class="jc-chip-sm">{{ code }}</span>{% endfor %}
     </div>
     <div class="jc-bar"><span style="width:{{ c.card.progress_percent }}%"></span></div>
+    <div class="jc-act">
+      <a href="{% url 'production:job_card' jc_no=c.card.number %}">Open Card →</a>
+      {% comment %} Edit stops at Start Work — after that the card carries
+      measured durations. Delete stays available either way. {% endcomment %}
+      {% if c.card.can_edit %}
+      <button type="button" class="jc-edit js-jc-edit"
+              data-jc="{{ c.card.number }}"
+              data-priority="{{ c.card.priority }}"
+              data-urgent="{{ c.card.is_urgent_split|yesno:'1,' }}"
+              data-reason="{{ c.card.urgent_reason }}">Edit</button>
+      {% endif %}
+      <button type="button" class="jc-del js-jc-del"
+              data-jc="{{ c.card.number }}"
+              data-started="{{ c.card.is_started|yesno:'1,' }}"
+              data-when="{% if c.card.started_at %}{{ c.card.started_at|date:'d M Y H:i' }}{% endif %}"
+              data-done="{{ c.card.done_count }}"
+              data-applicable="{{ c.card.applicable_count }}"
+              data-codes="{{ c.codes|join:', ' }}">Delete</button>
+    </div>
   </div>
   {% empty %}
   <div class="jc-card empty">
@@ -347,6 +539,71 @@
     <div class="jc-items">Nothing has been released to the floor against {{ order.number }}.</div>
   </div>
   {% endfor %}
+</div>
+
+{{ jc_choices|json_script:"jc-choices-data" }}
+
+{% comment %} Edit — membership, priority and the urgent flag. Every rule it
+appears to enforce is decided again in edit_job_card. {% endcomment %}
+<div class="jc-modal" id="jcEditModal">
+  <form class="jc-box" method="post" action="" id="jcEditForm"
+        data-url-tpl="{% url 'production:edit_job_card' '__JC__' %}">
+    {% csrf_token %}
+    <input type="hidden" name="so_no" value="{{ order.number }}">
+    <div class="jc-head">Edit job card <span id="jcEditNo">—</span></div>
+    <div class="jc-body">
+      <div class="jc-note">
+        Only cards that have not started can be edited. Unticking an item code
+        returns it to the selectable list above.
+      </div>
+      <div class="jc-field">
+        <label>Item codes on this card</label>
+        <div id="jcEditItems"></div>
+      </div>
+      <div class="jc-field">
+        <label>Priority</label>
+        <select name="priority" id="jcEditPriority">
+          <option value="1">P1 — Urgent</option>
+          <option value="2">P2 — High</option>
+          <option value="3">P3 — Normal</option>
+          <option value="4">P4 — Low</option>
+        </select>
+      </div>
+      <div class="jc-field">
+        <label class="inline">
+          <input type="checkbox" name="is_urgent_split" id="jcEditUrgent"> Urgent / priority split
+        </label>
+        <input type="text" name="urgent_reason" id="jcEditReason"
+               placeholder="Why did it jump the queue?">
+      </div>
+    </div>
+    <div class="jc-foot">
+      <button type="button" class="btn btn-outline" id="jcEditCancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+    </div>
+  </form>
+</div>
+
+{% comment %} Delete — allowed after Start Work too, so the dialog states
+exactly what recorded work disappears with the card. {% endcomment %}
+<div class="jc-modal" id="jcDelModal">
+  <form class="jc-box" method="post" action="" id="jcDelForm"
+        data-url-tpl="{% url 'production:delete_job_card' '__JC__' %}">
+    {% csrf_token %}
+    <input type="hidden" name="so_no" value="{{ order.number }}">
+    <div class="jc-head">Delete job card <span id="jcDelNo">—</span></div>
+    <div class="jc-body">
+      <div class="jc-note danger" id="jcDelWarn"></div>
+      <div class="jc-recap">
+        <div><b>Item codes</b><span id="jcDelCodes">—</span></div>
+        <div><b>They become</b><span>selectable again, ready for a new card</span></div>
+      </div>
+    </div>
+    <div class="jc-foot">
+      <button type="button" class="btn btn-outline" id="jcDelCancel">Keep Card</button>
+      <button type="submit" class="btn btn-danger">Delete Job Card</button>
+    </div>
+  </form>
 </div>
 {% endblock %}
 
@@ -399,6 +656,38 @@
     }
     urgentFlag.addEventListener('change', syncUrgent);
 
+    /* Create is a two-step: pick the item codes, then write the instruction
+       for each stage. Both post together, so the card is created once with
+       its instructions already on it. */
+    var panel = document.getElementById('stagePanel');
+
+    function openStages() {
+      if (urgentFlag.checked && !urgentText.value.trim()) {
+        urgentText.focus();
+        return;
+      }
+      document.getElementById('spCodes').textContent = selCodes.textContent;
+      panel.hidden = false;
+      panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+      var first = panel.querySelector('textarea');
+      if (first) { first.focus(); }
+    }
+
+    createBtn.addEventListener('click', function () {
+      if (createBtn.disabled) { return; }
+      openStages();
+    });
+
+    document.getElementById('spBack').addEventListener('click', function () {
+      panel.hidden = true;
+    });
+
+    // Skipping clears the boxes so a half-typed note cannot ride along.
+    document.getElementById('spSkip').addEventListener('click', function () {
+      panel.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
+      form.submit();
+    });
+
     form.addEventListener('submit', function (e) {
       if (createBtn.disabled) { e.preventDefault(); return; }
       if (urgentFlag.checked && !urgentText.value.trim()) {
@@ -409,6 +698,92 @@
 
     update();
     syncUrgent();
+  })();
+
+  // ---- Job card Edit / Delete -------------------------------------------
+  // One dialog each, re-pointed at whichever tile was clicked. Both POST to
+  // views that re-check every rule; nothing here is the authority.
+  (function () {
+    var choicesEl = document.getElementById('jc-choices-data');
+    var CHOICES = choicesEl ? JSON.parse(choicesEl.textContent) : {};
+
+    function wire(modal, cancelBtn) {
+      var close = function () { modal.classList.remove('show'); };
+      cancelBtn.addEventListener('click', close);
+      modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) { close(); }
+      });
+      return close;
+    }
+
+    // ---- Edit ----
+    var eModal = document.getElementById('jcEditModal');
+    if (eModal) {
+      var eForm  = document.getElementById('jcEditForm');
+      var eTpl   = eForm.dataset.urlTpl;
+      var eItems = document.getElementById('jcEditItems');
+      var eUrg   = document.getElementById('jcEditUrgent');
+      var eRsn   = document.getElementById('jcEditReason');
+
+      function syncReason() { eRsn.style.display = eUrg.checked ? '' : 'none'; }
+      eUrg.addEventListener('change', syncReason);
+
+      wire(eModal, document.getElementById('jcEditCancel'));
+
+      document.querySelectorAll('.js-jc-edit').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var jc = btn.dataset.jc;
+          eForm.action = eTpl.replace('__JC__', jc);
+          document.getElementById('jcEditNo').textContent = jc;
+          document.getElementById('jcEditPriority').value = btn.dataset.priority || '3';
+          eUrg.checked = btn.dataset.urgent === '1';
+          eRsn.value = btn.dataset.reason || '';
+          syncReason();
+
+          eItems.innerHTML = '';
+          (CHOICES[jc] || []).forEach(function (c) {
+            var row = document.createElement('label');
+            row.className = 'jc-pick';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.name = 'items'; cb.value = c.pk;
+            cb.checked = c.on_card;
+            var txt = document.createElement('span');
+            txt.innerHTML = '<b>' + c.code + '</b><i>' + c.spec + ' · ' + c.qty + ' Nos</i>';
+            row.appendChild(cb); row.appendChild(txt);
+            eItems.appendChild(row);
+          });
+          if (!eItems.children.length) {
+            eItems.innerHTML = '<div class="jc-note">No item codes available.</div>';
+          }
+          eModal.classList.add('show');
+        });
+      });
+    }
+
+    // ---- Delete ----
+    var dModal = document.getElementById('jcDelModal');
+    if (dModal) {
+      var dForm = document.getElementById('jcDelForm');
+      var dTpl  = dForm.dataset.urlTpl;
+      wire(dModal, document.getElementById('jcDelCancel'));
+
+      document.querySelectorAll('.js-jc-del').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var d = btn.dataset;
+          dForm.action = dTpl.replace('__JC__', d.jc);
+          document.getElementById('jcDelNo').textContent = d.jc;
+          document.getElementById('jcDelCodes').textContent = d.codes || '—';
+          // A started card holds measured durations; say so plainly.
+          document.getElementById('jcDelWarn').innerHTML = d.started === '1'
+            ? 'This card <b>started on ' + d.when + '</b> and has <b>' + d.done +
+              ' of ' + d.applicable + ' stations completed</b>. Deleting it destroys ' +
+              'those timings — only the audit log entry will remain.'
+            : 'This card has not started, so nothing recorded is lost.';
+          dModal.classList.add('show');
+        });
+      });
+    }
   })();
 </script>
 {% endblock %}

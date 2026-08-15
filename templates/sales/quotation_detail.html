@@ -276,8 +276,9 @@
           · <span class="supersedes">supersedes {{ quotation.supersedes.number }} v{{ quotation.supersedes.version }}</span>
         {% endif %}
       </div>
-      {# Booked already. Only Accounts / Sales Manager / Production may open the
-         SO screen, so a salesperson is not offered a link into a 403. #}
+      {% comment %} Booked already. Only Accounts / Sales Manager / Production
+      may open the SO screen, so a salesperson is not offered a link into a
+      403. {% endcomment %}
       {% if can_open_sales_order %}
       <div class="qtn-sub">
         Converted to Sales Order

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Shop Floor — Job Card Queue{% endblock %}
+{% block topbar_sub %}Production — Job Card Queue{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">
+    {% if user.is_floor_manager %}Floor Manager
+    {% elif user.is_production_manager %}Production Manager
+    {% else %}Admin{% endif %}
+  </span>
+  <span class="name">{{ user.short_name }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-head { margin-bottom: 14px; }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .page-head .desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; max-width: 660px; line-height: 1.55; }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); margin-bottom: 16px;
+  }
+  .summary .s { background: var(--card); padding: 12px 15px; }
+  .summary .s .l { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 5px; }
+  .summary .s .v { font-family: 'IBM Plex Mono'; font-size: 20px; font-weight: 700; line-height: 1; }
+  .summary .s.ready .v { color: var(--green); }
+  .summary .s.waiting .v { color: var(--amber); }
+  @media (max-width: 780px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  a.chip {
+    font-size: 11.5px; padding: 6px 13px; border-radius: 20px; text-decoration: none;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink-soft);
+  }
+  a.chip:hover { border-color: var(--steel); color: var(--ink); text-decoration: none; }
+  a.chip.on { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600; }
+  a.chip .n { font-family: 'IBM Plex Mono'; font-size: 10.5px; opacity: .8; margin-left: 4px; }
+
+  table.jc { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 12px; }
+  table.jc thead th {
+    background: var(--navy); color: #fff; text-align: left; padding: 9px 11px;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; font-weight: 600;
+  }
+  table.jc tbody td { padding: 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.jc tbody tr:last-child td { border-bottom: none; }
+  table.jc tbody tr:hover { background: var(--paper); }
+
+  .jc-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12.5px; color: var(--ink); }
+  .jc-sub { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+  .codes { font-family: 'IBM Plex Mono'; font-size: 11px; }
+  .cust { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+
+  .when   { font-family: 'IBM Plex Mono'; font-size: 11.5px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .when-t { font-family: 'IBM Plex Mono'; font-size: 10.5px; color: var(--ink-soft); margin-top: 1px; }
+  .when-sub { font-size: 10px; color: var(--ink-soft); margin-top: 3px; white-space: nowrap; }
+
+  .pri { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 3px; display: inline-block; }
+  .pri.p1 { background: var(--red-bg); color: var(--red); }
+  .pri.p2 { background: var(--amber-bg); color: var(--amber); }
+  .pri.p3 { background: var(--blue-bg); color: var(--blue); }
+  .pri.p4 { background: var(--paper); color: var(--gray); }
+
+  .state { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; display: inline-block; line-height: 1.5; }
+  .state.ready   { background: var(--green-bg); color: var(--green); }
+  .state.waiting { background: var(--amber-bg); color: var(--amber); }
+  .state.running { background: var(--blue-bg);  color: var(--blue); }
+  .state.done    { background: var(--paper);    color: var(--gray); }
+  .waiting-on { font-size: 10.5px; color: var(--amber); margin-top: 4px; font-family: 'IBM Plex Mono'; }
+
+  .acts { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .act-btn {
+    font-size: 11.5px; padding: 6px 13px; text-decoration: none; border-radius: var(--radius);
+    border: 1px solid var(--line); background: #fff; color: var(--ink); white-space: nowrap;
+  }
+  .act-btn:hover { border-color: var(--steel); text-decoration: none; }
+  .act-btn.go { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600; }
+
+  .empty { padding: 34px; text-align: center; color: var(--ink-soft); font-size: 12.5px; background: var(--card); border: 1px solid var(--line); }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}{% include "production/_floor_sidebar.html" %}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Job Card Queue</h1>
+  <div class="desc">
+    Every job card released to the floor, most urgent first — then oldest, so a card
+    left sitting rises above one released today at the same priority. Cards still
+    waiting on Stores stay listed so you can see what is coming and why it cannot start.
+  </div>
+</div>
+
+<div class="summary">
+  <div class="s ready"><div class="l">Ready to start</div><div class="v">{{ summary.ready }}</div></div>
+  <div class="s waiting"><div class="l">Waiting on material</div><div class="v">{{ summary.waiting }}</div></div>
+  <div class="s"><div class="l">In production</div><div class="v">{{ summary.running }}</div></div>
+</div>
+
+<div class="toolbar">
+  {% for chip in chips %}
+  <a class="chip {% if chip.is_active %}on{% endif %}"
+     href="?filter={{ chip.key }}">{{ chip.label }}<span class="n">{{ chip.count }}</span></a>
+  {% endfor %}
+</div>
+
+{% if rows %}
+<table class="jc">
+  <thead>
+    <tr>
+      <th style="width:13%;">Job Card</th>
+      <th style="width:8%;">Priority</th>
+      <th style="width:23%;">Item Codes</th>
+      <th style="width:12%;">Sales Order</th>
+      <th style="width:14%;">Created</th>
+      <th style="width:18%;">Status</th>
+      <th style="width:12%;">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>
+        <div class="jc-no">{{ r.card.number }}</div>
+        <div class="jc-sub">
+          {{ r.item_count }} item{{ r.item_count|pluralize }}
+          {% if r.card.is_urgent_split %} · urgent split{% endif %}
+        </div>
+      </td>
+      <td><span class="pri p{{ r.card.priority }}">P{{ r.card.priority }}</span></td>
+      <td>
+        <div class="codes">{{ r.codes }}</div>
+        {% if r.customer %}<div class="cust">{{ r.customer }}</div>{% endif %}
+      </td>
+      <td class="codes">{{ r.order_ref }}</td>
+      <td>
+        {% comment %} Created is what the sort is on, so it leads. Started /
+        completed follow as the card's own history. {% endcomment %}
+        <div class="when">{{ r.created|date:"d M Y" }}</div>
+        <div class="when-t">{{ r.created|date:"H:i" }}</div>
+        {% if r.completed %}
+        <div class="when-sub">completed {{ r.completed|date:"d M · H:i" }}</div>
+        {% elif r.started %}
+        <div class="when-sub">started {{ r.started|date:"d M · H:i" }}</div>
+        {% endif %}
+      </td>
+      <td>
+        <span class="state {{ r.state_css }}">{{ r.state_label }}</span>
+        {% if r.waiting_on %}
+        <div class="waiting-on">Stores owes: {{ r.waiting_on }}</div>
+        {% endif %}
+      </td>
+      <td>
+        <div class="acts">
+          <a class="act-btn {% if r.can_start %}go{% endif %}"
+             href="{% url 'production:job_card' jc_no=r.card.number %}">
+            {% if r.can_start %}Open &amp; Start →{% else %}Open Card{% endif %}
+          </a>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">No job cards match this filter.</div>
+{% endif %}
+{% endblock %}

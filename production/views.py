@@ -41,7 +41,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.models import SalesOrder, SOItem
-from core.constants import OrderStatus, OrderType, Priority, StationStatus
+from masters.models import ProcessStation
+from core.constants import (
+    Disposition, OrderStatus, OrderType, Priority, RejectionReason, StationStatus,
+)
 from core.decorators import role_required
 from core.services import log, notify
 
@@ -116,13 +119,18 @@ def _item_state(item):
     """('carded' | 'ready' | 'blocked', job card or None, reason).
 
     An item on a card is neither ready nor blocked — it has left the queue.
+
+    "Ready" here means ready to PLAN, not ready to cut. An item whose drawing
+    is approved but whose material Stores has not issued yet is selectable:
+    the PM cards it and sets its priority, and the floor is what waits for the
+    trolley. `awaiting_material` carries that caveat to the template.
     """
     card = item.current_job_card
     if card is not None:
         return 'carded', card, ''
-    if item.is_ready:
+    if item.is_plannable:
         return 'ready', None, ''
-    return 'blocked', None, (item.blocked_reason or 'Not ready')
+    return 'blocked', None, (item.blocked_reason_for_planning or 'Not ready')
 
 
 def _order_counts(order):
@@ -324,6 +332,9 @@ def order_detail(request, so_no):
             'value': item.quotation_item.line_amount,
             'state': state,
             'is_ready': state == 'ready',
+            # Selectable, but the floor will hold it until Stores issues.
+            # Shown as a caveat on the row, never as a block.
+            'awaiting_material': state == 'ready' and item.awaiting_material,
             # blocked_reason is the item's own words; never re-worded here.
             'reason': reason,
             'card': card,
@@ -338,15 +349,34 @@ def order_detail(request, so_no):
         )
         .order_by('-created_at')
     )
-    order_cards = [{
-        'card': card,
-        'state': _job_card_state(card),
-        'codes': [_item_code_text(link.so_item) for link in card.items.all()],
-    } for card in cards]
+    # What the edit dialog may offer for each card: the items already on it,
+    # plus this order's items that are plannable and not on another card.
+    # Anything else would fail edit_job_card's re-check anyway.
+    spare = [r['item'] for r in rows if r['state'] == 'ready']
+    order_cards = []
+    for card in cards:
+        on_card = [link.so_item for link in card.items.all()]
+        on_pks = {i.pk for i in on_card}
+        order_cards.append({
+            'card': card,
+            'state': _job_card_state(card),
+            'codes': [_item_code_text(link.so_item) for link in card.items.all()],
+            'choices': [
+                {'pk': i.pk, 'code': _item_code_text(i), 'spec': _spec_text(i),
+                 'qty': i.quantity, 'on_card': i.pk in on_pks}
+                for i in on_card + [s for s in spare if s.pk not in on_pks]
+            ],
+        })
 
     return render(request, 'production/order_detail.html', {
         'order': order,
         'rows': rows,
+        # The steps a new card will be laid out from, so the instruction for
+        # each one can be written before the card exists.
+        'station_master': ProcessStation.objects.filter(is_active=True)
+                                        .order_by('sequence', 'name'),
+        # Keyed by JC number so one edit dialog can serve every tile.
+        'jc_choices': {c['card'].number: c['choices'] for c in order_cards},
         'counts': _order_counts(order),
         'po': _po_chip(order),
         'days': days,
@@ -542,9 +572,10 @@ def create_job_card(request):
             blocked.append(
                 f'{_item_code_text(item)} — {item.order.get_status_display()}'
             )
-        elif not item.is_ready:
+        elif not item.is_plannable:
             blocked.append(
-                f'{_item_code_text(item)} — {item.blocked_reason or "not ready"}'
+                f'{_item_code_text(item)} — '
+                f'{item.blocked_reason_for_planning or "not ready"}'
             )
 
     if on_card:
@@ -557,11 +588,23 @@ def create_job_card(request):
             + '; '.join(blocked)
         )
 
+    # Per-stage instructions typed on the way in, posted as desc_<station pk>.
+    # Written onto this card's rows, so they describe THIS job — the etching
+    # note for 0.5mm SS is not the note for 3mm mild steel.
+    descriptions = {}
+    for key, value in request.POST.items():
+        if key.startswith('desc_') and (value or '').strip():
+            try:
+                descriptions[int(key[5:])] = value
+            except ValueError:
+                continue
+
     try:
         with transaction.atomic():
             card = JobCard.create_for(
                 found, request.user,
                 is_urgent_split=is_urgent, urgent_reason=reason,
+                descriptions=descriptions,
             )
             orders = list(card.orders)
             for order in orders:
@@ -570,6 +613,8 @@ def create_job_card(request):
         return refuse(f'Job card not created: {exc}')
 
     codes = ', '.join(sorted(_item_code_text(i) for i in found))
+    if descriptions:
+        codes += f' · {len(descriptions)} stage instruction(s) written'
     log(request.user, 'JobCard', card.order_ref,
         f'{card.number} released to production',
         detail=f'{len(found)} item code(s): {codes}'
@@ -595,6 +640,119 @@ def create_job_card(request):
 
 @role_required('is_production_manager')
 @require_POST
+def edit_job_card(request, jc_no):
+    """Change a card's membership, priority and urgent flag — before Start Work.
+
+    Editable membership is scoped to the order the card belongs to: an item is
+    either already on this card, or plannable and not on another one.
+    """
+    card = get_object_or_404(JobCard, number__iexact=jc_no)
+    so_no = request.POST.get('so_no') or ''
+
+    def back(msg=None, error=False):
+        if msg:
+            (messages.error if error else messages.success)(request, msg)
+        if so_no:
+            return redirect('production:order_detail', so_no=so_no)
+        return redirect('production:dashboard')
+
+    if not card.can_edit:
+        return back(
+            f'{card.number} has already started on the floor, so its item codes '
+            f'can no longer be changed. It can still be deleted.', error=True)
+
+    on_card = set(card.items.values_list('so_item_id', flat=True))
+    try:
+        wanted = {int(pk) for pk in request.POST.getlist('items')}
+    except (TypeError, ValueError):
+        return back('That selection was not understood. Nothing was changed.', error=True)
+
+    if not wanted:
+        return back('A job card must keep at least one item code. Delete it '
+                    'instead if it is not wanted.', error=True)
+
+    found = list(
+        SOItem.objects.filter(pk__in=wanted)
+        .select_related('order', 'quotation_item__item_code')
+    )
+    if len(found) != len(wanted):
+        return back('Some selected item codes no longer exist. Nothing was changed.',
+                    error=True)
+
+    # Anything being ADDED has to pass the same gate create_job_card applies.
+    refused = []
+    for item in found:
+        if item.pk in on_card:
+            continue
+        if item.job_card_items.exists():
+            refused.append(f'{_item_code_text(item)} (on {item.current_job_card})')
+        elif item.order.status in DEAD_ORDER_STATUSES:
+            refused.append(f'{_item_code_text(item)} — {item.order.get_status_display()}')
+        elif not item.is_plannable:
+            refused.append(
+                f'{_item_code_text(item)} — '
+                f'{item.blocked_reason_for_planning or "not ready"}')
+    if refused:
+        return back('Nothing was changed: ' + '; '.join(refused), error=True)
+
+    priority = request.POST.get('priority')
+    urgent = bool(request.POST.get('is_urgent_split'))
+    reason = (request.POST.get('urgent_reason') or '').strip()
+    if urgent and not reason:
+        return back('An urgent split must say why it jumped the queue. '
+                    'Nothing was changed.', error=True)
+
+    try:
+        with transaction.atomic():
+            card.set_items(found, request.user)
+            if priority and str(priority).isdigit():
+                card.priority = int(priority)
+            card.is_urgent_split = urgent
+            card.urgent_reason = reason if urgent else ''
+            card.save(update_fields=[
+                'priority', 'is_urgent_split', 'urgent_reason', 'updated_at'])
+    except (ValidationError, ValueError) as exc:
+        return back(f'{card.number} was not changed — {exc}', error=True)
+
+    codes = ', '.join(_item_code_text(i) for i in card.so_items)
+    log(request.user, 'JobCard', card.order_ref, f'{card.number} edited',
+        detail=f'{card.item_count} item code(s): {codes} · P{card.priority}')
+    return back(f'{card.number} updated — {card.item_count} item code(s): {codes}.')
+
+
+@role_required('is_production_manager')
+@require_POST
+def delete_job_card(request, jc_no):
+    """Remove a job card. Allowed before AND after Start Work.
+
+    After Start Work this destroys recorded station timings, which is why the
+    audit entry is written BEFORE the delete — the stations cascade away with
+    the card, so that entry is all that survives.
+    """
+    card = get_object_or_404(JobCard, number__iexact=jc_no)
+    so_no = request.POST.get('so_no') or ''
+    codes = ', '.join(_item_code_text(i) for i in card.so_items)
+    order_ref = card.order_ref
+    number = card.number
+
+    detail = f'{card.item_count} item code(s): {codes}'
+    if card.is_started:
+        detail += (f' · started {card.started_at:%d %b %Y %H:%M}'
+                   f' · {card.done_count} of {card.applicable_count} stations completed')
+    log(request.user, 'JobCard', order_ref, f'{number} deleted', detail=detail)
+
+    card.delete_card(request.user)
+    messages.success(
+        request,
+        f'{number} deleted. Its item codes are selectable again: {codes}.',
+    )
+    if so_no:
+        return redirect('production:order_detail', so_no=so_no)
+    return redirect('production:dashboard')
+
+
+@role_required('is_production_manager')
+@require_POST
 def send_to_production(request):
     """Mint the job card here — the JC number does not exist before this POST.
 
@@ -613,8 +771,9 @@ def send_to_production(request):
         return redirect('production:order_detail', so_no=order.number)
 
     # Re-check the gate: the button was rendered from a queryset, but the POST
-    # could have been hand-rolled, or the state could have moved since.
-    if not (item.design_approved and item.material_issued and order.is_ready_to_produce):
+    # could have been hand-rolled, or the state could have moved since. This is
+    # the PLANNING gate — material issue is checked on the floor, at Start Work.
+    if not item.is_plannable:
         return redirect('production:order_detail', so_no=order.number)
 
     card = JobCard.create_for([item], request.user, priority=order.priority)
@@ -643,6 +802,117 @@ def _get_card(jc_no):
     )
 
 
+# The floor's own landing screen. Before this existed the Floor Manager's
+# landing page was the PM dashboard, which is is_production_manager-only — so
+# signing in as floor staff went straight to "No access", and a job card could
+# only be reached by typing its URL.
+FLOOR_FILTERS = [
+    ('open', 'Open work'),
+    ('waiting', 'Waiting on material'),
+    ('running', 'In production'),
+    ('done', 'Completed'),
+    ('all', 'All cards'),
+]
+
+
+@role_required('is_floor_manager', 'is_production_manager')
+def floor_queue(request):
+    """Every job card released to the floor, newest first.
+
+    Newest-first matches every other list in the ERP. Note this means priority
+    no longer drives the order — a P1 released last week now sits below a P4
+    released today, so the priority chip is the thing to read, not position.
+    Cards waiting on Stores stay listed rather than hidden: the Floor Manager
+    needs to see what is coming and why it cannot start.
+    """
+    cards = (
+        JobCard.objects
+        .select_related('floor_manager', 'released_by')
+        .prefetch_related(
+            'stations',
+            'items__so_item__order__customer',
+            'items__so_item__quotation_item__item_code',
+            'items__so_item__reservations',
+        )
+        .order_by('-released_at', '-number')
+    )
+
+    rows = []
+    for card in cards:
+        waiting = card.items_awaiting_material
+        if card.is_complete:
+            key, label, css = 'done', 'Completed', 'done'
+        elif waiting:
+            key, label, css = 'waiting', 'Waiting on material', 'waiting'
+        elif card.stations_confirmed_at:
+            station = card.current_station
+            key, css = 'running', 'running'
+            label = (f'Station {card.done_count + 1} of {card.applicable_count}'
+                     f' — {station.station.name}' if station else 'In production')
+        elif card.is_started:
+            key, label, css = 'running', 'Selecting stations', 'running'
+        else:
+            key, label, css = 'ready', 'Ready to start', 'ready'
+
+        rows.append({
+            'card': card,
+            'state_key': key,
+            'state_label': label,
+            'state_css': css,
+            'waiting_on': ', '.join(_item_code_text(i) for i in waiting),
+            'codes': ', '.join(_item_code_text(i) for i in card.so_items) or '—',
+            'order_ref': card.order_ref,
+            'customer': next(
+                (i.order.customer.name for i in card.so_items if i.order.customer),
+                '',
+            ),
+            'item_count': card.item_count,
+            'can_start': card.can_start and not card.is_started,
+            # released_at is stamped by create_for; created_at is the safety
+            # net for any card written outside that path (admin, fixtures).
+            'created': card.released_at or card.created_at,
+            'started': card.started_at,
+            'completed': card.completed_at,
+        })
+
+    active = request.GET.get('filter', 'open')
+    if active not in dict(FLOOR_FILTERS):
+        active = 'open'
+
+    def keep(row, key):
+        if key == 'all':
+            return True
+        if key == 'open':                      # anything the floor still owes work on
+            return row['state_key'] != 'done'
+        if key == 'waiting':
+            return row['state_key'] == 'waiting'
+        if key == 'running':
+            return row['state_key'] == 'running'
+        return row['state_key'] == 'done'
+
+    chips = [
+        {'key': key, 'label': label, 'count': sum(1 for r in rows if keep(r, key)),
+         'is_active': key == active}
+        for key, label in FLOOR_FILTERS
+    ]
+    visible = [r for r in rows if keep(r, active)]
+
+    return render(request, 'production/floor_queue.html', {
+        'rows': visible,
+        'chips': chips,
+        'active_filter': active,
+        'summary': {
+            'ready': sum(1 for r in rows if r['state_key'] == 'ready'),
+            'waiting': sum(1 for r in rows if r['state_key'] == 'waiting'),
+            'running': sum(1 for r in rows if r['state_key'] == 'running'),
+        },
+        'can_run': bool(request.user.is_floor_manager or request.user.is_superuser),
+        'can_open_order': bool(
+            request.user.is_production_manager or request.user.is_superuser),
+        'nav': 'floor',
+    })
+
+
 @role_required('is_floor_manager', 'is_production_manager')
 def job_card(request, jc_no):
     """One real job card. The station list is whatever build_stations() laid out.
@@ -667,6 +937,64 @@ def job_card(request, jc_no):
     reservation = item.reservations.filter(
         released_at__isnull=True,
     ).select_related('sheet', 'sheet__size').first() if item else None
+
+    # The right rail shows only the LEAD item's sheet, which is wrong the
+    # moment a card covers more than one item code. This is the full material
+    # trail — every sheet on the card, when Design reserved it and when Stores
+    # actually handed it over.
+    # Same story as the sheet: the rail showed only the lead item's drawing,
+    # so on a multi-item card the other drawings were simply absent — and the
+    # filename was plain text, so the floor could not open any of them.
+    drawings = []
+    for so_item in card_items:
+        rev = so_item.current_drawing
+        drawings.append({
+            'code': _item_code_text(so_item),
+            'revision': rev,
+            'name': (rev.file.name.rsplit('/', 1)[-1]
+                     if rev and rev.file else ''),
+            'url': rev.file.url if rev and rev.file else '',
+            'label': rev.label if rev else '',
+            'approved': so_item.design_approved,
+        })
+
+    materials = []
+    for so_item in card_items:
+        res = (
+            so_item.reservations
+            .filter(released_at__isnull=True)
+            .select_related('sheet', 'sheet__size', 'reserved_by', 'issued_by')
+            .first()
+        )
+        qi = so_item.quotation_item
+        row = {
+            'code': _item_code_text(so_item),
+            'spec': _spec_text(so_item),
+            'qty': qi.quantity,
+        }
+        if res is None:
+            row.update({'uid': '', 'state': 'Not reserved', 'css': 'none'})
+        elif res.issued_at:
+            row.update({
+                'uid': res.sheet.uid,
+                'is_offcut': res.sheet.is_offcut,
+                'size': res.sheet.size_display,
+                'rack': res.sheet.rack.name if res.sheet.rack_id else '',
+                'state': 'Issued', 'css': 'issued',
+                'reserved_at': res.reserved_at, 'reserved_by': res.reserved_by,
+                'issued_at': res.issued_at, 'issued_by': res.issued_by,
+            })
+        else:
+            row.update({
+                'uid': res.sheet.uid,
+                'is_offcut': res.sheet.is_offcut,
+                'size': res.sheet.size_display,
+                'rack': res.sheet.rack.name if res.sheet.rack_id else '',
+                'state': 'Reserved — awaiting issue', 'css': 'reserved',
+                'reserved_at': res.reserved_at, 'reserved_by': res.reserved_by,
+                'issued_at': None, 'issued_by': None,
+            })
+        materials.append(row)
 
     # Operator roster, grouped by the station master's group (§3.8).
     roster = {}
@@ -704,12 +1032,33 @@ def job_card(request, jc_no):
         'current_station': current,
         'reservation': reservation,
         'sheet': reservation.sheet if reservation else None,
+        'materials': materials,
         'drawing': item.current_drawing if item else None,
+        'drawings': drawings,
         'roster': roster,
         'pill_class': pill_class,
         'pill_text': pill_text,
+        'nav': 'floor',
+        'nav_card': card.number,
+        'rejection_reasons': RejectionReason.choices,
+        'dispositions': Disposition.choices,
         # Only the floor runs the card; the Production Manager is here to watch.
         'can_run': bool(request.user.is_floor_manager or request.user.is_superuser),
+        # ...but the instructions are his to write, before the station runs.
+        'can_edit_notes': bool(
+            request.user.is_production_manager or request.user.is_superuser),
+        # Drives the prompt: an empty card should say so loudly, a documented
+        # one should get out of the way.
+        'notes_written': sum(
+            1 for s in stations
+            if s.description.strip() and s.status != StationStatus.SKIPPED),
+        'notes_total': sum(
+            1 for s in stations if s.status != StationStatus.SKIPPED),
+        # The order link is is_production_manager-only, so the floor must not
+        # be offered it — they would land on "No access".
+        'can_open_order': bool(
+            request.user.is_production_manager or request.user.is_superuser),
+        'nav_order': order.number if order else '',
     })
 
 
@@ -718,7 +1067,18 @@ def job_card(request, jc_no):
 def start_work(request, jc_no):
     """Captures the start time. Station selection stays locked until this runs."""
     card = _get_card(jc_no)
-    if not card.is_started:
+    if not card.can_start:
+        # The material gate, enforced on the floor rather than in planning.
+        waiting = ', '.join(
+            str(i.quotation_item.item_code or i.quotation_item.description or i.pk)
+            for i in card.items_awaiting_material
+        )
+        messages.error(
+            request,
+            f'{card.number} cannot start — Stores has not issued material for: '
+            f'{waiting}. The card stays on the floor queue until they do.',
+        )
+    elif not card.is_started:
         card.start_work(request.user)
         log(request.user, 'JobCard', card.order_ref, f'{card.number} work started')
     return redirect('production:job_card', jc_no=card.number)
@@ -743,10 +1103,58 @@ def confirm_stations(request, jc_no):
     return redirect('production:job_card', jc_no=card.number)
 
 
+@role_required('is_production_manager')
+@require_POST
+def save_station_notes(request, jc_no):
+    """Add or change the stage instructions on a card that already exists.
+
+    Only stations that have NOT been completed can be edited. Rewriting the
+    instruction on a finished station would change what the operator was told
+    after he acted on it, which is exactly the record an audit is looking at.
+    """
+    card = _get_card(jc_no)
+    changed, locked = [], []
+
+    with transaction.atomic():
+        for row in card.stations.select_related('station'):
+            key = f'desc_{row.pk}'
+            if key not in request.POST:
+                continue
+            text = (request.POST.get(key) or '').strip()
+            if text == row.description:
+                continue
+            if row.status == StationStatus.DONE:
+                locked.append(row.station.name)
+                continue
+            row.description = text
+            row.save(update_fields=['description', 'updated_at'])
+            changed.append(row.station.name)
+
+    if changed:
+        log(request.user, 'JobCard', card.order_ref,
+            f'{card.number} stage instructions updated',
+            detail=', '.join(changed))
+        messages.success(
+            request,
+            f'Instructions updated on {card.number}: {", ".join(changed)}.')
+    if locked:
+        messages.error(
+            request,
+            f'Left unchanged because the station is already complete: '
+            f'{", ".join(locked)}.')
+    if not changed and not locked:
+        messages.info(request, 'Nothing was changed.')
+    return redirect('production:job_card', jc_no=card.number)
+
+
 @role_required('is_floor_manager')
 @require_POST
-def complete_station(request, jc_no):
-    """Blocked until the station list is confirmed; duration is computed, not typed."""
+def start_station(request, jc_no):
+    """Operator picks up one station — this is what starts its clock.
+
+    Only one station runs at a time: the card is a physical batch moving down
+    the line, so a second concurrent start would make both durations lies.
+    """
     card = _get_card(jc_no)
     if not card.stations_confirmed_at:
         return redirect('production:job_card', jc_no=card.number)
@@ -755,9 +1163,83 @@ def complete_station(request, jc_no):
         JobCardStation.objects.select_related('station'),
         pk=request.POST.get('station'), job_card=card,
     )
-    if row.status in {StationStatus.PENDING, StationStatus.IN_PROGRESS}:
-        card.complete_station(row, request.user)
+    running = card.stations.filter(status=StationStatus.IN_PROGRESS).exclude(pk=row.pk).first()
+    if running is not None:
+        messages.error(
+            request,
+            f'{running.station.name} is still running. Complete it before '
+            f'starting {row.station.name}.')
+    elif row.status == StationStatus.PENDING:
+        row.start(request.user)
         log(request.user, 'JobCardStation', card.order_ref,
-            f'{row.station.name} completed',
-            detail=f'{card.number} · {row.duration_display}')
+            f'{row.station.name} started', detail=card.number)
+    return redirect('production:job_card', jc_no=card.number)
+
+
+def _int_or(value, fallback=None):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return fallback
+
+
+@role_required('is_floor_manager')
+@require_POST
+def complete_station(request, jc_no):
+    """Close a station and record its production log.
+
+    Duration is still computed, never typed. The quantities ARE typed — the
+    operator is the only one who knows how many survived — but they have to
+    balance: in = good + rejected, or the yield figures downstream are fiction.
+    """
+    card = _get_card(jc_no)
+    if not card.stations_confirmed_at:
+        return redirect('production:job_card', jc_no=card.number)
+
+    row = get_object_or_404(
+        JobCardStation.objects.select_related('station'),
+        pk=request.POST.get('station'), job_card=card,
+    )
+    def refuse(msg):
+        messages.error(request, f'{row.station.name} was not closed — {msg}')
+        return redirect('production:job_card', jc_no=card.number)
+
+    if row.status == StationStatus.DONE or row.status == StationStatus.SKIPPED:
+        return redirect('production:job_card', jc_no=card.number)
+    if row.status != StationStatus.IN_PROGRESS:
+        # Closing a station that was never started would fall back to the old
+        # inferred duration — the gap since the previous station finished,
+        # which counts overnight and weekends as run time. Press Start.
+        return refuse('press Start first, or the recorded time is the gap '
+                      'since the last station finished, not the work.')
+
+    qty_in = _int_or(request.POST.get('qty_in'), row.expected_qty_in)
+    qty_out = _int_or(request.POST.get('qty_out'))
+    qty_rej = _int_or(request.POST.get('qty_rejected'), 0)
+    reason = (request.POST.get('rejection_reason') or '').strip()
+    disposition = (request.POST.get('disposition') or '').strip()
+
+    if qty_out is None:
+        return refuse('enter how many good pieces came out.')
+    if qty_out + qty_rej != qty_in:
+        return refuse(
+            f'the numbers do not balance: {qty_out} good + {qty_rej} rejected '
+            f'= {qty_out + qty_rej}, but {qty_in} went in.')
+    if qty_rej and not reason:
+        return refuse('a rejection needs a reason — that is the whole point of '
+                      'recording it.')
+    if qty_rej and not disposition:
+        return refuse('say what happens to the rejected pieces: scrap, rework '
+                      'or use as is.')
+
+    card.complete_station(
+        row, request.user, qty_in=qty_in, qty_out=qty_out,
+        qty_rejected=qty_rej, rejection_reason=reason, disposition=disposition,
+    )
+    detail = f'{card.number} · {row.duration_display} · {qty_out} good'
+    if qty_rej:
+        detail += (f' · {qty_rej} rejected ({row.get_rejection_reason_display()}'
+                   f' → {row.get_disposition_display()})')
+    log(request.user, 'JobCardStation', card.order_ref,
+        f'{row.station.name} completed', detail=detail)
     return redirect('production:job_card', jc_no=card.number)

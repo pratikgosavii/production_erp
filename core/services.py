@@ -4,10 +4,35 @@ Keeping the derivations here — rather than in a view or a template — is what
 stops the Order Booking dashboard and the Production queue disagreeing about
 whether the same job is "delayed".
 """
+import re
 from datetime import date
+from decimal import Decimal
 
 from .constants import STATUS_STAGE, Health, OrderStatus, Stage
 from .models import AuditLog, Notification
+
+MM2_PER_SQ_INCH = Decimal('645.16')          # 25.4mm squared
+
+
+def plate_area_sq_in(size_text):
+    """'150 x 110' (mm) -> 25.58 sq.in, or None when the size is unparseable.
+
+    Sizes are free text — on a quotation line, and on the size a Stores hand
+    types when booking a cut — so anything that is not two numbers separated by
+    an x returns None and the caller shows a dash rather than a wrong figure.
+
+    Both callers (sales.views for rate-per-sq-in, stores.models.SheetCut for
+    used/remnant area) come through here so the two can never disagree.
+    """
+    if not size_text:
+        return None
+    parts = re.findall(r'\d+(?:\.\d+)?', str(size_text))
+    if len(parts) < 2:
+        return None
+    length, width = Decimal(parts[0]), Decimal(parts[1])
+    if length <= 0 or width <= 0:
+        return None
+    return (length * width / MM2_PER_SQ_INCH).quantize(Decimal('0.01'))
 
 
 def log(actor, obj_type, obj_ref, action, detail='', from_value='', to_value=''):

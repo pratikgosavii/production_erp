@@ -36,10 +36,35 @@ ROLE_LANDING = [
     ('is_accounts', 'accounts:order_booking'),
     ('is_designer', 'design:queue'),
     ('is_production_manager', 'production:dashboard'),
-    ('is_floor_manager', 'production:dashboard'),
+    # NOT production:dashboard — that screen is is_production_manager-only, so
+    # sending the floor there meant signing in landed straight on "No access".
+    ('is_floor_manager', 'production:floor_queue'),
     ('is_stores', 'stores:dashboard'),
     ('is_qa', 'stores:dashboard'),  # QA module deferred (§3.10)
 ]
+
+
+ROLE_LABELS = [
+    ('is_salesman', 'Sales'),
+    ('is_sales_manager', 'Sales Manager'),
+    ('is_accounts', 'Accounts'),
+    ('is_designer', 'Design'),
+    ('is_production_manager', 'Production Manager'),
+    ('is_floor_manager', 'Floor Manager'),
+    ('is_stores', 'Stores'),
+    ('is_qa', 'QA'),
+    ('is_operator', 'Operator'),
+]
+
+
+def role_label(user):
+    """Human name for the roles a user holds — for the no-access screen."""
+    if not user.is_authenticated:
+        return ''
+    held = [label for flag, label in ROLE_LABELS if getattr(user, flag, False)]
+    if user.is_superuser:
+        held.append('Admin')
+    return ' · '.join(held) or 'no role assigned'
 
 
 def landing_url_name(user):

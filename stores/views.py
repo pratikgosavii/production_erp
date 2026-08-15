@@ -20,13 +20,13 @@ from core.constants import SheetStatus
 from core.decorators import role_required
 from core.models import Sequence
 from core.services import log
-from masters.models import ReorderLevel
+from masters.models import Rack, ReorderLevel
 
 from .forms import (
     MAX_BATCH, UNASSIGNED, BlankBatchForm, SheetDetailForm, SheetLogForm,
     active_lookups,
 )
-from .models import DispatchRecord, Sheet
+from .models import DispatchRecord, Sheet, SheetCut
 
 STORES = role_required('is_stores')
 
@@ -51,6 +51,20 @@ def _sheet_queryset():
     return Sheet.objects.select_related(
         'material', 'thickness', 'grade', 'size', 'finish', 'supplier', 'rack', 'parent',
     ).prefetch_related('reservations__so_item__order__customer', 'reservations__reserved_by')
+
+
+def _cut_job_options(sheet):
+    """The jobs a cut on this sheet may legitimately be booked against.
+
+    Only live reservations — a released one is no longer this sheet's business,
+    and the view re-checks the chosen id against exactly this list.
+    """
+    return [
+        {'id': res.so_item_id,
+         'label': f'{res.so_item.order.number} #{res.so_item.position}'}
+        for res in sheet.reservations.all()
+        if res.released_at is None and res.so_item_id
+    ]
 
 
 def _below_reorder():
@@ -142,6 +156,20 @@ def dashboard(request):
         'dispatches': dispatches,
         'dispatch_pending': dispatches.filter(dispatched_at__isnull=True).count(),
         'materials': active_lookups()['materials'],
+        'racks': active_lookups()['racks'],
+        # One blob for the shared Log Offcut modal — which jobs each cuttable
+        # sheet may be booked against, and where its remnant should default to.
+        'cut_jobs_json': {
+            s.uid: {
+                'jobs': _cut_job_options(s),
+                'rack': s.rack_id,
+                'material': (
+                    '' if s.material.name == UNASSIGNED
+                    else f'{s.material.name} · {s.thickness.name}'
+                ),
+            }
+            for s in filtered if s.can_be_cut
+        },
         'q': q, 'material_id': material_id, 'kind': kind, 'chip': chip,
         'unassigned': UNASSIGNED,
         # Design/Production see the same stock, read-only.
@@ -182,6 +210,87 @@ def issue_sheet(request, uid):
         request,
         f'{sheet.uid} issued against {reservation.so_item.order.number}.',
     )
+    return redirect(_safe_next(request))
+
+
+@STORES
+@require_POST
+def log_cut(request, uid):
+    """Book a cut — and mint the remnant sheet if one came off it.
+
+    This is the only thing in the app that creates an offcut. Every rule below
+    is re-checked here rather than being left to a hidden button: the modal is
+    a convenience, the server is the authority.
+    """
+    sheet = get_object_or_404(Sheet, uid=uid)
+
+    used_note = (request.POST.get('used_note') or '').strip()
+    remnant_note = (request.POST.get('remnant_note') or '').strip()
+    remarks = (request.POST.get('remarks') or '').strip()
+
+    if not sheet.can_be_cut:
+        messages.error(
+            request,
+            f'{sheet.uid} cannot be cut — it is {sheet.get_status_display()}. '
+            'A sheet has to be issued to the floor before a cut can be booked '
+            'against it.',
+        )
+        return redirect(_safe_next(request))
+
+    if not used_note:
+        messages.error(
+            request,
+            f'No cut booked on {sheet.uid} — enter the size that was used, e.g. 150 x 110.',
+        )
+        return redirect(_safe_next(request))
+
+    # A sheet closed as fully consumed has nothing left to cut. LEFTOVER is
+    # different: material is still on the plate, so a second cut is legitimate.
+    if sheet.status == SheetStatus.CONSUMED:
+        messages.error(
+            request,
+            f'{sheet.uid} is already closed as fully consumed — no material left to cut.',
+        )
+        return redirect(_safe_next(request))
+
+    so_item = None
+    so_item_id = (request.POST.get('so_item') or '').strip()
+    if so_item_id.isdigit():
+        # Only a job this sheet is actually reserved against may be named.
+        reservation = sheet.reservations.filter(
+            released_at__isnull=True, so_item_id=int(so_item_id),
+        ).select_related('so_item__order').first()
+        so_item = reservation.so_item if reservation else None
+
+    rack = None
+    rack_id = (request.POST.get('rack') or '').strip()
+    if rack_id.isdigit():
+        rack = Rack.objects.filter(pk=int(rack_id), is_active=True).first()
+
+    before = sheet.status
+    cut, offcut = SheetCut.record(
+        sheet, request.user, used_note, remnant_note=remnant_note,
+        so_item=so_item, rack=rack, remarks=remarks,
+    )
+
+    detail = f'Used {used_note}'
+    if so_item:
+        detail += f' against {so_item.order.number} #{so_item.position}'
+    detail += f'; remnant {remnant_note} -> {offcut.uid}' if offcut else '; no remnant'
+    log(request.user, 'Sheet', sheet.uid, 'Cut logged', detail=detail,
+        from_value=before, to_value=sheet.status)
+
+    if offcut:
+        messages.success(
+            request,
+            f'Cut booked on {sheet.uid} — {offcut.uid} ({remnant_note}) is back in '
+            f'Available stock, {sheet.uid} is now Leftover.',
+        )
+    else:
+        messages.success(
+            request,
+            f'Cut booked on {sheet.uid} — no remnant, the sheet is now Consumed.',
+        )
     return redirect(_safe_next(request))
 
 
@@ -349,6 +458,21 @@ def scan_open(request):
     return redirect('stores:sheet_detail', uid=uid)
 
 
+def _cut_blocked_reason(sheet):
+    """Plain words for why this sheet cannot have a cut booked on it."""
+    if sheet.can_be_cut:
+        return ''
+    if sheet.status == SheetStatus.AVAILABLE:
+        return ('Still on the rack — nothing has been cut off it. A sheet has to be '
+                'reserved by Design and issued by Stores before a cut can be booked.')
+    if sheet.status == SheetStatus.RESERVED:
+        return ('Merely reserved — Design has nested it, but it has not been issued '
+                'to the floor yet. Issue it first, then book the cut.')
+    if sheet.status == SheetStatus.SCRAP:
+        return 'Written off to the scrap register — it is out of circulation.'
+    return f'Not cuttable in its current state ({sheet.get_status_display()}).'
+
+
 @STORES
 def sheet_detail(request, uid):
     """The form a scan opens. Status is shown, never set here."""
@@ -376,6 +500,12 @@ def sheet_detail(request, uid):
         'reservations': sheet.reservations.select_related(
             'so_item__order', 'reserved_by', 'issued_by', 'consumed_by',
         ).all(),
+        'cuts': sheet.cuts.select_related(
+            'so_item__order', 'cut_by', 'offcut',
+        ).all(),
+        'cut_jobs': _cut_job_options(sheet),
+        # Why the Log Offcut button is not offered, in the sheet's own terms.
+        'cut_blocked_reason': _cut_blocked_reason(sheet),
         'is_unassigned': sheet.material.name == UNASSIGNED,
         'today': date.today(),
     }

@@ -151,6 +151,31 @@ class StationStatus(models.TextChoices):
     SKIPPED = 'SKIPPED', 'Skipped'
 
 
+class RejectionReason(models.TextChoices):
+    """Why pieces were rejected at a station.
+
+    A fixed list rather than free text so rejections are countable — "how much
+    under-etch did we scrap last month" is the question ISO asks, and typed
+    notes cannot answer it.
+    """
+
+    UNDER_ETCH = 'UNDER_ETCH', 'Under-etch'
+    OVER_ETCH = 'OVER_ETCH', 'Over-etch'
+    EDGE_DEFECT = 'EDGE_DEFECT', 'Edge defect'
+    COLOUR_BLEED = 'COLOUR_BLEED', 'Colour bleed'
+    DIMENSION_MISMATCH = 'DIMENSION_MISMATCH', 'Dimension mismatch'
+    HANDLING_DAMAGE = 'HANDLING_DAMAGE', 'Handling damage'
+    OTHER = 'OTHER', 'Other'
+
+
+class Disposition(models.TextChoices):
+    """What happens to the rejected pieces."""
+
+    SCRAP = 'SCRAP', 'Scrap'
+    REWORK = 'REWORK', 'Rework'
+    CONCESSION = 'CONCESSION', 'Use as is (concession)'
+
+
 class QueryStatus(models.TextChoices):
     OPEN = 'OPEN', 'Open'
     ANSWERED = 'ANSWERED', 'Answered'

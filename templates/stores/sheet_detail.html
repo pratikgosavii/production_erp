@@ -153,6 +153,69 @@
     padding: 16px 22px; position: sticky; bottom: 0;
   }
   .form-actions .note { font-size: 11px; color: var(--ink-soft); margin-left: auto; }
+  .form-actions .btn-cut {
+    background: #fff; color: var(--purple); border: 1px solid var(--purple);
+    padding: 8px 15px; border-radius: 3px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; font-family: 'IBM Plex Sans';
+  }
+  .form-actions .btn-cut:hover { background: var(--purple-bg); }
+  .form-actions .cut-blocked {
+    font-size: 11px; color: var(--ink-soft); line-height: 1.45; max-width: 430px;
+  }
+  .form-actions .cut-blocked b { color: var(--steel); }
+
+  /* Cuts table — the real usage record */
+  table.hist td.uid-cell { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 12px; }
+  table.hist td.uid-cell a { color: var(--purple); text-decoration: none; border-bottom: 1px dotted currentColor; }
+  table.hist td.uid-cell a:hover { border-bottom-style: solid; text-decoration: none; }
+  .sub-head {
+    display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+    margin: 24px 0 4px; font-size: 12.5px; font-weight: 700;
+  }
+  .sub-head .tag {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    background: var(--gray-bg); color: var(--gray); padding: 2px 7px; border-radius: 3px;
+  }
+  .sub-head .why { font-size: 11px; font-weight: 400; color: var(--ink-soft); }
+  .cut-note { font-size: 10.5px; color: var(--ink-soft); }
+
+  /* ---- Modal (same pattern as the masters screens) ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--card); border-radius: 8px; width: 520px; max-width: 92vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-box .modal-head {
+    background: var(--navy); color: #fff; padding: 15px 20px; font-size: 14px; font-weight: 700;
+  }
+  .modal-box .modal-head .sub {
+    display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+    opacity: .78; font-family: 'IBM Plex Mono';
+  }
+  .modal-box .modal-body { padding: 18px 20px 4px; max-height: 66vh; overflow-y: auto; }
+  .modal-box .modal-body .field { margin-bottom: 14px; }
+  .modal-box .modal-body .field input,
+  .modal-box .modal-body .field select { padding: 8px 11px; font-size: 12.5px; }
+  .modal-box .modal-body .field input.mono-in { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+  .field-hint.err { color: var(--red); font-weight: 600; }
+  .field-hint.hidden { display: none; }
+  .note-box {
+    font-size: 11.5px; line-height: 1.5; padding: 9px 11px; margin-bottom: 14px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .note-box.warn { background: var(--amber-bg); color: var(--amber); border-left: 3px solid var(--amber); }
+  .note-box.ok   { background: var(--green-bg); color: var(--green); border-left: 3px solid var(--green); }
+  .note-box b { font-family: 'IBM Plex Mono'; }
+  .modal-foot {
+    display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px;
+    border-top: 1px solid var(--line); background: #fafbfc;
+  }
 
   .saved-msg {
     background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green);
@@ -410,10 +473,78 @@
 
   <!-- SECTION 3 -->
   <div class="section">
-    <h2><span class="n">3</span> Reservation History <span class="readonly-tag">Read only</span></h2>
+    <h2><span class="n">3</span> Usage History <span class="readonly-tag">Read only</span></h2>
     <div class="s-sub">
-      Every reservation raised against this sheet, newest first — who nested it, who handed
-      it over and who booked it as consumed. Written by the workflow; Stores cannot edit it.
+      Every cut booked against this sheet, newest first — what was used, what came back as a
+      remnant and which OFF- label that remnant carries. Written when Stores books the cut;
+      it is not editable here.
+    </div>
+
+    <div class="table-wrap">
+      <table class="hist">
+        <thead>
+          <tr>
+            <th style="width:14%">Date</th>
+            <th style="width:16%">Job / SO</th>
+            <th style="width:13%">Cut by</th>
+            <th style="width:19%">Used</th>
+            <th style="width:19%">Remnant</th>
+            <th style="width:19%">Offcut UID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cut in cuts %}
+          <tr>
+            <td class="num">{{ cut.created_at|date:"d M Y" }}<br>
+              <span class="text-xs text-soft">{{ cut.created_at|date:"H:i" }}</span>
+            </td>
+            <td class="job">
+              {% if cut.so_item %}{{ cut.so_item.order.number }} #{{ cut.so_item.position }}
+              {% else %}<span class="cut-note">— not against a job —</span>{% endif %}
+            </td>
+            <td>{{ cut.cut_by.short_name|default:"—" }}</td>
+            <td class="num">
+              {{ cut.used_note|default:"—" }}
+              {% if cut.used_sq_in %}<br><span class="cut-note">{{ cut.used_sq_in }} sq.in</span>{% endif %}
+            </td>
+            <td class="num">
+              {% if cut.remnant_note %}
+                {{ cut.remnant_note }}
+                {% if cut.remnant_sq_in %}<br><span class="cut-note">{{ cut.remnant_sq_in }} sq.in</span>{% endif %}
+              {% else %}<span class="cut-note">none — fully consumed</span>{% endif %}
+            </td>
+            <td class="uid-cell">
+              {% if cut.offcut %}
+                <a href="{% url 'stores:sheet_detail' cut.offcut.uid %}">{{ cut.offcut.uid }}</a>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% if cut.remarks %}
+          <tr><td colspan="6" class="cut-note" style="padding-top:0;">↳ {{ cut.remarks }}</td></tr>
+          {% endif %}
+          {% empty %}
+          <tr><td colspan="6" style="text-align:center; color:var(--ink-soft); padding:26px;">
+            No cut has been booked on this sheet yet.
+            {% if sheet.can_be_cut %}Use <b>✂ Log Offcut</b> below once it comes off the saw.{% endif %}
+          </td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">
+              {{ cuts|length }} cut{{ cuts|length|pluralize }} on record ·
+              {{ sheet.total_used_sq_in }} sq.in booked off this sheet ·
+              {{ sheet.offcut_count }} offcut{{ sheet.offcut_count|pluralize }} produced.
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="sub-head">
+      Reservation history <span class="tag">Read only</span>
+      <span class="why">A different thing — who nested this sheet for which job and when it
+        changed hands. A reservation is a claim on material; a cut is what actually came off it.</span>
     </div>
 
     <div class="table-wrap">
@@ -457,8 +588,6 @@
           <tr>
             <td colspan="5">
               {{ reservations|length }} reservation{{ reservations|length|pluralize }} on record.
-              Per-cut sizes (size before / used / left) are not tracked yet — there is no
-              cut model behind this screen.
             </td>
           </tr>
         </tfoot>
@@ -470,10 +599,87 @@
     <button type="submit" class="btn btn-primary">Save Details</button>
     <a href="{% url 'stores:dashboard' %}" class="btn btn-outline">Cancel</a>
     <a href="{% url 'stores:qr_labels' %}?ids={{ sheet.uid }}" class="btn btn-outline">🖨 Print This Label</a>
+    {% if sheet.can_be_cut %}
+      <button type="button" class="btn-cut" id="btnOpenCut">✂ Log Offcut</button>
+    {% else %}
+      <span class="cut-blocked"><b>No cut can be booked yet.</b> {{ cut_blocked_reason }}</span>
+    {% endif %}
     <span class="note">Status is not on this form — it is set by the workflow.</span>
   </div>
 
 </form>
+
+{% if sheet.can_be_cut %}
+<!-- ======== LOG OFFCUT MODAL ======== -->
+<div class="modal-overlay" id="cutModal">
+  <form class="modal-box" method="post" action="{% url 'stores:log_cut' sheet.uid %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="modal-head">
+      ✂ Log Offcut
+      <span class="sub">{{ sheet.uid }} · {{ sheet.material.name }} · {{ sheet.thickness.name }}</span>
+    </div>
+    <div class="modal-body">
+      <div class="note-box ok">
+        Record what came off this plate. A <b>remnant size</b> mints a new <b>OFF-</b> sheet in
+        Available stock, linked back to <b>{{ sheet.uid }}</b>, and leaves this sheet
+        <b>LEFTOVER</b>. Leave the remnant blank and the sheet is closed as <b>CONSUMED</b>.
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="cutUsed">Used size <span class="req">*</span></label>
+          <input type="text" id="cutUsed" name="used_note" class="mono-in"
+                 placeholder="e.g. 150 x 110" required autocomplete="off">
+          <div class="field-hint">Millimetres, length × width. Free text — the area is worked out from it.</div>
+          <div class="field-hint err hidden" id="cutUsedErr">Enter the size that was used.</div>
+        </div>
+        <div class="field">
+          <label for="cutRemnant">Remnant size <span class="opt">(optional)</span></label>
+          <input type="text" id="cutRemnant" name="remnant_note" class="mono-in"
+                 placeholder="blank = fully consumed" autocomplete="off">
+          <div class="field-hint" id="cutRemnantHint">Blank means nothing usable was left.</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="cutJob">Against which job <span class="opt">(optional)</span></label>
+        <select id="cutJob" name="so_item">
+          <option value="">— Not against a specific job —</option>
+          {% for job in cut_jobs %}
+          <option value="{{ job.id }}">{{ job.label }}</option>
+          {% endfor %}
+        </select>
+        <div class="field-hint">
+          {% if cut_jobs %}Only jobs holding a live reservation on {{ sheet.uid }} are listed.
+          {% else %}No live reservation on this sheet, so there is no job to book it against.{% endif %}
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="cutRack">Rack for the remnant</label>
+        <select id="cutRack" name="rack">
+          <option value="">— Same rack as {{ sheet.uid }} —</option>
+          {% for r in racks %}
+          <option value="{{ r.pk }}" {% if sheet.rack_id == r.pk %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="field-hint">Where the leftover physically goes. Defaults to this sheet's own location.</div>
+      </div>
+
+      <div class="field">
+        <label for="cutRemarks">Remarks <span class="opt">(optional)</span></label>
+        <input type="text" id="cutRemarks" name="remarks" maxlength="200"
+               placeholder="e.g. edge trim damaged, remnant is clean stock">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-outline" id="btnCancelCut">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="btnSaveCut">Book Cut</button>
+    </div>
+  </form>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -531,6 +737,47 @@
       box.innerHTML = '<b>Not saved.</b> Complete: ' + missing.join(', ') + '.';
       form.parentNode.insertBefore(box, form);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
+
+  // ---- Log Offcut modal ----
+  // Plumbing only. Whether this sheet may be cut at all, and whether the used
+  // size is present, are both re-decided by the view — this just saves a
+  // round-trip on the obvious mistake.
+  var cutModal = document.getElementById('cutModal');
+  if (!cutModal) { return; }
+
+  var openCut  = document.getElementById('btnOpenCut');
+  var usedIn   = document.getElementById('cutUsed');
+  var usedErr  = document.getElementById('cutUsedErr');
+  var remnant  = document.getElementById('cutRemnant');
+  var remHint  = document.getElementById('cutRemnantHint');
+
+  function closeCut() { cutModal.classList.remove('show'); }
+
+  openCut.addEventListener('click', function () {
+    usedErr.classList.add('hidden');
+    cutModal.classList.add('show');
+    usedIn.focus();
+  });
+  document.getElementById('btnCancelCut').addEventListener('click', closeCut);
+  cutModal.addEventListener('click', function (e) { if (e.target === cutModal) closeCut(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && cutModal.classList.contains('show')) { closeCut(); }
+  });
+
+  // Say out loud which way the sheet is about to go.
+  remnant.addEventListener('input', function () {
+    remHint.textContent = remnant.value.trim()
+      ? 'A new OFF- sheet will be created in Available stock; this sheet becomes LEFTOVER.'
+      : 'Blank means nothing usable was left — this sheet will be closed as CONSUMED.';
+  });
+
+  cutModal.querySelector('form').addEventListener('submit', function (e) {
+    if (!usedIn.value.trim()) {
+      e.preventDefault();
+      usedErr.classList.remove('hidden');
+      usedIn.focus();
     }
   });
 })();

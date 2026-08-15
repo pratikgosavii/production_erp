@@ -104,6 +104,13 @@
     border-radius: 0 3px 3px 0; font-size: 11px; color: var(--ink); line-height: 1.6;
   }
   .slab-warn.show { display: block; }
+  /* Slab already approved at this exact rate — reads as settled, not as an
+     alert, because there is nothing for anyone to do about it. */
+  .tier-covered .est-amount { color: var(--green); font-weight: 600; }
+  .tier-covered .est-amount::after { content: ' ✓'; font-size: 10px; }
+  /* Legitimate, but the manager has to sign it off. */
+  .tier-split .est-amount { color: var(--amber); font-weight: 600; }
+  .tier-split .est-amount::after { content: ' ⧗'; font-size: 10px; }
   .slab-warn b { font-family: 'IBM Plex Mono'; }
 
   .tooling-row {
@@ -1179,6 +1186,73 @@
     qaCheckSlabs(card);
   }
 
+  // Mirror of ItemCode.covered_at_rate (masters/models.py). A slab needs no
+  // approval when every quantity in it is already covered by approved bands
+  // AND every band it touches carries exactly this rate. Two different
+  // approved prices under one slab is a decision, so that goes to the manager.
+  function qaCoveredAtRate(bands, from, to, rate) {
+    if (!bands || !bands.length || !rate) return false;
+    var upper = (to === null || to === undefined) ? BAND_OPEN_END : to;
+
+    var covering = bands.filter(function (b) {
+      var bUpper = (b.to === null || b.to === undefined) ? BAND_OPEN_END : b.to;
+      return from <= bUpper && b.from <= upper;
+    }).sort(function (a, b) { return a.from - b.from; });
+
+    if (!covering.length) return false;
+    // Compare in paise: 95 vs 95.00 must not read as a price change.
+    if (covering.some(function (b) {
+      return Math.round(b.rate * 100) !== Math.round(rate * 100);
+    })) return false;
+
+    var cursor = from;
+    for (var i = 0; i < covering.length; i++) {
+      var b = covering[i];
+      if (b.from > cursor) return false;            // a gap the card never priced
+      var bUpper = (b.to === null || b.to === undefined) ? BAND_OPEN_END : b.to;
+      cursor = Math.max(cursor, bUpper + 1);
+      if (cursor > upper) return true;
+    }
+    return cursor > upper;
+  }
+
+  // Mirror of ItemCode.containing_approved_band. One approved band wholly
+  // containing the slab means approval can carve it; crossing a boundary
+  // cannot be resolved that way and stays a real clash.
+  function qaContainedInBand(bands, from, to) {
+    if (!bands || !bands.length) return false;
+    var upper = (to === null || to === undefined) ? BAND_OPEN_END : to;
+    return bands.some(function (b) {
+      var bUpper = (b.to === null || b.to === undefined) ? BAND_OPEN_END : b.to;
+      return b.from <= from && upper <= bUpper;
+    });
+  }
+
+  // A carved slab is legitimate but not free — say it needs the manager, so
+  // the salesperson is not surprised when the quote does not auto-approve.
+  function qaMarkRowSplit(row, splitting) {
+    var cell = row.querySelector('.est-amount');
+    row.classList.toggle('tier-split', !!splitting);
+    if (cell && splitting) {
+      cell.title = 'Different price inside an approved band — this slab will '
+                 + 'be sent to the Sales Manager, and approving it splits that band.';
+    } else if (cell && !row.classList.contains('tier-covered')) {
+      cell.title = '';
+    }
+  }
+
+  // Tell the salesperson the slab is fine BECAUSE it matches the approved
+  // price — silence would read the same as "not checked yet".
+  function qaMarkRowCovered(row, covered) {
+    var cell = row.querySelector('.est-amount');
+    row.classList.toggle('tier-covered', !!covered);
+    if (cell) {
+      cell.title = covered
+        ? 'Already approved at this rate — no approval needed.'
+        : '';
+    }
+  }
+
   function qaCheckSlabs(card) {
     if (!card) return;
     var box = card.querySelector('.slab-warn');
@@ -1192,9 +1266,35 @@
         if (row.hidden) return;
         var del = row.querySelector('.tier-delete');
         if (del && del.value) return;                 // flagged for deletion
+
+        // A row with no rate typed is a blank the salesperson has not filled
+        // in yet. The server skips those (QuotationItem.band_conflicts), so
+        // warning about them here shouts about rows that would never be
+        // written — and does it while they are still typing.
+        var rateEl = row.querySelector('.tier-rate');
+        if (!rateEl || !parseFloat(rateEl.value)) return;
+
         var slab = qaSlabRange(row);
         if (!slab) return;
         var upper = slab.to === null ? BAND_OPEN_END : slab.to;
+
+        // Auto-approved: the slab sits wholly inside approved bands that
+        // already carry this exact rate, so nothing on the rate card changes.
+        // Mirrors ItemCode.covered_at_rate — keep the two in step.
+        if (qaCoveredAtRate(bands, slab.from, slab.to, parseFloat(rateEl.value))) {
+          qaMarkRowCovered(row, true);
+          return;
+        }
+        qaMarkRowCovered(row, false);
+
+        // Inside ONE approved band at a different price. Not a collision:
+        // approving it carves that band (ItemCode.split_approved_band), so
+        // the salesperson may quote it — it just needs the manager.
+        if (qaContainedInBand(bands, slab.from, slab.to)) {
+          qaMarkRowSplit(row, true);
+          return;
+        }
+        qaMarkRowSplit(row, false);
 
         bands.forEach(function (b) {
           var bTo    = (b.to === null || b.to === undefined) ? null : b.to;
@@ -1210,28 +1310,126 @@
       });
     }
 
-    if (!clashes.length) { box.className = 'slab-warn'; box.innerHTML = ''; return; }
+    if (!clashes.length) {
+      box.className = 'slab-warn'; box.innerHTML = ''; qaGateSubmit(); return;
+    }
     box.className = 'slab-warn show';
+
+    // "1+" reads like a slab name, but it means the upper limit box is empty —
+    // which is why it collides with every band the customer has. Say that,
+    // rather than repeating the same clash once per band it runs into.
+    var openEnded = clashes.some(function (c) { return /^\d+\+ overlaps/.test(c); });
+    var advice = openEnded
+      ? 'One slab has no upper limit, so it covers every quantity and collides ' +
+        'with the whole rate card — fill in its <b>to</b> quantity.'
+      : 'Start the slab above the existing band, or quote that band’s exact ' +
+        'range to revise it.';
+
     box.innerHTML = '⚠ <b>' + clashes.join('</b>; <b>') + '</b>. ' +
-      'A quotation with an overlapping slab cannot be submitted — start the slab ' +
-      'above the existing band, or quote that band’s exact range to revise it.';
+      'A quotation with an overlapping slab cannot be submitted — ' + advice;
+    qaGateSubmit();
+  }
+
+  // The server refuses an overlapping slab outright. Rather than let the
+  // salesperson fill the whole form and lose the round trip, take Submit away
+  // while any slab clashes. Save as Draft stays live — a draft is exactly what
+  // the server would have left behind anyway.
+  function qaGateSubmit() {
+    var btn = document.querySelector('button[name="action"][value="submit"]');
+    if (!btn) return;
+    var clashing = Array.prototype.some.call(
+      document.querySelectorAll('#itemsContainer .item-card'),
+      function (card) {
+        if (card.style.display === 'none') return false;   // removed by the X
+        var box = card.querySelector('.slab-warn');
+        return box && box.classList.contains('show');
+      });
+    btn.disabled = clashing;
+    btn.title = clashing
+      ? 'Fix the overlapping slab before submitting — you can still save a draft.'
+      : '';
+    btn.style.opacity = clashing ? '0.45' : '';
+    btn.style.cursor = clashing ? 'not-allowed' : '';
   }
 
   function qaCheckAllSlabs() {
     document.querySelectorAll('#itemsContainer .item-card').forEach(qaCheckSlabs);
   }
 
-  // Push an approved rate into the first tier
+  /* Lay the customer's APPROVED LADDER into the slab table.
+
+     Showing the bands as a read-only reference line and then leaving the table
+     blank is what made people retype them by hand — and a hand-typed 201–300
+     against an approved 201–500 is exactly the collision the amber warning
+     then complains about. Writing the real rows removes the chance to get it
+     wrong: the ranges match the rate card exactly, so nothing needs
+     re-approval and any quantity lands on the right band by itself.
+
+     Only ever fills EMPTY rows. A salesperson who has already typed a ladder
+     keeps it — this is a starting point, not an overwrite. */
+  function qaApplyBands(card, bands, flash) {
+    if (!card || !bands || !bands.length) return false;
+
+    var rows = Array.prototype.slice.call(
+      card.querySelectorAll('table.tiers tbody tr')).filter(function (r) {
+        if (r.hidden) return false;
+        var del = r.querySelector('.tier-delete');
+        return !(del && del.value);
+      });
+    if (!rows.length) return false;
+
+    // Refuse to clobber work: if any visible row already carries a rate, the
+    // salesperson has started pricing and this is not ours to rewrite.
+    var alreadyTyped = rows.some(function (r) {
+      var rate = r.querySelector('.tier-rate');
+      return rate && (rate.value || '').trim() !== '';
+    });
+    if (alreadyTyped) return false;
+
+    while (rows.length < bands.length) {
+      addTier(card.querySelector('.btn-add-tier'));
+      rows = Array.prototype.slice.call(
+        card.querySelectorAll('table.tiers tbody tr')).filter(function (r) {
+          return !r.hidden;
+        });
+    }
+
+    bands.forEach(function (band, i) {
+      var row = rows[i];
+      if (!row) return;
+      var nums = row.querySelectorAll('input[type=number]');
+      if (nums.length < 3) return;
+      nums[0].value = band.from;
+      nums[1].value = (band.to === null || band.to === undefined) ? '' : band.to;
+      var rateIn = row.querySelector('.tier-rate');
+      if (rateIn) { rateIn.value = Number(band.rate).toFixed(2); }
+      qaSyncTierRow(row);
+      if (flash && rateIn) { icFlash(rateIn); }
+    });
+    return true;
+  }
+
+  // Push an approved rate into the tiers — the whole ladder when the code has
+  // one, otherwise just the single live rate into the first row.
   function qaApplyRate(card, rec, flash) {
-    var rateIn = qaFirstRateInput(card);
-    if (!rateIn) return;
-    rateIn.value = rec.rate.toFixed(2);
-    qaSyncTierRow(rateIn.closest('tr'));
-    if (flash) icFlash(rateIn);
+    var bands = (rec && rec.bands) || qaCardBands(card);
+    if (!qaApplyBands(card, bands, flash)) {
+      var rateIn = qaFirstRateInput(card);
+      // qaApplyBands refuses when the salesperson has already priced a row —
+      // writing the rate here anyway would undo the work it just protected.
+      // Fall through either way: the approved bands still have to be recorded
+      // on the card below, or the overlap check has nothing to compare against.
+      if (rateIn && (rateIn.value || '').trim() === '') {
+        rateIn.value = rec.rate.toFixed(2);
+        qaSyncTierRow(rateIn.closest('tr'));
+        if (flash) icFlash(rateIn);
+      }
+    }
     card.dataset.approvedRate = rec.rate.toFixed(2);
     card.dataset.approvedCode = rec.code;
     qaSetRateChip(card, 'ok', 'Approved rate');
     qaSetFlag(card, null);
+    qaCheckSlabs(card);
     recalcTotals();
   }
 
@@ -1854,6 +2052,15 @@
     cuEvaluate(false, false);   // paints the green "existing customer" line, no flash
     icScopeAll(true);           // silent: no flash on first paint
     qaRefreshBanner();          // and the "needs approval" banner
+    // A failed submit re-renders the typed slabs. Re-run the overlap check so
+    // the inline warning is sitting on the offending item, not just in a toast
+    // at the top of the page — and so Submit starts out disabled. Evaluate the
+    // code first: scoping alone does not leave the approved bands on the card,
+    // and with no bands there is nothing for the check to collide against.
+    document.querySelectorAll('#itemsContainer .ic-field').forEach(function (f) {
+      icEvaluate(f, false);
+      qaCheckSlabs(f.closest('.item-card'));
+    });
     recalcTotals();             // approved-rate autofill may have moved the Grand Total
   });
 </script>

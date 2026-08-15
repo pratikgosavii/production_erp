@@ -88,6 +88,17 @@
   .jc-ref.none { color: var(--gray); font-weight: 400; }
   .qr-ref { font-family: 'IBM Plex Mono'; font-size: 10px; color: var(--ink-soft); }
 
+  .sheet-uid { font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 600; color: var(--ink); }
+  .sheet-uid .off {
+    font-family: 'IBM Plex Sans'; font-size: 9px; font-weight: 600; color: var(--steel);
+    background: var(--paper); border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px;
+  }
+  .sheet-state { font-size: 10px; font-weight: 600; margin-top: 3px; }
+  /* Issued is the only state the floor can act on — reserved is still on the rack. */
+  .sheet-state.issued   { color: var(--green); }
+  .sheet-state.reserved { color: var(--amber); }
+  .sheet-state.none     { color: var(--gray); font-weight: 500; }
+
   table.items tfoot td { background: var(--gray-bg); font-weight: 700; padding: 10px 11px; font-size: 12px; }
   .items-empty td { padding: 40px 12px; text-align: center; color: var(--gray); font-style: italic; }
 
@@ -209,10 +220,11 @@
       <th style="width:7%">Qty</th>
       <th style="width:8%">Rate</th>
       <th style="width:8%">Amount</th>
-      <th style="width:12%">Drawing</th>
-      <th style="width:14%">Status</th>
-      <th style="width:9%">Job Card</th>
-      <th style="width:9%">Package QR</th>
+      <th style="width:11%">Drawing</th>
+      <th style="width:13%">Sheet Reserved</th>
+      <th style="width:12%">Status</th>
+      <th style="width:8%">Job Card</th>
+      <th style="width:8%">Package QR</th>
     </tr>
   </thead>
   <tbody>
@@ -238,6 +250,17 @@
         <span class="dwg-chip missing">📐 Not uploaded</span>
         {% endif %}
       </td>
+      <td>
+        {% comment %} Reserved and issued are different facts (§10.1·3) — the
+        floor cannot start on a reservation alone, so both are spelled out.
+        No link: the sheet screen is Stores-only. {% endcomment %}
+        {% if row.material.uid %}
+        <div class="sheet-uid">{{ row.material.uid }}{% if row.material.is_offcut %} <span class="off">offcut</span>{% endif %}</div>
+        <div class="sheet-state {{ row.material.css }}">{{ row.material.state }}</div>
+        {% else %}
+        <span class="sheet-state none">Not reserved</span>
+        {% endif %}
+      </td>
       <td><span class="status-pill-sm {{ row.status_class }}">{{ row.status_icon }} {{ row.status_label }}</span></td>
       <td>
         {% if row.job_card %}
@@ -250,7 +273,7 @@
     </tr>
     {% empty %}
     <tr class="items-empty">
-      <td colspan="9">This sales order has no item codes on it yet.</td>
+      <td colspan="10">This sales order has no item codes on it yet.</td>
     </tr>
     {% endfor %}
   </tbody>
@@ -259,7 +282,7 @@
     <tr>
       <td colspan="4">Total ({{ item_count }} Item Code{{ item_count|pluralize }})</td>
       <td class="rate">{{ items_total }}</td>
-      <td colspan="4"></td>
+      <td colspan="5"></td>
     </tr>
   </tfoot>
   {% endif %}

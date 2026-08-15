@@ -174,6 +174,13 @@
     border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; white-space: nowrap;
   }
   .mat-filter .mat-all:hover { border-color: var(--blue); text-decoration: none; }
+  .swap-note {
+    font-size: 11.5px; line-height: 1.6; color: var(--amber);
+    background: var(--amber-bg); border-left: 3px solid var(--amber);
+    padding: 9px 12px; margin: 10px 0 4px;
+  }
+  .swap-note b { font-family: 'IBM Plex Mono'; }
+
   .mat-empty {
     font-size: 11.5px; color: var(--ink-soft); font-style: italic;
     padding: 14px; text-align: center; background: #fafbfc;
@@ -472,6 +479,24 @@
       </div>
       <div class="mat-empty" id="sheetNoMatch" hidden>No sheet matches that search.</div>
 
+      {% if reservation.issued_at %}
+      {% comment %} Issued — the plate is on the floor, so the choice is final.
+      Before issue the picker below stays open so the sheet can be swapped.
+      {% endcomment %}
+      <div class="sheet-option selected">
+        <input type="radio" checked disabled>
+        <div>
+          <span class="uid">{{ reservation.sheet.uid }}</span>
+          <span class="kind {% if reservation.sheet.is_offcut %}offcut{% else %}sheet{% endif %}">{% if reservation.sheet.is_offcut %}Offcut{% else %}Sheet{% endif %}</span>
+          <div class="meta">
+            {{ reservation.sheet.size_display|default:"—" }} · {{ reservation.sheet.rack.name|default:"—" }} ·
+            Reserved {{ reservation.reserved_at|date:"d M Y" }} by {{ reservation.reserved_by.short_name|default:"—" }} ·
+            Issued {{ reservation.issued_at|date:"d M Y" }} by {{ reservation.issued_by.short_name|default:"—" }}
+          </div>
+        </div>
+        <span class="stat">Issued by Stores — locked</span>
+      </div>
+      {% else %}
       {% if reservation %}
       <div class="sheet-option selected">
         <input type="radio" checked disabled>
@@ -483,11 +508,14 @@
             Reserved {{ reservation.reserved_at|date:"d M Y" }} by {{ reservation.reserved_by.short_name|default:"—" }}
           </div>
         </div>
-        <span class="stat {% if not reservation.issued_at %}held{% endif %}">
-          {% if reservation.issued_at %}Issued by Stores{% else %}Reserved — awaiting Stores{% endif %}
-        </span>
+        <span class="stat held">Reserved — awaiting Stores</span>
       </div>
-      {% else %}
+      <div class="swap-note">
+        Stores has not issued this yet, so it can still be changed — pick a
+        different sheet below and <b>{{ reservation.sheet.uid }}</b> goes back
+        into available stock. Once issued, the choice is locked.
+      </div>
+      {% endif %}
       <form method="post" action="{% url 'design:reserve_sheet' order.number %}">
         {% csrf_token %}
         <input type="hidden" name="item" value="{{ item.pk }}">
@@ -515,7 +543,9 @@
         {% endfor %}
 
         <div class="btn-row" style="margin-top:14px;">
-          <button type="submit" class="btn btn-primary" id="btnReserve" {% if not sheets %}disabled{% endif %}>Reserve Selected Sheet</button>
+          <button type="submit" class="btn btn-primary" id="btnReserve" {% if not sheets %}disabled{% endif %}>
+            {% if reservation %}Change to Selected Sheet{% else %}Reserve Selected Sheet{% endif %}
+          </button>
         </div>
       </form>
       {% endif %}

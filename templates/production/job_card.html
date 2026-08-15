@@ -6,7 +6,13 @@
 
 {% block topbar_right %}
 <div class="user-info">
-  <span class="role-tag">Floor Manager</span>
+  {% comment %} The Production Manager reads this screen too — hardcoding
+  "Floor Manager" labelled him as somebody he is not. {% endcomment %}
+  <span class="role-tag">
+    {% if user.is_floor_manager %}Floor Manager
+    {% elif user.is_production_manager %}Production Manager
+    {% else %}Admin{% endif %}
+  </span>
   <span class="name">{{ user.short_name }}</span>
   <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
 </div>
@@ -51,6 +57,135 @@
   .spec-grid .s .v { font-size: 13px; font-weight: 600; font-family: 'IBM Plex Mono'; }
 
   .section-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 2px; }
+
+  /* Prompt to write the stage instructions. Loud while the card is
+     undocumented, quiet once it is — an empty card is the problem worth
+     shouting about, a documented one just needs a way back in. */
+  .notes-cta {
+    display: flex; align-items: center; gap: 13px; margin: 12px 0 4px;
+    padding: 13px 16px; border: 1px solid var(--line);
+    border-left: 3px solid var(--steel); border-radius: var(--radius);
+    background: var(--paper);
+  }
+  .notes-cta.empty { border-left-color: var(--amber); background: var(--amber-bg); }
+  .nc-icon {
+    width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    background: #fff; border: 1px solid var(--line);
+  }
+  .notes-cta.empty .nc-icon { border-color: #e6cfa6; }
+  .nc-text { flex: 1; min-width: 0; }
+  .nc-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .notes-cta.empty .nc-title { color: var(--amber); }
+  .nc-sub { font-size: 11px; color: var(--ink-soft); margin-top: 3px; line-height: 1.55; }
+  .nc-btn {
+    flex-shrink: 0; font-size: 12px; font-weight: 600; padding: 9px 17px;
+    cursor: pointer; border-radius: var(--radius); white-space: nowrap;
+    background: var(--navy); color: #fff; border: 1px solid var(--navy);
+    font-family: 'IBM Plex Sans';
+  }
+  .nc-btn:hover { background: var(--steel); border-color: var(--steel); }
+  .notes-cta.empty .nc-btn { background: var(--amber); border-color: var(--amber); }
+  .notes-cta.empty .nc-btn:hover { filter: brightness(1.1); }
+  @media (max-width: 720px) {
+    .notes-cta { flex-wrap: wrap; }
+    .nc-btn { width: 100%; }
+  }
+
+  /* Stage instructions, editable by the Production Manager after release. */
+  .notes-panel { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; margin: 12px 0 4px; overflow: hidden; }
+  .np-head { padding: 13px 16px; border-bottom: 1px solid var(--line); background: var(--paper); }
+  .np-title { font-size: 12.5px; font-weight: 700; }
+  .np-sub { font-size: 11px; color: var(--ink-soft); margin-top: 3px; line-height: 1.6; max-width: 620px; }
+  .np-sub b { font-family: 'IBM Plex Mono'; color: var(--ink); }
+  .np-list { max-height: 50vh; overflow-y: auto; padding: 2px 16px; }
+  .np-row { display: grid; grid-template-columns: 28px 1fr; gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .np-row:last-child { border-bottom: none; }
+  .np-row.locked { opacity: .72; }
+  .np-seq {
+    width: 25px; height: 25px; border-radius: 50%; background: var(--paper);
+    border: 2px solid var(--line); color: var(--ink-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono'; font-size: 10.5px; font-weight: 700;
+  }
+  .np-name { font-size: 12px; font-weight: 600; margin-bottom: 5px; }
+  .np-lock { font-size: 9.5px; font-weight: 600; color: var(--gray); background: var(--gray-bg); padding: 1px 7px; border-radius: 3px; margin-left: 6px; }
+  .np-ro { font-size: 11.5px; color: var(--ink-soft); line-height: 1.55; padding-left: 9px; border-left: 2px solid var(--line); }
+  .np-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: var(--radius); font-size: 12px; font-family: 'IBM Plex Sans';
+    line-height: 1.55; resize: vertical; color: var(--ink);
+  }
+  .np-row textarea:focus { outline: none; border-color: var(--steel); }
+  .np-foot { padding: 12px 16px; border-top: 1px solid var(--line); background: var(--paper); display: flex; justify-content: flex-end; gap: 9px; }
+
+  /* Station SOP text — the written form of the verbal briefing. */
+  .station-desc {
+    font-size: 11px; line-height: 1.55; color: var(--ink-soft);
+    margin-top: 5px; padding-left: 9px; border-left: 2px solid var(--line);
+    max-width: 560px;
+  }
+  .station-log { font-size: 11px; color: var(--ink-soft); margin-top: 5px; }
+  .station-log b { font-family: 'IBM Plex Mono'; color: var(--ink); }
+  .station-log .rej { color: var(--red); font-weight: 600; }
+
+  .btn-start-station {
+    font-size: 11.5px; font-weight: 600; padding: 7px 15px; cursor: pointer;
+    background: var(--navy); color: #fff; border: none; border-radius: var(--radius);
+    font-family: 'IBM Plex Sans'; white-space: nowrap;
+  }
+  .btn-start-station:hover { background: var(--steel); }
+
+  /* Production log form */
+  .log-form {
+    background: #f8f9fb; border: 1px solid var(--line); border-radius: 4px;
+    padding: 15px; margin: 12px 0;
+  }
+  .log-form .lf-title { font-size: 12px; font-weight: 700; margin-bottom: 11px; }
+  .log-form .lf-title span { font-family: 'IBM Plex Mono'; }
+  .lf-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 11px; margin-bottom: 11px; }
+  .lf-grid label {
+    font-size: 9.5px; color: var(--ink-soft); text-transform: uppercase;
+    letter-spacing: .03em; display: block; margin-bottom: 4px; font-weight: 600;
+  }
+  .lf-grid input, .lf-grid select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 3px; font-size: 12.5px; font-family: 'IBM Plex Sans';
+  }
+  .lf-grid input { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .lf-balance { font-size: 11px; margin-bottom: 11px; font-family: 'IBM Plex Mono'; }
+  .lf-balance.ok  { color: var(--green); }
+  .lf-balance.bad { color: var(--red); font-weight: 600; }
+  .lf-acts { display: flex; gap: 8px; }
+
+  .count-box { background: #f8f9fb; border: 1px solid var(--line); border-radius: 3px; padding: 12px; }
+  .count-box .row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .count-box .row:last-child { border-bottom: none; }
+  .count-box .row span:first-child { color: var(--ink-soft); }
+  .count-box .row span:last-child { font-weight: 600; font-family: 'IBM Plex Mono'; font-size: 11.5px; }
+  .count-box .row span.rej { color: var(--red); }
+
+  table.mat-log { width: 100%; border-collapse: collapse; font-size: 12px; margin: 12px 0 4px; border: 1px solid var(--line); background: var(--card); }
+  table.mat-log thead th {
+    background: var(--paper); text-align: left; padding: 8px 11px; font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: .03em; font-weight: 700; color: var(--ink-soft);
+    border-bottom: 1px solid var(--line);
+  }
+  table.mat-log tbody td { padding: 10px 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.mat-log tbody tr:last-child td { border-bottom: none; }
+  .mat-code { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 11.5px; }
+  .mat-uid  { font-family: 'IBM Plex Mono'; font-weight: 600; font-size: 11.5px; }
+  .mat-uid .off {
+    font-family: 'IBM Plex Sans'; font-size: 9px; font-weight: 600; color: var(--steel);
+    background: var(--paper); border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px;
+  }
+  .mat-when { font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .mat-spec { font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+  .mat-spec.pending { color: var(--amber); font-weight: 600; }
+  .mat-state { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 20px; display: inline-block; white-space: nowrap; }
+  .mat-state.issued   { background: var(--green-bg); color: var(--green); }
+  .mat-state.reserved { background: var(--amber-bg); color: var(--amber); }
+  .mat-state.none     { background: var(--red-bg);   color: var(--red); }
   .section-sub { font-size: 10.5px; color: var(--ink-soft); margin-bottom: 10px; }
 
   /* Selection toolbar */
@@ -139,24 +274,18 @@
   }
   .drawing-mini .fname { font-size: 12px; font-weight: 600; }
   .drawing-mini .frev { font-family: 'IBM Plex Mono'; font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+  .drawing-mini + .drawing-mini { margin-top: 8px; }
+  a.drawing-mini { display: block; text-decoration: none; color: inherit; }
+  a.drawing-mini:hover { border-color: var(--blue); background: var(--blue-bg); text-decoration: none; }
+  a.drawing-mini .fopen { font-size: 10px; color: var(--blue); font-weight: 600; margin-top: 5px; }
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">Production Floor</div>
-  <a href="{% url 'production:job_card' jc_no %}" class="nav-item">
-    <span class="icon">📋</span> My Job Cards
-  </a>
-  <a class="nav-item active">
-    <span class="icon">🔧</span> {{ jc_no }}
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include "production/_floor_sidebar.html" %}{% endblock %}
 
 {% block content %}
 <div class="breadcrumb-bar">
-  <a href="{% url 'production:job_card' jc_no %}">My Job Cards</a> → <b>{{ jc_no }}</b>
+  <a href="{% url 'production:floor_queue' %}">Job Card Queue</a> → <b>{{ jc_no }}</b>
 </div>
 
 <div class="jc-layout">
@@ -182,6 +311,13 @@
         <span class="status-pill {{ pill_class }}" id="statusPill">{{ pill_text }}</span>
         {% if not can_run %}
         <span class="watch-note">Viewing as Production Manager — the floor runs this card</span>
+        {% elif not card.can_start %}
+        {% comment %} The §4 material gate is enforced here, on the floor — the
+        card was planned and prioritised before Stores issued. {% endcomment %}
+        <button class="btn btn-primary btn-sm" id="btnStartWork" disabled
+                title="Stores has not issued material for every item on this card.">
+          ▶ Start Work
+        </button>
         {% elif not card.is_started %}
         <form method="post" action="{% url 'production:start_work' card.number %}">
           {% csrf_token %}
@@ -205,11 +341,87 @@
     <div class="section-title">Process Stations</div>
     <div class="section-sub">Tick the stations from the Station master that apply to this job — unticked stations are recorded as skipped. Selection is locked once confirmed.</div>
 
+    {% comment %} The instructions are the Production Manager's to write, and he
+    can still add them after the card was raised — but only for stations that
+    have not run yet. An undocumented card says so plainly: the floor would
+    otherwise see nothing but station names. {% endcomment %}
+    {% if can_edit_notes %}
+    <div class="notes-cta {% if not notes_written %}empty{% endif %}">
+      <div class="nc-icon">{% if notes_written %}📋{% else %}✎{% endif %}</div>
+      <div class="nc-text">
+        <div class="nc-title">
+          {% if notes_written %}
+            Instructions written for {{ notes_written }} of {{ notes_total }} stages
+          {% else %}
+            No instructions written for this job yet
+          {% endif %}
+        </div>
+        <div class="nc-sub">
+          {% if notes_written %}
+            The floor reads these at each stage. Stages already completed are locked.
+          {% else %}
+            The floor will see station names only. Write what the operator needs
+            to know at each stage of this job — material, timings, what to check.
+          {% endif %}
+        </div>
+      </div>
+      <button type="button" class="nc-btn" id="btnNotes">
+        {% if notes_written %}✎ Edit Instructions{% else %}✎ Add Instructions{% endif %}
+      </button>
+    </div>
+    {% endif %}
+
+    {% if can_edit_notes %}
+    <form method="post" action="{% url 'production:save_station_notes' card.number %}"
+          id="notesPanel" class="notes-panel" hidden>
+      {% csrf_token %}
+      <div class="np-head">
+        <div>
+          <div class="np-title">Instructions for this job</div>
+          <div class="np-sub">
+            What the operator reads at each stage of <b>{{ card.number }}</b>.
+            A completed station is locked — its instruction is what the operator
+            was actually told.
+          </div>
+        </div>
+      </div>
+      <div class="np-list">
+        {% for row in stations %}
+        {% if row.status != 'SKIPPED' %}
+        <div class="np-row {% if row.status == 'DONE' %}locked{% endif %}">
+          <div class="np-seq">{{ row.sequence }}</div>
+          <div class="np-body">
+            <div class="np-name">
+              {{ row.station.name }}
+              {% if row.status == 'DONE' %}<span class="np-lock">completed — locked</span>{% endif %}
+            </div>
+            {% if row.status == 'DONE' %}
+            <div class="np-ro">{{ row.description|default:"— nothing was written for this stage —" }}</div>
+            {% else %}
+            <textarea name="desc_{{ row.pk }}" rows="2"
+                      placeholder="What to check, what to do, what to verify before the batch moves on.">{{ row.description }}</textarea>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="np-foot">
+        <button type="button" class="btn btn-outline btn-sm" id="btnNotesCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Save Instructions</button>
+      </div>
+    </form>
+    {% endif %}
+
     <form method="post" action="{% url 'production:confirm_stations' card.number %}">
       {% csrf_token %}
       <div class="select-bar">
         <div class="hint" id="selHint">
-          {% if not card.is_started %}
+          {% if not card.can_start %}
+            Waiting on Stores — material has not been issued for
+            {% for i in card.items_awaiting_material %}<b>{{ i.quotation_item.item_code|default:i.quotation_item.description }}</b>{% if not forloop.last %}, {% endif %}{% endfor %}.
+            This card is planned and queued; work can begin once the material is issued.
+          {% elif not card.is_started %}
             Press <b>Start Work</b> to capture the start time and unlock station selection.
           {% elif not confirmed %}
             Tick the applicable stations, then confirm. <b>{{ master_count }}</b> stations in the master list.
@@ -261,11 +473,26 @@
                 · {{ row.started_at|date:"H:i" }} → {{ row.completed_at|date:"H:i" }}
               {% elif confirmed %}
                 Op: <span class="op">{{ row.operator.short_name|default:"—" }}</span> ·
-                {% if current_station and current_station.pk == row.pk %}In progress{% else %}Pending{% endif %}
+                {% if row.status == 'IN_PROGRESS' %}Running since {{ row.started_at|date:"H:i" }}{% else %}Waiting{% endif %}
               {% else %}
                 Op: —
               {% endif %}
             </div>
+            {% comment %} Written by the Production Manager when he raised THIS
+            card, so it describes this job's material and thickness — not a
+            generic instruction shared by every card. {% endcomment %}
+            {% if row.description %}
+            <div class="station-desc">{{ row.description }}</div>
+            {% endif %}
+            {% if row.status == 'DONE' and row.qty_out is not None %}
+            <div class="station-log">
+              <b>{{ row.qty_in }}</b> in → <b>{{ row.qty_out }}</b> good
+              {% if row.qty_rejected %}
+                · <span class="rej">{{ row.qty_rejected }} rejected —
+                {{ row.get_rejection_reason_display }} → {{ row.get_disposition_display }}</span>
+              {% endif %}
+            </div>
+            {% endif %}
           </div>
           <div class="station-time">
             {% if row.status == 'SKIPPED' %}
@@ -273,11 +500,23 @@
             {% elif row.status == 'DONE' %}
               {{ row.completed_at|date:"d M" }}<span class="dur">{{ row.duration_display }}</span>
             {% elif confirmed and current_station and current_station.pk == row.pk %}
+              {% comment %} Start and Complete are separate: the clock has to
+              measure real run time, not the gap since the last station ended.
+              {% endcomment %}
               {% if can_run %}
-                <button type="submit" class="btn-mark-complete" form="completeForm"
-                        name="station" value="{{ row.pk }}">Mark Complete</button>
+                {% if row.status == 'IN_PROGRESS' %}
+                <button type="button" class="btn-mark-complete js-log"
+                        data-station="{{ row.pk }}"
+                        data-name="{{ row.sequence }}. {{ row.station.name }}"
+                        data-qtyin="{{ row.expected_qty_in }}">✓ Complete</button>
+                {% else %}
+                <button type="submit" class="btn-start-station" form="startStationForm"
+                        name="station" value="{{ row.pk }}">▶ Start</button>
+                {% endif %}
               {% else %}
-                <span class="not-applicable">In progress</span>
+                <span class="not-applicable">
+                  {% if row.status == 'IN_PROGRESS' %}In progress{% else %}Waiting{% endif %}
+                </span>
               {% endif %}
             {% endif %}
           </div>
@@ -294,13 +533,116 @@
       </div>
     </form>
 
-    <!-- Separate owner form for the per-station Mark Complete buttons: forms
-         cannot nest, so the buttons above point at this one via form="". -->
-    <form method="post" action="{% url 'production:complete_station' card.number %}" id="completeForm">
+    {% comment %} Separate owner forms for the per-station buttons: forms
+    cannot nest, so the buttons above point at these via form="". {% endcomment %}
+    <form method="post" action="{% url 'production:start_station' card.number %}" id="startStationForm">
       {% csrf_token %}
     </form>
 
+    {% if can_run %}
+    {% comment %} The production log. Quantities are typed — only the operator
+    knows how many survived — but they must balance, and a rejection with no
+    reason is refused server-side. {% endcomment %}
+    <form method="post" action="{% url 'production:complete_station' card.number %}"
+          id="logForm" class="log-form" hidden>
+      {% csrf_token %}
+      <input type="hidden" name="station" id="logStation">
+      <div class="lf-title">Log Production — <span id="logName">—</span></div>
+      <div class="lf-grid">
+        <div>
+          <label>Qty In</label>
+          <input type="number" name="qty_in" id="logIn" min="0" required>
+        </div>
+        <div>
+          <label>Qty Out (Good)</label>
+          <input type="number" name="qty_out" id="logOut" min="0" required>
+        </div>
+        <div>
+          <label>Qty Rejected</label>
+          <input type="number" name="qty_rejected" id="logRej" min="0" value="0">
+        </div>
+      </div>
+      <div class="lf-grid" id="logRejBlock" hidden>
+        <div style="grid-column:span 2;">
+          <label>Rejection Reason</label>
+          <select name="rejection_reason" id="logReason">
+            <option value="">—</option>
+            {% for value, label in rejection_reasons %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Disposition</label>
+          <select name="disposition" id="logDisp">
+            <option value="">—</option>
+            {% for value, label in dispositions %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="lf-balance" id="logBalance"></div>
+      <div class="lf-acts">
+        <button type="button" class="btn btn-outline btn-sm" id="logCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="logSave">Save &amp; Close Station</button>
+      </div>
+    </form>
+    {% endif %}
+
     <div class="done-banner {% if card.is_complete %}show{% endif %}" id="doneBanner">✓ All applicable stations complete — job marked <b>Completed</b> and handed over to QA.</div>
+
+    {% comment %} The right rail shows only the lead item's sheet. This is the
+    full trail — every sheet on the card, reserved when, issued when, by whom.
+    {% endcomment %}
+    <div class="section-title" style="margin-top:22px;">Material Issued Against This Card</div>
+    <div class="section-sub">
+      Design reserves the sheet; Stores issues it. Work cannot start until every
+      line below reads <b>Issued</b>.
+    </div>
+
+    <table class="mat-log">
+      <thead>
+        <tr>
+          <th>Item Code</th>
+          <th>Sheet</th>
+          <th>Reserved</th>
+          <th>Issued</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in materials %}
+        <tr>
+          <td>
+            <div class="mat-code">{{ m.code }}</div>
+            <div class="mat-spec">{{ m.spec }} · {{ m.qty }} Nos</div>
+          </td>
+          <td>
+            {% if m.uid %}
+            <div class="mat-uid">{{ m.uid }}{% if m.is_offcut %} <span class="off">offcut</span>{% endif %}</div>
+            <div class="mat-spec">{{ m.size|default:"—" }}{% if m.rack %} · {{ m.rack }}{% endif %}</div>
+            {% else %}<span class="mat-spec">—</span>{% endif %}
+          </td>
+          <td>
+            {% if m.reserved_at %}
+            <div class="mat-when">{{ m.reserved_at|date:"d M Y" }}</div>
+            <div class="mat-spec">{{ m.reserved_at|date:"H:i" }} · {{ m.reserved_by.short_name|default:"—" }}</div>
+            {% else %}<span class="mat-spec">—</span>{% endif %}
+          </td>
+          <td>
+            {% if m.issued_at %}
+            <div class="mat-when">{{ m.issued_at|date:"d M Y" }}</div>
+            <div class="mat-spec">{{ m.issued_at|date:"H:i" }} · {{ m.issued_by.short_name|default:"—" }}</div>
+            {% else %}<span class="mat-spec pending">awaiting Stores</span>{% endif %}
+          </td>
+          <td><span class="mat-state {{ m.css }}">{{ m.state }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="mat-spec">No item codes on this card.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
 
     <div class="btn-row">
       <button class="btn btn-outline" id="btnFlag" disabled>Flag Issue at This Station</button>
@@ -325,12 +667,42 @@
       </div>
     </div>
 
+    {% comment %} Yield, station by station. qty_good is the LAST station's
+    output, not a sum — the same pieces pass through every station.
+    {% endcomment %}
+    <div class="card side-block">
+      <div class="st">Live Production Count</div>
+      <div class="count-box">
+        <div class="row"><span>Qty Started</span><span>{{ card.planned_qty }}</span></div>
+        <div class="row"><span>Qty Currently Good</span><span>{{ card.qty_good }}</span></div>
+        <div class="row"><span>Total Rejected</span><span class="rej">{{ card.qty_rejected_total }}</span></div>
+        <div class="row"><span>Yield So Far</span><span>{{ card.yield_percent }}%</span></div>
+      </div>
+    </div>
+
     <div class="card side-block">
       <div class="st">Drawing Reference</div>
+      {% comment %} One per item code, and clickable — the floor works FROM
+      the drawing, so a filename it cannot open is no use. {% endcomment %}
+      {% for d in drawings %}
+        {% if d.url %}
+        <a class="drawing-mini open" href="{{ d.url }}" target="_blank">
+          <div class="fname">📐 {{ d.name }}</div>
+          <div class="frev">{{ d.code }} · {{ d.label }} — {% if d.approved %}Approved{% else %}Current{% endif %}</div>
+          <div class="fopen">Open drawing →</div>
+        </a>
+        {% else %}
+        <div class="drawing-mini">
+          <div class="fname">📐 No drawing on file</div>
+          <div class="frev">{{ d.code }}</div>
+        </div>
+        {% endif %}
+      {% empty %}
       <div class="drawing-mini">
-        <div class="fname">📐 {{ drawing.file.name|cut:"drawings/"|default:"No drawing on file" }}</div>
-        <div class="frev">{% if drawing %}{{ drawing.label }} — {% if item.design_approved %}Approved{% else %}Current{% endif %}{% else %}—{% endif %}</div>
+        <div class="fname">📐 No drawing on file</div>
+        <div class="frev">—</div>
       </div>
+      {% endfor %}
     </div>
 
     <div class="card side-block">
@@ -402,5 +774,97 @@
     checks().forEach(function (c) { c.addEventListener('change', refreshSelection); });
     refreshSelection();
   });
+
+  /* ---- Stage instructions (Production Manager) -------------------------- */
+  (function () {
+    var btn = document.getElementById('btnNotes');
+    var panel = document.getElementById('notesPanel');
+    if (!btn || !panel) { return; }          // floor view: read-only
+
+    btn.addEventListener('click', function () {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) {
+        panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+        var first = panel.querySelector('textarea');
+        if (first) { first.focus(); }
+      }
+    });
+    document.getElementById('btnNotesCancel').addEventListener('click', function () {
+      panel.hidden = true;
+    });
+  })();
+
+  /* ---- Production log ---------------------------------------------------
+     Opens under the station being closed. The balance check here is a
+     courtesy: complete_station re-derives it and refuses a mismatch, so a
+     hand-rolled POST cannot record 20 good out of 22 in with nothing
+     rejected. */
+  (function () {
+    var form = document.getElementById('logForm');
+    if (!form) { return; }                       // read-only viewer
+
+    var fStation = document.getElementById('logStation');
+    var fName    = document.getElementById('logName');
+    var fIn      = document.getElementById('logIn');
+    var fOut     = document.getElementById('logOut');
+    var fRej     = document.getElementById('logRej');
+    var rejBlock = document.getElementById('logRejBlock');
+    var fReason  = document.getElementById('logReason');
+    var fDisp    = document.getElementById('logDisp');
+    var balance  = document.getElementById('logBalance');
+    var saveBtn  = document.getElementById('logSave');
+
+    function n(el) { var v = parseInt(el.value, 10); return isNaN(v) ? 0 : v; }
+
+    function refresh() {
+      var inQ = n(fIn), outQ = n(fOut), rejQ = n(fRej);
+      var rejecting = rejQ > 0;
+      rejBlock.hidden = !rejecting;
+      fReason.required = rejecting;
+      fDisp.required = rejecting;
+      if (!rejecting) { fReason.value = ''; fDisp.value = ''; }
+
+      var sum = outQ + rejQ;
+      var ok = sum === inQ;
+      balance.className = 'lf-balance ' + (ok ? 'ok' : 'bad');
+      balance.textContent = ok
+        ? outQ + ' good + ' + rejQ + ' rejected = ' + inQ + ' in ✓'
+        : outQ + ' good + ' + rejQ + ' rejected = ' + sum + ', but ' + inQ + ' went in';
+      saveBtn.disabled = !ok;
+    }
+
+    [fIn, fOut, fRej].forEach(function (el) {
+      el.addEventListener('input', refresh);
+    });
+
+    document.querySelectorAll('.js-log').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var qty = btn.dataset.qtyin || '0';
+        fStation.value = btn.dataset.station;
+        fName.textContent = btn.dataset.name;
+        fIn.value = qty;
+        // Good defaults to everything that went in: the common case is a
+        // clean station, and typing the rejects is what changes it.
+        fOut.value = qty;
+        fRej.value = '0';
+        refresh();
+        form.hidden = false;
+        form.scrollIntoView({behavior: 'smooth', block: 'center'});
+        fOut.focus();
+        fOut.select();
+      });
+    });
+
+    document.getElementById('logCancel').addEventListener('click', function () {
+      form.hidden = true;
+    });
+
+    // Rejected count drives Good, so the operator only types one number.
+    fRej.addEventListener('input', function () {
+      var inQ = n(fIn), rejQ = n(fRej);
+      if (rejQ <= inQ) { fOut.value = inQ - rejQ; }
+      refresh();
+    });
+  })();
 </script>
 {% endblock %}

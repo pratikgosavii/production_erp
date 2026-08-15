@@ -118,3 +118,4 @@ class CustomerForm(forms.ModelForm):
             tail = (cleaned.get('address') or '').split(',')[-1].strip()
             cleaned['city'] = tail.rstrip('0123456789 ').strip()
         return cleaned
+

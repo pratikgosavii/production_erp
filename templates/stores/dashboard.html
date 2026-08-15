@@ -122,6 +122,73 @@
   .status-inv.scrap { background: var(--red-bg); color: var(--red); }
   .status-inv.scrap::before { background: var(--red); }
 
+  .btn-cut {
+    font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 3px;
+    border: 1px solid var(--purple); background: #fff; color: var(--purple);
+    cursor: pointer; font-family: 'IBM Plex Sans'; margin-top: 5px;
+  }
+  .btn-cut:hover { background: var(--purple-bg); }
+  .row-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+
+  /* ---- Modal (same pattern as the masters screens) ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(19,36,53,.55);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--card); border-radius: 8px; width: 520px; max-width: 92vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden;
+  }
+  .modal-box .modal-head {
+    background: var(--navy); color: #fff; padding: 15px 20px; font-size: 14px; font-weight: 700;
+  }
+  .modal-box .modal-head .sub {
+    display: block; margin-top: 3px; font-size: 11px; font-weight: 400;
+    opacity: .78; font-family: 'IBM Plex Mono';
+  }
+  .modal-box .modal-body { padding: 18px 20px 4px; max-height: 66vh; overflow-y: auto; }
+  .modal-box .modal-body .field { margin-bottom: 14px; }
+  .modal-box .modal-body label {
+    display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-soft); font-weight: 600; margin-bottom: 5px;
+  }
+  .modal-box .modal-body .field input,
+  .modal-box .modal-body .field select {
+    width: 100%; padding: 8px 11px; font-size: 12.5px; border: 1px solid var(--line);
+    border-radius: 3px; font-family: 'IBM Plex Sans'; background: #fff;
+  }
+  .modal-box .modal-body .field input.mono-in { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .req { color: var(--red); }
+  .opt { color: var(--gray); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 10px; }
+  .field-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+  .field-hint.err { color: var(--red); font-weight: 600; }
+  .field-hint.hidden { display: none; }
+  .note-box {
+    font-size: 11.5px; line-height: 1.5; padding: 9px 11px; margin-bottom: 14px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .note-box.ok { background: var(--green-bg); color: var(--green); border-left: 3px solid var(--green); }
+  .note-box b { font-family: 'IBM Plex Mono'; }
+
+  .issue-recap { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+  .issue-recap th {
+    text-align: left; font-weight: 500; color: var(--ink-soft); font-size: 11px;
+    padding: 5px 12px 5px 0; white-space: nowrap; width: 34%; vertical-align: top;
+  }
+  .issue-recap td { padding: 5px 0; color: var(--ink); }
+  .issue-recap td.mono { font-family: 'IBM Plex Mono'; font-size: 11.5px; }
+  /* The destination is the thing being checked, so it carries the emphasis. */
+  .issue-recap td.strong { font-weight: 700; font-size: 13px; }
+  .issue-recap tr.gap th, .issue-recap tr.gap td {
+    border-top: 1px solid var(--line); padding-top: 10px;
+  }
+  .modal-foot {
+    display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px;
+    border-top: 1px solid var(--line); background: #fafbfc;
+  }
+
   .inline-form { display: inline; margin: 0; }
   .flash { padding: 10px 14px; font-size: 11.5px; line-height: 1.55; margin-bottom: 14px; border-radius: 0 var(--radius) var(--radius) 0; }
   .flash.success { background: var(--green-bg); border-left: 3px solid var(--green); color: var(--green); }
@@ -270,18 +337,37 @@
         {% if not can_manage %}
           {# Design/Production are looking, not acting — issuing is Stores' call. #}
           <span class="cell-note">—</span>
-        {% elif sheet.status == 'RESERVED' and res %}
-          <form method="post" class="inline-form" action="{% url 'stores:issue_sheet' sheet.uid %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <button type="submit" class="btn-issue">Issue</button>
-          </form>
-        {% elif sheet.status == 'ISSUED' %}
-          <span class="cell-note">Handed over</span>
-        {% elif sheet.status == 'CONSUMED' %}
-          <span class="cell-note">Closed</span>
         {% else %}
-          <button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button>
+        <div class="row-actions">
+          {% if sheet.status == 'RESERVED' and res %}
+            {% comment %} Issue hands the plate to the floor and cannot be
+            undone from this screen, so it confirms first — showing which order
+            it is going to, rather than firing on a single click. {% endcomment %}
+            <button type="button" class="btn-issue js-issue"
+                    data-uid="{{ sheet.uid }}"
+                    data-sheet="{{ sheet.material.name }} · {{ sheet.thickness.name }} · {{ sheet.size_display|default:'—' }}"
+                    data-rack="{{ sheet.rack.name|default:'—' }}"
+                    data-so="{{ res.so_item.order.number }}"
+                    data-customer="{{ res.so_item.order.customer.name }}"
+                    {% comment %} .code, not the ItemCode itself — its __str__ appends
+                    the customer, which the Customer row already states. {% endcomment %}
+                    data-code="{{ res.so_item.quotation_item.item_code.code|default:res.so_item.quotation_item.description }}"
+                    data-qty="{{ res.so_item.quantity }}"
+                    data-by="{{ res.reserved_by.short_name|default:'—' }}">Issue</button>
+          {% elif sheet.status == 'ISSUED' %}
+            <span class="cell-note">Handed over</span>
+          {% elif sheet.status == 'CONSUMED' %}
+            <span class="cell-note">Closed</span>
+          {% else %}
+            <button class="btn-issue" disabled title="Material must be reserved by Design before it can be issued">Issue</button>
+          {% endif %}
+
+          {# The only thing in the app that creates an offcut. Offered on material #}
+          {# that reached the floor; the view re-checks it regardless.             #}
+          {% if sheet.can_be_cut %}
+            <button type="button" class="btn-cut js-log-cut" data-uid="{{ sheet.uid }}">✂ Log Offcut</button>
+          {% endif %}
+        </div>
         {% endif %}
       </td>
     </tr>
@@ -362,10 +448,117 @@
   </tbody>
 </table>
 </div>
+
+{% if can_manage %}
+{{ cut_jobs_json|json_script:"cut-jobs-data" }}
+<!-- ======== LOG OFFCUT MODAL (shared by every cuttable row) ======== -->
+{% comment %} Issue confirmation. The plate physically leaves the rack here, so
+the destination is spelled out before the handover, not only after it. {% endcomment %}
+<div class="modal-overlay" id="issueModal">
+  <form class="modal-box" method="post" action="" id="issueForm"
+        data-url-tpl="{% url 'stores:issue_sheet' '__UID__' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="modal-head">
+      Issue material to production
+      <span class="sub" id="issueSub">—</span>
+    </div>
+    <div class="modal-body">
+      <div class="note-box ok">
+        Handing this plate to the shop floor. Check it is the right sheet for the
+        right order — the floor cannot start until it is issued, and this screen
+        has no undo.
+      </div>
+      <table class="issue-recap">
+        <tr><th>Sheet</th>       <td class="mono" id="isUid">—</td></tr>
+        <tr><th>Material</th>    <td id="isSheet">—</td></tr>
+        <tr><th>From rack</th>   <td id="isRack">—</td></tr>
+        <tr class="gap"><th>Going to</th><td class="mono strong" id="isSo">—</td></tr>
+        <tr><th>Customer</th>    <td id="isCustomer">—</td></tr>
+        <tr><th>Item code</th>   <td class="mono" id="isCode">—</td></tr>
+        <tr><th>Quantity</th>    <td id="isQty">—</td></tr>
+        <tr><th>Reserved by</th> <td id="isBy">—</td></tr>
+      </table>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-outline" id="btnCancelIssue">Cancel</button>
+      <button type="submit" class="btn btn-primary">Confirm &amp; Issue</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-overlay" id="cutModal">
+  {# The action is stamped per row from this template — one modal, many sheets. #}
+  <form class="modal-box" method="post" action="" id="cutForm"
+        data-url-tpl="{% url 'stores:log_cut' '__UID__' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="modal-head">
+      ✂ Log Offcut
+      <span class="sub" id="cutSub">—</span>
+    </div>
+    <div class="modal-body">
+      <div class="note-box ok">
+        Record what came off this plate. A <b>remnant size</b> mints a new <b>OFF-</b> sheet in
+        Available stock, linked back to the sheet it was cut from, and leaves that sheet
+        <b>LEFTOVER</b>. Leave the remnant blank and the sheet is closed as <b>CONSUMED</b>.
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="cutUsed">Used size <span class="req">*</span></label>
+          <input type="text" id="cutUsed" name="used_note" class="mono-in"
+                 placeholder="e.g. 150 x 110" required autocomplete="off">
+          <div class="field-hint">Millimetres, length × width.</div>
+          <div class="field-hint err hidden" id="cutUsedErr">Enter the size that was used.</div>
+        </div>
+        <div class="field">
+          <label for="cutRemnant">Remnant size <span class="opt">(optional)</span></label>
+          <input type="text" id="cutRemnant" name="remnant_note" class="mono-in"
+                 placeholder="blank = fully consumed" autocomplete="off">
+          <div class="field-hint" id="cutRemnantHint">Blank means nothing usable was left.</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="cutJob">Against which job <span class="opt">(optional)</span></label>
+        <select id="cutJob" name="so_item">
+          <option value="">— Not against a specific job —</option>
+        </select>
+        <div class="field-hint" id="cutJobHint">Only jobs holding a live reservation on this sheet are listed.</div>
+      </div>
+
+      <div class="field">
+        <label for="cutRack">Rack for the remnant</label>
+        <select id="cutRack" name="rack">
+          <option value="">— Same rack as the parent sheet —</option>
+          {% for r in racks %}
+          <option value="{{ r.pk }}">{{ r.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="field-hint">Where the leftover physically goes. Defaults to the parent's location.</div>
+      </div>
+
+      <div class="field">
+        <label for="cutRemarks">Remarks <span class="opt">(optional)</span></label>
+        <input type="text" id="cutRemarks" name="remarks" maxlength="200"
+               placeholder="e.g. edge trim damaged, remnant is clean stock">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-outline" id="btnCancelCut">Cancel</button>
+      <button type="submit" class="btn btn-primary">Book Cut</button>
+    </div>
+  </form>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
+(function () {
+  'use strict';
+
   // Filters are real querystring filters and the chips are links, so the row
   // state comes back from the server. Nothing is flipped locally any more —
   // Issue and Mark Dispatched are POST forms.
@@ -375,5 +568,119 @@
       if (btn.form) { btn.form.submit(); }
     });
   });
+
+{% if can_manage %}
+  // ---- Issue: confirm the destination before the plate leaves the rack ----
+  // Read-only recap; issue_sheet re-checks the reservation server-side, so a
+  // stale row cannot issue material Design never reserved.
+  var isModal = document.getElementById('issueModal');
+  if (isModal) {
+    var isForm = document.getElementById('issueForm');
+    var isTpl  = isForm.dataset.urlTpl;
+    var closeIssue = function () { isModal.classList.remove('show'); };
+
+    document.querySelectorAll('.js-issue').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var d = btn.dataset;
+        isForm.action = isTpl.replace('__UID__', d.uid);
+        document.getElementById('issueSub').textContent  = d.uid + ' → ' + d.so;
+        document.getElementById('isUid').textContent      = d.uid;
+        document.getElementById('isSheet').textContent    = d.sheet;
+        document.getElementById('isRack').textContent     = d.rack;
+        document.getElementById('isSo').textContent       = d.so;
+        document.getElementById('isCustomer').textContent = d.customer;
+        document.getElementById('isCode').textContent     = d.code;
+        document.getElementById('isQty').textContent      = d.qty + ' Nos';
+        document.getElementById('isBy').textContent       = d.by + ' (Design)';
+        isModal.classList.add('show');
+      });
+    });
+
+    document.getElementById('btnCancelIssue').addEventListener('click', closeIssue);
+    isModal.addEventListener('click', function (e) { if (e.target === isModal) closeIssue(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && isModal.classList.contains('show')) { closeIssue(); }
+    });
+  }
+
+  // ---- Log Offcut: one modal re-pointed at whichever row was clicked ----
+  // Every rule it looks like it enforces (cuttable status, a used size, the job
+  // really being reserved on this sheet) is decided again in the view. Design
+  // and Production read this screen, so none of it is shipped to them at all.
+  var modal = document.getElementById('cutModal');
+  if (!modal) { return; }
+
+  var data    = JSON.parse(document.getElementById('cut-jobs-data').textContent);
+  var form    = document.getElementById('cutForm');
+  var tpl     = form.dataset.urlTpl;
+  var sub     = document.getElementById('cutSub');
+  var used    = document.getElementById('cutUsed');
+  var usedErr = document.getElementById('cutUsedErr');
+  var remnant = document.getElementById('cutRemnant');
+  var remHint = document.getElementById('cutRemnantHint');
+  var jobSel  = document.getElementById('cutJob');
+  var jobHint = document.getElementById('cutJobHint');
+  var rackSel = document.getElementById('cutRack');
+
+  function closeCut() { modal.classList.remove('show'); }
+
+  document.querySelectorAll('.js-log-cut').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var uid  = btn.dataset.uid;
+      var info = data[uid] || { jobs: [], rack: null, material: '' };
+
+      form.action = tpl.replace('__UID__', uid);
+      sub.textContent = uid + (info.material ? ' · ' + info.material : '');
+
+      used.value = '';
+      remnant.value = '';
+      document.getElementById('cutRemarks').value = '';
+      usedErr.classList.add('hidden');
+      remHint.textContent = 'Blank means nothing usable was left.';
+
+      // Jobs are per sheet, so rebuild the select each time it opens.
+      jobSel.innerHTML = '';
+      var none = document.createElement('option');
+      none.value = '';
+      none.textContent = '— Not against a specific job —';
+      jobSel.appendChild(none);
+      info.jobs.forEach(function (job) {
+        var opt = document.createElement('option');
+        opt.value = job.id;
+        opt.textContent = job.label;
+        jobSel.appendChild(opt);
+      });
+      jobHint.textContent = info.jobs.length
+        ? 'Only jobs holding a live reservation on ' + uid + ' are listed.'
+        : 'No live reservation on this sheet, so there is no job to book it against.';
+
+      rackSel.value = info.rack ? String(info.rack) : '';
+
+      modal.classList.add('show');
+      used.focus();
+    });
+  });
+
+  document.getElementById('btnCancelCut').addEventListener('click', closeCut);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeCut(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('show')) { closeCut(); }
+  });
+
+  remnant.addEventListener('input', function () {
+    remHint.textContent = remnant.value.trim()
+      ? 'A new OFF- sheet will be created in Available stock; the parent becomes LEFTOVER.'
+      : 'Blank means nothing usable was left — the sheet will be closed as CONSUMED.';
+  });
+
+  form.addEventListener('submit', function (e) {
+    if (!used.value.trim()) {
+      e.preventDefault();
+      usedErr.classList.remove('hidden');
+      used.focus();
+    }
+  });
+{% endif %}
+})();
 </script>
 {% endblock %}
