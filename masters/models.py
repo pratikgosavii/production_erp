@@ -674,6 +674,13 @@ class ProcessStation(TimeStampedModel):
     sequence = models.PositiveSmallIntegerField(default=0)
     # Cell/group the station belongs to, used for the operator roster.
     group = models.CharField(max_length=60, blank=True)
+    # Most stations run the same time whatever the metal is — the panel size is
+    # what governs. Etching and Colour Filling genuinely vary with material and
+    # thickness, so only those two carry per-material bands (spec SS 5).
+    is_material_dependent = models.BooleanField(
+        default=False,
+        help_text='Etching and Colour Fill only — their time varies by material.',
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -681,6 +688,88 @@ class ProcessStation(TimeStampedModel):
 
     def __str__(self):
         return self.name
+
+    def band_for(self, material=None, thickness=None):
+        """The Min/Max band that applies to this station for this spec.
+
+        A material-dependent station looks for its exact material+thickness row
+        and falls back to its universal row when that pairing has not been
+        time-studied yet — better a rough band than none at all.
+        """
+        bands = list(self.bands.all())
+        if self.is_material_dependent and material and thickness:
+            for b in bands:
+                if b.material_id == material.pk and b.thickness_id == thickness.pk:
+                    return b
+        for b in bands:
+            if b.material_id is None and b.thickness_id is None:
+                return b
+        return None
+
+
+class StationStandardBand(TimeStampedModel):
+    """Min/Max run time for a station, against the standard 12" x 48" panel.
+
+    Two kinds of row live here. A UNIVERSAL row (material and thickness both
+    null) applies to a station whatever is being run. A MATERIAL row pins the
+    band to one material+thickness pairing, and only Etching and Colour Fill
+    are expected to have any.
+    """
+
+    station = models.ForeignKey(
+        ProcessStation, on_delete=models.CASCADE, related_name='bands',
+    )
+    material = models.ForeignKey(
+        'Material', on_delete=models.CASCADE, null=True, blank=True,
+    )
+    thickness = models.ForeignKey(
+        'Thickness', on_delete=models.CASCADE, null=True, blank=True,
+    )
+    min_seconds = models.PositiveIntegerField()
+    max_seconds = models.PositiveIntegerField()
+    standard_unit = models.CharField(max_length=40, default='12" x 48" panel')
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['station__sequence', 'material__name', 'thickness__name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['station', 'material', 'thickness'],
+                name='uniq_band_per_station_spec',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.station.name} · {self.scope_label}'
+
+    @property
+    def is_universal(self):
+        return self.material_id is None and self.thickness_id is None
+
+    @property
+    def scope_label(self):
+        if self.is_universal:
+            return 'Universal'
+        return f'{self.material.name} · {self.thickness.name}'
+
+    @property
+    def band_label(self):
+        return f'Min {self.min_seconds}s · Max {self.max_seconds}s'
+
+    def clean(self):
+        super().clean()
+        if self.max_seconds and self.min_seconds and self.max_seconds < self.min_seconds:
+            raise ValidationError({
+                'max_seconds': 'Max must not be below Min.',
+            })
+        # A half-specified scope would silently never match anything.
+        if bool(self.material_id) != bool(self.thickness_id):
+            raise ValidationError(
+                'Give both material and thickness, or neither for a universal band.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class ReorderLevel(TimeStampedModel):

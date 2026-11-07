@@ -1236,10 +1236,24 @@ def complete_station(request, jc_no):
         row, request.user, qty_in=qty_in, qty_out=qty_out,
         qty_rejected=qty_rej, rejection_reason=reason, disposition=disposition,
     )
+    # A rejection worth investigating opens an NCR off the same data, rather
+    # than asking the floor to fill a second form about what it just logged.
+    ncr = None
+    from quality.models import NCR
+    if NCR.should_auto_raise(row):
+        ncr = NCR.raise_from_station(row, request.user)
+
     detail = f'{card.number} · {row.duration_display} · {qty_out} good'
     if qty_rej:
         detail += (f' · {qty_rej} rejected ({row.get_rejection_reason_display()}'
                    f' → {row.get_disposition_display()})')
     log(request.user, 'JobCardStation', card.order_ref,
         f'{row.station.name} completed', detail=detail)
+    if ncr is not None:
+        log(request.user, 'NCR', card.order_ref, f'{ncr.number} raised',
+            detail=ncr.title)
+        messages.warning(
+            request,
+            f'{ncr.number} raised — {qty_rej} rejected at {row.station.name} '
+            f'needs a root cause before it can be closed.')
     return redirect('production:job_card', jc_no=card.number)

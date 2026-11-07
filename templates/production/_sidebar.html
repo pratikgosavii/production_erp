@@ -11,6 +11,9 @@ and its sidebar must stay on the floor's own footing.
   <a href="{% url 'production:priority_board' %}" class="nav-item {% if nav == 'priority' %}active{% endif %}">
     <span class="icon">🎯</span> Priority Board
   </a>
+  <a href="{% url 'quality:register' %}" class="nav-item {% if nav == 'ncr' %}active{% endif %}">
+    <span class="icon">⚠️</span> NCR Register
+  </a>
   {% if nav_order %}
   <a href="{% url 'production:order_detail' so_no=nav_order %}" class="nav-item active">
     <span class="icon">🧾</span> {{ nav_order }}

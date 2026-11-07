@@ -18,7 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.constants import ItemCodeApproval, OrderType, QuotationStatus, QueryStatus
+from core.constants import ProofOutcome, ItemCodeApproval, OrderType, QuotationStatus, QueryStatus
 from core.decorators import landing_url_name, role_required
 from core.models import AuditLog
 from core.services import log, notify, plate_area_sq_in
@@ -1346,7 +1346,25 @@ def _owned_query(request, pk):
 
 @role_required('is_salesman')
 def design_queries(request):
-    """My Design Queries — the inbox §7.1 promised and never built."""
+    """My Design Queries — the inbox §7.1 promised and never built.
+
+    It also carries the open artwork proofs: both are "Design is waiting on a
+    person", and the salesperson is that person in each case.
+    """
+    from design.models import ProofRound
+    from core.constants import ProofOutcome as _PO
+
+    proofs = (
+        ProofRound.objects
+        .filter(outcome=_PO.SENT)
+        .select_related('so_item__order__customer',
+                        'so_item__quotation_item__item_code', 'drawing', 'sent_by')
+        .order_by('sent_at')
+    )
+    if not request.user.is_superuser and not request.user.is_sales_manager:
+        proofs = proofs.filter(so_item__order__quotation__salesperson=request.user)
+    open_proofs = list(proofs)
+
     rows = list(_my_queries(request.user))
 
     counts = {'all': len(rows), 'open': 0, 'answered': 0, 'closed': 0}
@@ -1366,6 +1384,7 @@ def design_queries(request):
         _decorate_query(query)
 
     context = {
+        'open_proofs': open_proofs,
         'queries': visible,
         'counts': counts,
         'active_filter': active,
@@ -1410,3 +1429,49 @@ def query_reply(request, pk):
         f'Design decides whether it unblocks the job.',
     )
     return redirect(f"{reverse('sales:queries')}?status={request.POST.get('back') or 'open'}")
+
+
+@role_required('is_salesman', 'is_sales_manager')
+@require_POST
+def record_proof(request, pk):
+    """Sales writes down what the customer said about an artwork proof.
+
+    Approving here is what releases the item to nesting and production - it is
+    the customer's gate, so only the person who spoke to them can close it.
+    """
+    from design.models import ProofRound
+    proof = get_object_or_404(
+        ProofRound.objects.select_related('so_item__order'), pk=pk)
+    item = proof.so_item
+
+    if not proof.is_open:
+        messages.info(request, f'{proof.label} was already answered.')
+        return redirect('sales:queries')
+
+    outcome = (request.POST.get('outcome') or '').strip()
+    comment = (request.POST.get('comment') or '').strip()
+    if outcome not in (ProofOutcome.APPROVED, ProofOutcome.CHANGES):
+        messages.error(request, 'Say whether the customer approved it or asked '
+                                'for changes.')
+        return redirect('sales:queries')
+    if outcome == ProofOutcome.CHANGES and not comment:
+        messages.error(
+            request,
+            "Changes need the customer's words - Design cannot act on "
+            '"they want changes" alone.')
+        return redirect('sales:queries')
+
+    proof.record(outcome, request.user, comment)
+    log(request.user, 'ProofRound', item.order.number,
+        f'{proof.label} {proof.get_outcome_display()}',
+        detail=comment[:160])
+    notify_designer = getattr(item.order, 'assigned_designer', None)
+    if notify_designer:
+        notify(notify_designer,
+               f'{proof.label} {proof.get_outcome_display().lower()} - '
+               f'{item.order.number}',
+               link=f'/design/job/{item.order.number}/?item={item.pk}',
+               object_ref=item.order.number)
+    messages.success(request, f'{proof.label} recorded as '
+                              f'{proof.get_outcome_display().lower()}.')
+    return redirect('sales:queries')

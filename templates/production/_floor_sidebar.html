@@ -13,6 +13,9 @@ offering them to floor staff would be links that lead to "No access".
     <span class="icon">🔧</span> {{ nav_card }}
   </a>
   {% endif %}
+  <a href="{% url 'quality:register' %}" class="nav-item {% if nav == 'ncr' %}active{% endif %}">
+    <span class="icon">⚠️</span> NCR Register
+  </a>
 </div>
 
 {% if can_open_order %}

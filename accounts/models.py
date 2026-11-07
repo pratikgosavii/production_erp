@@ -299,7 +299,72 @@ class SOItem(TimeStampedModel):
 
     @property
     def current_drawing(self):
-        return self.drawing_revisions.filter(is_current=True).first()
+        """The DESIGNER's live drawing. A customer reference is not one.
+
+        Sales attaching the client's drawing is an input to design, not the
+        output of it — counting it here let an item read as "drawn" and pass
+        the production gate before anyone in Design had touched it.
+        """
+        from design.models import DrawingRevision
+        return (
+            self.drawing_revisions
+            .filter(is_current=True)
+            .exclude(source__in=DrawingRevision.REFERENCE_SOURCES)
+            .first()
+        )
+
+    # ---- customer proof (spec SS 6: two gates, not one) ----------------
+    @property
+    def current_proof(self):
+        """The latest proof round, whatever its outcome."""
+        return self.proof_rounds.order_by('-revision').first()
+
+    @property
+    def proof_approved(self):
+        """Has the customer signed off the artwork?"""
+        from core.constants import ProofOutcome
+        return self.proof_rounds.filter(outcome=ProofOutcome.APPROVED).exists()
+
+    @property
+    def proof_pending(self):
+        """Sent and still waiting - the blocker is the customer, not us."""
+        from core.constants import ProofOutcome
+        if self.proof_approved:
+            return False
+        return self.proof_rounds.filter(outcome=ProofOutcome.SENT).exists()
+
+    @property
+    def proof_state(self):
+        """'approved' | 'waiting' | 'changes' | 'none'."""
+        from core.constants import ProofOutcome
+        if self.proof_approved:
+            return 'approved'
+        latest = self.current_proof
+        if latest is None:
+            return 'none'
+        if latest.outcome == ProofOutcome.SENT:
+            return 'waiting'
+        return 'changes'
+
+    @property
+    def customer_reference(self):
+        """What Sales/the customer supplied — permanent, never superseded."""
+        from design.models import DrawingRevision
+        return (
+            self.drawing_revisions
+            .filter(source__in=DrawingRevision.REFERENCE_SOURCES)
+            .order_by('revision')
+        )
+
+    @property
+    def design_revisions(self):
+        """The designer's own ladder, newest first."""
+        from design.models import DrawingRevision
+        return (
+            self.drawing_revisions
+            .exclude(source__in=DrawingRevision.REFERENCE_SOURCES)
+            .order_by('-revision')
+        )
 
     @property
     def material_reserved(self):
@@ -373,6 +438,10 @@ class SOItem(TimeStampedModel):
 
         if self.current_drawing is None:
             return 'Awaiting drawing from Design'
+        if self.proof_state == 'waiting':
+            return 'Held - awaiting customer proof approval'
+        if self.proof_state == 'changes':
+            return 'Customer asked for proof changes'
         if not self.design_approved:
             return 'Design not approved'
 

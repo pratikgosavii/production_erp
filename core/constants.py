@@ -176,6 +176,14 @@ class Disposition(models.TextChoices):
     CONCESSION = 'CONCESSION', 'Use as is (concession)'
 
 
+class ProofOutcome(models.TextChoices):
+    """How a customer answered an artwork proof round."""
+
+    SENT = 'SENT', 'Sent - awaiting customer'
+    APPROVED = 'APPROVED', 'Approved by customer'
+    CHANGES = 'CHANGES', 'Changes requested'
+
+
 class QueryStatus(models.TextChoices):
     OPEN = 'OPEN', 'Open'
     ANSWERED = 'ANSWERED', 'Answered'
@@ -184,7 +192,31 @@ class QueryStatus(models.TextChoices):
 
 # Number prefixes, one registry so nothing collides (§9 Numbering).
 PREFIX_QUOTATION = 'QTN'
+PREFIX_NCR = 'NCR'
 PREFIX_SALES_ORDER = 'SO'
 PREFIX_JOB_CARD = 'JC'
 PREFIX_SHEET = 'SHT'
 PREFIX_OFFCUT = 'OFF'
+
+
+class NCRSource(models.TextChoices):
+    """Where a non-conformance came from. One record, five doors in."""
+
+    PRODUCTION = 'PRODUCTION', 'Production rejection'
+    QC = 'QC', 'QC inspection failure'
+    CUSTOMER = 'CUSTOMER', 'Customer complaint'
+    SUPPLIER = 'SUPPLIER', 'Supplier non-conformance'
+    AUDIT = 'AUDIT', 'Audit finding'
+
+
+class NCRStatus(models.TextChoices):
+    OPEN = 'OPEN', 'Open'
+    INVESTIGATING = 'INVESTIGATING', 'Investigating'
+    ACTION_TAKEN = 'ACTION_TAKEN', 'Action taken'
+    CLOSED = 'CLOSED', 'Closed'
+
+
+class Severity(models.TextChoices):
+    MINOR = 'MINOR', 'Minor'
+    MAJOR = 'MAJOR', 'Major'
+    CRITICAL = 'CRITICAL', 'Critical'

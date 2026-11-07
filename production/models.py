@@ -118,6 +118,69 @@ class JobCard(TimeStampedModel):
     def is_started(self):
         return self.started_at is not None
 
+    #: A job card is one physical run, and a panel is one material at a time.
+    #: Grouping anything else onto the same card describes work that cannot
+    #: happen (spec: "grouped ONLY if they share the same Material + Thickness").
+    @staticmethod
+    def spec_of(so_item):
+        qi = so_item.quotation_item
+        return (qi.material_id, qi.thickness_id)
+
+    @classmethod
+    def assert_one_spec(cls, items):
+        """Refuse a card that mixes materials or thicknesses."""
+        specs = {}
+        for item in items:
+            specs.setdefault(cls.spec_of(item), []).append(item)
+        if len(specs) <= 1:
+            return
+        shown = []
+        for (_m, _t), group in specs.items():
+            first = group[0].quotation_item
+            label = (f'{first.material.name if first.material else "no material"}'
+                     f' · {first.thickness.name if first.thickness else "no thickness"}')
+            codes = ', '.join(
+                str(i.quotation_item.item_code or i.quotation_item.description or i.pk)
+                for i in group)
+            shown.append(f'{label} ({codes})')
+        raise ValidationError(
+            'A job card runs one material and thickness — a panel cannot be two '
+            'metals at once. This selection spans: ' + '; '.join(shown)
+            + '. Raise one card per spec.')
+
+    @property
+    def spec_conflict(self):
+        """Cards raised before the one-spec rule existed can still mix metals.
+
+        Nothing is auto-split (the work may already be done) but the card says
+        so, because a panel that is two materials at once never happened the
+        way the card describes it.
+        """
+        specs = {self.spec_of(l.so_item)
+                 for l in self.items.select_related('so_item__quotation_item')}
+        if len(specs) <= 1:
+            return ''
+        labels = []
+        for l in self.items.select_related(
+                'so_item__quotation_item__material',
+                'so_item__quotation_item__thickness'):
+            qi = l.so_item.quotation_item
+            labels.append(f'{qi.material.name if qi.material else "-"} * '
+                          f'{qi.thickness.name if qi.thickness else "-"}')
+        return ', '.join(sorted(set(labels)))
+
+    @property
+    def spec_label(self):
+        """The single material+thickness this card is locked to."""
+        link = self.items.select_related(
+            'so_item__quotation_item__material',
+            'so_item__quotation_item__thickness').first()
+        if link is None:
+            return ''
+        qi = link.so_item.quotation_item
+        return (f'{qi.material.name if qi.material else "—"} · '
+                f'{qi.thickness.name if qi.thickness else "—"}')
+
     @property
     def planned_qty(self):
         """Pieces this card set out to make — the opening Qty In."""
@@ -170,6 +233,7 @@ class JobCard(TimeStampedModel):
         items = list(so_items)
         if not items:
             raise ValueError('A job card must cover at least one item.')
+        self.assert_one_spec(items)
 
         keep = {i.pk for i in items}
         # Drop the links that are going, add the ones that are new. Orders on
@@ -270,6 +334,8 @@ class JobCard(TimeStampedModel):
             raise ValidationError({
                 'urgent_reason': 'An urgent split must say why it jumped the queue.',
             })
+
+        cls.assert_one_spec(items)
 
         if priority is None:
             priority = min(item.order.priority for item in items)
@@ -428,11 +494,96 @@ class JobCardStation(TimeStampedModel):
         max_length=12, choices=Disposition.choices, blank=True,
     )
 
+    # The band is SNAPSHOT here when the station closes, not looked up later.
+    # Standards get re-timed; a finished job must keep the band it was actually
+    # judged against or its history quietly rewrites itself.
+    band_min_seconds = models.PositiveIntegerField(null=True, blank=True)
+    band_max_seconds = models.PositiveIntegerField(null=True, blank=True)
+
     class Meta:
         ordering = ['sequence']
 
     def __str__(self):
         return f'{self.job_card.number} · {self.station.name}'
+
+    @property
+    def spec_source(self):
+        """The item whose material+thickness decides a material-dependent band.
+
+        A card is locked to one material+thickness by the grouping rule, so any
+        item on it answers the question.
+        """
+        link = self.job_card.items.select_related(
+            'so_item__quotation_item__material',
+            'so_item__quotation_item__thickness').first()
+        return link.so_item if link else None
+
+    @property
+    def applicable_band(self):
+        """The live band for this station — before it has been snapshotted."""
+        item = self.spec_source
+        return self.station.band_for(
+            material=item.material if item else None,
+            thickness=item.thickness if item else None,
+        )
+
+    @property
+    def band(self):
+        """(min, max) actually in force: the snapshot once closed, else live."""
+        if self.band_min_seconds is not None:
+            return self.band_min_seconds, self.band_max_seconds
+        live = self.applicable_band
+        return (live.min_seconds, live.max_seconds) if live else (None, None)
+
+    @property
+    def band_label(self):
+        lo, hi = self.band
+        if lo is None:
+            return ''
+        live = self.applicable_band
+        scope = live.scope_label if live else 'Snapshot'
+        return f'{scope} band: Min {lo}s · Max {hi}s'
+
+    @property
+    def variance_status(self):
+        """'within' | 'under' | 'over' | '' once the station has closed."""
+        lo, hi = self.band
+        if lo is None or self.duration_seconds is None:
+            return ''
+        if self.duration_seconds > hi:
+            return 'over'
+        if self.duration_seconds < lo:
+            return 'under'
+        return 'within'
+
+    @property
+    def variance_label(self):
+        st = self.variance_status
+        if not st:
+            return ''
+        lo, hi = self.band
+        if st == 'over':
+            return f'+{self.duration_seconds - hi}s over'
+        if st == 'under':
+            return f'{lo - self.duration_seconds}s under'
+        return 'Within band'
+
+    @property
+    def timer_state(self):
+        """Green / amber / red for a station that is RUNNING right now.
+
+        Amber starts at 80% of max — the point where someone can still do
+        something about it, which is the only reason to warn at all.
+        """
+        lo, hi = self.band
+        if lo is None or self.status != StationStatus.IN_PROGRESS or not self.started_at:
+            return ''
+        elapsed = (timezone.now() - self.started_at).total_seconds()
+        if elapsed > hi:
+            return 'red'
+        if elapsed >= hi * 0.8:
+            return 'amber'
+        return 'green'
 
     @property
     def expected_qty_in(self):
@@ -491,6 +642,13 @@ class JobCardStation(TimeStampedModel):
         if user:
             self.operator = user
 
+        # Freeze the band this run was judged against.
+        if self.band_min_seconds is None:
+            live = self.applicable_band
+            if live is not None:
+                self.band_min_seconds = live.min_seconds
+                self.band_max_seconds = live.max_seconds
+
         if qty_in is not None:
             self.qty_in = qty_in
         if qty_out is not None:
@@ -503,7 +661,8 @@ class JobCardStation(TimeStampedModel):
         self.save(update_fields=[
             'started_at', 'completed_at', 'duration_seconds',
             'status', 'operator', 'qty_in', 'qty_out', 'qty_rejected',
-            'rejection_reason', 'disposition', 'updated_at',
+            'rejection_reason', 'disposition',
+            'band_min_seconds', 'band_max_seconds', 'updated_at',
         ])
         return self
 

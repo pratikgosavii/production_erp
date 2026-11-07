@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}NCR Register — Quality{% endblock %}
+{% block topbar_sub %}Quality — NCR / CAPA Register{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">
+    {% if user.is_qa %}QA{% elif user.is_production_manager %}Production Manager
+    {% elif user.is_floor_manager %}Floor Manager{% else %}Admin{% endif %}
+  </span>
+  <span class="name">{{ user.short_name }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .page-head h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .page-head .desc { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; max-width: 700px; line-height: 1.55; }
+
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 16px; }
+  .summary .s { background: var(--card); padding: 12px 15px; }
+  .summary .s .l { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 5px; }
+  .summary .s .v { font-family: 'IBM Plex Mono'; font-size: 20px; font-weight: 700; line-height: 1; }
+  .summary .s.bad .v { color: var(--red); }
+  .summary .s.warn .v { color: var(--amber); }
+  .summary .s.good .v { color: var(--green); }
+  @media (max-width: 780px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  a.chip { font-size: 11.5px; padding: 6px 13px; border-radius: 20px; text-decoration: none; border: 1px solid var(--line); background: var(--card); color: var(--ink-soft); }
+  a.chip:hover { border-color: var(--steel); color: var(--ink); text-decoration: none; }
+  a.chip.on { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600; }
+  a.chip .n { font-family: 'IBM Plex Mono'; font-size: 10.5px; opacity: .8; margin-left: 4px; }
+
+  .ncr { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--steel); border-radius: var(--radius); margin-bottom: 12px; }
+  .ncr.closed { border-left-color: var(--green); opacity: .78; }
+  .ncr.overdue { border-left-color: var(--red); }
+  .ncr-head { padding: 13px 16px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  .ncr-no { font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 13px; }
+  .ncr-title { font-size: 13px; font-weight: 600; margin-top: 3px; }
+  .ncr-meta { font-size: 10.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.6; }
+  .ncr-meta b { font-family: 'IBM Plex Mono'; color: var(--ink); font-weight: 600; }
+  .ncr-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tag { font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .tag.minor { background: var(--blue-bg); color: var(--blue); }
+  .tag.major { background: var(--amber-bg); color: var(--amber); }
+  .tag.critical { background: var(--red-bg); color: var(--red); }
+  .tag.st { background: var(--paper); color: var(--ink-soft); }
+  .tag.st.closed { background: var(--green-bg); color: var(--green); }
+  .tag.due { background: var(--red-bg); color: var(--red); }
+  .ncr-detail { padding: 0 16px 12px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.6; }
+
+  .capa { border-top: 1px solid var(--line); padding: 13px 16px; background: #fafbfc; }
+  .capa-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 11px; }
+  @media (max-width: 900px) { .capa-grid { grid-template-columns: 1fr; } }
+  .capa label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); font-weight: 700; display: block; margin-bottom: 4px; }
+  .capa textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 12px; font-family: 'IBM Plex Sans'; line-height: 1.5; resize: vertical; }
+  .capa textarea:focus { outline: none; border-color: var(--steel); }
+  .capa-acts { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; align-items: center; }
+  .capa-acts input[type=text] { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 12px; font-family: 'IBM Plex Sans'; }
+  .btn-sm2 { font-size: 11.5px; font-weight: 600; padding: 8px 15px; border-radius: var(--radius); cursor: pointer; font-family: 'IBM Plex Sans'; white-space: nowrap; }
+  .btn-save { background: var(--navy); border: 1px solid var(--navy); color: #fff; }
+  .btn-close { background: var(--green); border: 1px solid var(--green); color: #fff; }
+  .capa-note { font-size: 10.5px; color: var(--amber); font-weight: 600; margin-top: 8px; }
+  .closed-note { padding: 11px 16px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--green); background: var(--green-bg); line-height: 1.55; }
+
+  .raise-box { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 17px; margin-bottom: 18px; }
+  .raise-box .rb-title { font-size: 12.5px; font-weight: 700; margin-bottom: 10px; }
+  .rb-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end; }
+  @media (max-width: 900px) { .rb-grid { grid-template-columns: 1fr; } }
+  .rb-grid label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); font-weight: 700; display: block; margin-bottom: 4px; }
+  .rb-grid input, .rb-grid select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 12.5px; font-family: 'IBM Plex Sans'; }
+  .empty { padding: 34px; text-align: center; color: var(--ink-soft); font-size: 12.5px; background: var(--card); border: 1px solid var(--line); }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Quality</div>
+  <a href="{% url 'quality:register' %}" class="nav-item {% if nav == 'ncr' %}active{% endif %}">
+    <span class="icon">⚠️</span> NCR Register
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>NCR / CAPA Register</h1>
+    <div class="desc">
+      Every non-conformance, wherever it came from — a production rejection, a QC
+      failure, a customer complaint, a supplier issue or an audit finding. A big
+      rejection opens one here by itself, off the data the floor already logged.
+    </div>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="s warn"><div class="l">Open</div><div class="v">{{ summary.open }}</div></div>
+  <div class="s bad"><div class="l">Overdue</div><div class="v">{{ summary.overdue }}</div></div>
+  <div class="s warn"><div class="l">Awaiting root cause</div><div class="v">{{ summary.no_capa }}</div></div>
+  <div class="s good"><div class="l">Closed</div><div class="v">{{ summary.closed }}</div></div>
+</div>
+
+<div class="raise-box">
+  <div class="rb-title">Raise a non-conformance</div>
+  <form method="post" action="{% url 'quality:raise_manual' %}">
+    {% csrf_token %}
+    <div class="rb-grid">
+      <div>
+        <label>What went wrong</label>
+        <input type="text" name="title" required
+               placeholder="e.g. Customer reports colour mismatch on MT-LBL-060">
+      </div>
+      <div>
+        <label>Source</label>
+        <select name="source">
+          {% for value, label in sources %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Severity</label>
+        <select name="severity">
+          {% for value, label in severities %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><button type="submit" class="btn-sm2 btn-save">Raise NCR</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="toolbar">
+  {% for chip in chips %}
+  <a class="chip {% if chip.is_active %}on{% endif %}"
+     href="?filter={{ chip.key }}">{{ chip.label }}<span class="n">{{ chip.count }}</span></a>
+  {% endfor %}
+</div>
+
+{% for n in rows %}
+<div class="ncr {% if not n.is_open %}closed{% elif n.is_overdue %}overdue{% endif %}">
+  <div class="ncr-head">
+    <div>
+      <div class="ncr-no">{{ n.number }}</div>
+      <div class="ncr-title">{{ n.title }}</div>
+      <div class="ncr-meta">
+        {{ n.get_source_display }} · raised {{ n.raised_at|date:"d M Y" }}
+        {% if n.raised_by %}by {{ n.raised_by.short_name }}{% endif %}
+        {% if n.origin_label != "-" %}· <b>{{ n.origin_label }}</b>{% endif %}
+        {% if n.qty_affected %}· {{ n.qty_affected }} pieces{% endif %}
+        {% if n.due_date %}<br>Due {{ n.due_date|date:"d M Y" }}{% endif %}
+      </div>
+    </div>
+    <div class="ncr-tags">
+      <span class="tag {{ n.severity|lower }}">{{ n.get_severity_display }}</span>
+      <span class="tag st {% if not n.is_open %}closed{% endif %}">{{ n.get_status_display }}</span>
+      {% if n.is_overdue %}<span class="tag due">{{ n.age_days }}d overdue</span>{% endif %}
+    </div>
+  </div>
+
+  {% if n.detail %}<div class="ncr-detail">{{ n.detail }}</div>{% endif %}
+
+  {% if n.is_open %}
+  <form class="capa" method="post" action="{% url 'quality:save_capa' n.pk %}">
+    {% csrf_token %}
+    <div class="capa-grid">
+      <div>
+        <label>Root cause — why did it happen?</label>
+        <textarea name="root_cause" placeholder="Not the symptom. What let it happen?">{{ n.root_cause }}</textarea>
+      </div>
+      <div>
+        <label>Corrective action — what was done?</label>
+        <textarea name="corrective_action" placeholder="What fixed this batch.">{{ n.corrective_action }}</textarea>
+      </div>
+      <div>
+        <label>Preventive action — what stops a repeat?</label>
+        <textarea name="preventive_action" placeholder="What changes so it cannot recur.">{{ n.preventive_action }}</textarea>
+      </div>
+    </div>
+    <div class="capa-acts">
+      <button type="submit" class="btn-sm2 btn-save">Save</button>
+    </div>
+    {% if not n.has_capa %}
+    <div class="capa-note">
+      A root cause and a corrective action are both needed before this can be closed.
+    </div>
+    {% endif %}
+  </form>
+
+  {% if n.has_capa %}
+  <form class="capa" method="post" action="{% url 'quality:close' n.pk %}" style="padding-top:0;border-top:none;">
+    {% csrf_token %}
+    <div class="capa-acts">
+      <input type="text" name="verification_note"
+             placeholder="How was it verified? (e.g. clean over the next two runs)">
+      <button type="submit" class="btn-sm2 btn-close">Close NCR</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% else %}
+  <div class="closed-note">
+    ✓ Closed {{ n.closed_at|date:"d M Y" }}{% if n.closed_by %} by {{ n.closed_by.short_name }}{% endif %}.
+    {% if n.verification_note %}{{ n.verification_note }}{% endif %}
+    {% if n.root_cause %}<br><b>Cause:</b> {{ n.root_cause }}{% endif %}
+    {% if n.corrective_action %}<br><b>Action:</b> {{ n.corrective_action }}{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% empty %}
+<div class="empty">No non-conformances match this filter.</div>
+{% endfor %}
+{% endblock %}

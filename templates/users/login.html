@@ -140,25 +140,37 @@
     <h2>Sign in to your account</h2>
     <div class="sub">Enter your credentials to access the quotation and order system.</div>
 
-    {% if error %}
+    {% comment %} login_view reports through the messages framework like every
+    other screen. This block was checking an `error` variable nothing ever set,
+    so a wrong password reloaded the page saying nothing at all. {% endcomment %}
+    {% if messages %}
+      {% for message in messages %}
+      <div class="error-msg {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% elif error %}
     <div class="error-msg">{{ error }}</div>
     {% endif %}
 
     <form method="post" action="{% url 'users:login' %}">
       {% csrf_token %}
 
-      <!-- 8 role tabs (§2) — value posted as hidden field -->
+      {% comment %} 8 role chips (§2). The choice is checked against the
+      account's own flags in login_view — a mismatch is refused and named,
+      and the chip below comes back set to the role the account actually
+      holds so the retry is a single click. {% endcomment %}
+      {% with sel=selected_role|default:"sales" %}
       <div class="role-select" id="roleSelect">
-        <div class="role-chip active" data-role="sales">Sales</div>
-        <div class="role-chip" data-role="sales_manager">Sales Mgr</div>
-        <div class="role-chip" data-role="accounts">Accounts</div>
-        <div class="role-chip" data-role="design">Design</div>
-        <div class="role-chip" data-role="production_manager">Prod Mgr</div>
-        <div class="role-chip" data-role="floor_manager">Floor Mgr</div>
-        <div class="role-chip" data-role="stores">Stores</div>
-        <div class="role-chip" data-role="qa">QA</div>
+        <div class="role-chip {% if sel == 'sales' %}active{% endif %}" data-role="sales">Sales</div>
+        <div class="role-chip {% if sel == 'sales_manager' %}active{% endif %}" data-role="sales_manager">Sales Mgr</div>
+        <div class="role-chip {% if sel == 'accounts' %}active{% endif %}" data-role="accounts">Accounts</div>
+        <div class="role-chip {% if sel == 'design' %}active{% endif %}" data-role="design">Design</div>
+        <div class="role-chip {% if sel == 'production_manager' %}active{% endif %}" data-role="production_manager">Prod Mgr</div>
+        <div class="role-chip {% if sel == 'floor_manager' %}active{% endif %}" data-role="floor_manager">Floor Mgr</div>
+        <div class="role-chip {% if sel == 'stores' %}active{% endif %}" data-role="stores">Stores</div>
+        <div class="role-chip {% if sel == 'qa' %}active{% endif %}" data-role="qa">QA</div>
       </div>
-      <input type="hidden" name="role" id="roleInput" value="sales">
+      <input type="hidden" name="role" id="roleInput" value="{{ sel }}">
+      {% endwith %}
 
       <div class="field">
         <label>Employee ID / Email</label>

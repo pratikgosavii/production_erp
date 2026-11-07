@@ -174,6 +174,38 @@
     border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; white-space: nowrap;
   }
   .mat-filter .mat-all:hover { border-color: var(--blue); text-decoration: none; }
+  /* Customer-supplied drawing — an input, visually distinct from Design's
+     own revision ladder so the two are never read as the same thing. */
+  .cust-ref {
+    border: 1px dashed var(--steel); border-radius: var(--radius);
+    background: var(--blue-bg); padding: 12px 14px; margin-bottom: 14px;
+  }
+  .cr-head {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em;
+    font-weight: 700; color: var(--blue); margin-bottom: 8px;
+  }
+  .cr-row + .cr-row { margin-top: 9px; padding-top: 9px; border-top: 1px solid #cfdce6; }
+  .cr-file { font-size: 12.5px; font-weight: 600; }
+  .cr-file a { color: var(--ink); text-decoration: none; }
+  .cr-file a:hover { color: var(--blue); text-decoration: underline; }
+  .cr-meta { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; line-height: 1.55; }
+  .cr-note { font-size: 10.5px; color: var(--blue); margin-top: 9px; font-weight: 600; }
+  .cr-nofile { color: var(--ink-soft); font-weight: 500; font-style: italic; }
+
+  .proof-list { margin-bottom: 4px; }
+  .proof-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 11px; margin-bottom: 7px; }
+  .proof-row.approved { border-left: 3px solid var(--green); }
+  .proof-row.sent     { border-left: 3px solid var(--amber); }
+  .proof-row.changes  { border-left: 3px solid var(--red); }
+  .pr-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pr-top b { font-family: 'IBM Plex Mono'; font-size: 11.5px; }
+  .pr-state { font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .pr-state.approved { background: var(--green-bg); color: var(--green); }
+  .pr-state.sent     { background: var(--amber-bg); color: var(--amber); }
+  .pr-state.changes  { background: var(--red-bg);   color: var(--red); }
+  .pr-meta { font-size: 10px; color: var(--ink-soft); margin-top: 3px; line-height: 1.5; }
+  .pr-comment { font-size: 11px; color: var(--ink); margin-top: 5px; font-style: italic; line-height: 1.5; }
+
   .swap-note {
     font-size: 11.5px; line-height: 1.6; color: var(--amber);
     background: var(--amber-bg); border-left: 3px solid var(--amber);
@@ -414,6 +446,42 @@
         The PO carries no drawing. Design uploads one drawing per item code; every revision is retained,
         and revision numbers run independently for each item.
       </div>
+      {% comment %} The client's own drawing, sent in by Sales with the PO.
+      It is the brief for this item, not a revision of Design's work — so it
+      sits apart, never gets superseded, and never counts as "drawn".
+      {% endcomment %}
+      {% if references %}
+      <div class="cust-ref">
+        <div class="cr-head">Customer drawing — supplied with the PO</div>
+        {% for ref in references %}
+        <div class="cr-row">
+          <div class="cr-file">
+            {% comment %} A revision row can exist with no file attached —
+            .url raises on those, so it is never reached unguarded. {% endcomment %}
+            {% if ref.file %}
+            📎 <a href="{{ ref.file.url }}" target="_blank">{{ ref.file.name|cut:"drawings/" }}</a>
+            {% else %}
+            📎 <span class="cr-nofile">Recorded, but no file was attached</span>
+            {% endif %}
+          </div>
+          <div class="cr-meta">
+            Uploaded by {{ ref.uploaded_by.short_name|default:"Sales" }}
+            ({{ ref.source }}) · {{ ref.created_at|date:"d M Y, H:i" }}
+            {% if ref.note %}<br>{{ ref.note }}{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        <div class="cr-note">
+          {% if current_revision %}
+            Reference only. It stays here for the life of the item — the
+            production drawing below is what the floor works from.
+          {% else %}
+            Reference only — Design still owes a production drawing for this item.
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
       <div class="drawing-preview {% if not current_revision %}missing{% endif %}">
         <div class="ficon">📐</div>
         <div class="fname" id="curDrawingName">
@@ -524,12 +592,16 @@
           <input type="radio" name="sheet" value="{{ sheet.pk }}" {% if forloop.first %}checked{% endif %}>
           <div>
             <span class="uid">{{ sheet.uid }}</span>
+            {% comment %} Two different facts: WHAT it is (a full sheet or an
+            offcut cut from one) and WHERE it is in its life (untouched, or a
+            leftover with usable material still on it). {% endcomment %}
             <span class="kind {% if sheet.is_offcut %}offcut{% else %}sheet{% endif %}">{% if sheet.is_offcut %}Offcut{% else %}Sheet{% endif %}</span>
+            {% if sheet.parent %}<span class="from">from {{ sheet.parent.uid }}</span>{% endif %}
             <div class="meta">
               {{ sheet.size_display|default:"—" }} · {{ sheet.rack.name|default:"No rack" }} · {{ sheet.origin }}
             </div>
           </div>
-          <span class="stat">{{ sheet.get_status_display }}</span>
+          <span class="stat {{ sheet.status|lower }}">{{ sheet.get_status_display }}</span>
         </div>
         {% empty %}
         <div class="sheet-option">
@@ -667,6 +739,54 @@
         <div class="row"><span>Sales Person</span><span>{{ order.salesperson.short_name }}</span></div>
       </div>
     </div>
+
+    {% comment %} Customer proof (spec: two gates). The proof travels by hand;
+    this records that it went and what came back. Sales closes the round.
+    {% endcomment %}
+    {% if item %}
+    <div class="card side-block">
+      <div class="st">Customer Proof — {{ item_code }}</div>
+      {% if proof_rounds %}
+      <div class="proof-list">
+        {% for pr in proof_rounds %}
+        <div class="proof-row {{ pr.outcome|lower }}">
+          <div class="pr-top">
+            <b>{{ pr.label }}</b>
+            <span class="pr-state {{ pr.outcome|lower }}">{{ pr.get_outcome_display }}</span>
+          </div>
+          <div class="pr-meta">
+            Sent {{ pr.sent_at|date:"d M Y" }}
+            {% if pr.sent_by %}by {{ pr.sent_by.short_name }}{% endif %}
+            {% if pr.drawing %}· {{ pr.drawing.label }}{% endif %}
+            {% if pr.is_open %}· waiting {{ pr.days_waiting }} day{{ pr.days_waiting|pluralize }}{% endif %}
+          </div>
+          {% if pr.customer_comment %}
+          <div class="pr-comment">“{{ pr.customer_comment }}”</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="section-sub">No proof has gone to the customer yet.</div>
+      {% endif %}
+
+      {% if not item.proof_approved %}
+      <form method="post" action="{% url 'design:send_proof' order.number %}">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <button type="submit" class="btn btn-primary btn-sm" style="width:100%;margin-top:10px;"
+                {% if not item.current_drawing or item.proof_pending %}disabled{% endif %}>
+          {% if item.proof_pending %}Awaiting customer answer{% else %}Record Proof Sent{% endif %}
+        </button>
+      </form>
+      <div class="gate-note" style="margin-top:8px;">
+        {% if not item.current_drawing %}Upload a production drawing first.
+        {% elif item.proof_pending %}Sales records the answer when the customer replies.
+        {% else %}Download the drawing, hand it to Sales, then record it here.{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Finalize -->
     {% if item %}

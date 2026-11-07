@@ -28,7 +28,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.models import SalesOrder, SOItem
-from core.constants import OrderStatus, QueryStatus
+from core.constants import ProofOutcome, OrderStatus, QueryStatus
 from core.decorators import role_required
 from core.models import AuditLog
 from core.services import log, notify
@@ -37,7 +37,7 @@ from .forms import (
     QueryReplyForm, RaiseQueryForm, ReserveSheetForm, RevisionUploadForm,
     SpecForm, available_sheets_for,
 )
-from .models import DesignQuery, DrawingRevision, MaterialReservation
+from .models import DesignQuery, DrawingRevision, MaterialReservation, ProofRound
 
 DESIGN_STATUSES = [OrderStatus.IN_DESIGN, OrderStatus.DESIGN_QUERY]
 
@@ -276,7 +276,12 @@ def job_detail(request, so_no):
 
     revisions, current, query, reservation = [], None, None, None
     if item is not None:
-        revisions = list(item.drawing_revisions.select_related('uploaded_by').all())
+        # Two distinct things, deliberately not one ladder: what the customer
+        # supplied through Sales is the BRIEF, and it stays valid forever;
+        # what Design produces is the answer, and only that gets revised.
+        all_revs = list(item.drawing_revisions.select_related('uploaded_by').all())
+        references = [r for r in all_revs if r.is_customer_reference]
+        revisions = [r for r in all_revs if not r.is_customer_reference]
         current = next((r for r in revisions if r.is_current), None)
         query = _open_query(order, item) or (
             order.queries.filter(Q(so_item=item) | Q(so_item__isnull=True))
@@ -295,6 +300,9 @@ def job_detail(request, so_no):
         'items_total': len(items),
         'spec_form': SpecForm(instance=item) if item else None,
         'revisions': revisions,
+        'references': references,
+        'proof_rounds': list(item.proof_rounds.select_related(
+            'sent_by', 'drawing').all()) if item else [],
         'current_revision': current,
         'sheets': available_sheets_for(item),
         'reservation': reservation,
@@ -552,4 +560,46 @@ def approve_design(request, so_no):
         f'{item_label(item)} approved. It reaches the Production Ready Queue '
         f'once Stores issues the reserved sheet.',
     )
+    return _redirect_to_job(order, item)
+
+
+@role_required('is_designer')
+@require_POST
+def send_proof(request, so_no):
+    """Record that an artwork proof has gone out to the customer.
+
+    The proof travels by hand - designer downloads, salesperson walks it to the
+    customer. This only writes down that it happened, and opens the round the
+    salesperson will close when the answer comes back.
+    """
+    order, item = _acted_item(request, so_no)
+
+    if item.current_drawing is None:
+        messages.error(
+            request,
+            f'{item_label(item)} has no production drawing yet, so there is '
+            f'nothing to send as a proof.')
+        return _redirect_to_job(order, item)
+
+    open_round = item.proof_rounds.filter(outcome=ProofOutcome.SENT).first()
+    if open_round is not None:
+        messages.info(
+            request,
+            f'{open_round.label} is already out with the customer. Record its '
+            f'outcome before sending another.')
+        return _redirect_to_job(order, item)
+
+    last = item.proof_rounds.order_by('-revision').first()
+    proof = ProofRound.objects.create(
+        so_item=item,
+        revision=(last.revision + 1) if last else 1,
+        drawing=item.current_drawing,
+        sent_by=request.user,
+    )
+    log(request.user, 'ProofRound', order.number, f'{proof.label} sent to customer',
+        detail=f'{item_label(item)} - {item.current_drawing.label}')
+    messages.success(
+        request,
+        f'{proof.label} recorded as sent for {item_label(item)}. Sales records '
+        f"the customer's answer when it comes back.")
     return _redirect_to_job(order, item)

@@ -18,6 +18,7 @@ urlpatterns = [
     path('job/<str:so_no>/spec/', views.save_spec, name='save_spec'),
     path('job/<str:so_no>/revision/', views.upload_revision, name='upload_revision'),
     path('job/<str:so_no>/reserve/', views.reserve_sheet, name='reserve_sheet'),
+    path('job/<str:so_no>/proof/', views.send_proof, name='send_proof'),
     path('job/<str:so_no>/query/', views.raise_query, name='raise_query'),
     path('job/<str:so_no>/query/<int:query_id>/reply/', views.reply_query, name='reply_query'),
     path('job/<str:so_no>/query/<int:query_id>/close/', views.close_query, name='close_query'),

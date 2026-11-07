@@ -291,6 +291,10 @@ class QuotationItem(TimeStampedModel):
     thickness = models.ForeignKey(Thickness, on_delete=models.PROTECT, null=True, blank=True)
     finish = models.ForeignKey(Finish, on_delete=models.PROTECT, null=True, blank=True)
     size = models.CharField(max_length=60, blank=True)
+    # How many colours get filled into the etched detail. Drives the
+    # Colour Fill band and tells the floor what it is actually doing —
+    # one colour and three are not the same operation.
+    colour_count = models.PositiveSmallIntegerField(default=1)
 
     quantity = models.PositiveIntegerField(default=0)
     tooling_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)

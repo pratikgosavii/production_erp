@@ -3,7 +3,7 @@ from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
 
-from core.constants import QueryStatus, SheetStatus
+from core.constants import ProofOutcome, QueryStatus, SheetStatus
 from core.models import TimeStampedModel
 
 
@@ -23,6 +23,15 @@ class DrawingRevision(TimeStampedModel):
     is_current = models.BooleanField(default=True)
     note = models.CharField(max_length=200, blank=True)
 
+    #: What Sales/the customer supplies is an INPUT to design, not a revision
+    #: of it. It never gets superseded and never satisfies the design gate —
+    #: only a drawing the designer produced does.
+    REFERENCE_SOURCES = ('Sales', 'Customer')
+
+    @property
+    def is_customer_reference(self):
+        return self.source in self.REFERENCE_SOURCES
+
     class Meta:
         ordering = ['-revision']
         constraints = [
@@ -40,12 +49,92 @@ class DrawingRevision(TimeStampedModel):
 
     @transaction.atomic
     def save(self, *args, **kwargs):
+        # A customer reference is never "the current drawing" — it is the
+        # brief, not the answer. Marking one current made the design gate
+        # pass on a file the designer never produced.
+        if self.is_customer_reference:
+            self.is_current = False
         if self.is_current:
             # Only one current revision per item; the rest stay readable.
             DrawingRevision.objects.filter(
                 so_item=self.so_item, is_current=True,
             ).exclude(pk=self.pk).update(is_current=False)
         super().save(*args, **kwargs)
+
+
+class ProofRound(TimeStampedModel):
+    """One artwork proof round with the customer (spec SS 3, SS 6).
+
+    The proof itself travels by hand: the designer downloads the drawing, the
+    salesperson gets the customer's sign-off, and the outcome is recorded here.
+    The ERP does not pretend to send it - it records what happened, which is
+    the part that was previously only in somebody's head.
+
+    Proof revisions are customer-facing and number independently of the
+    designer's internal Rev 00/01 drawing ladder.
+    """
+
+    so_item = models.ForeignKey(
+        'accounts.SOItem', on_delete=models.CASCADE, related_name='proof_rounds',
+    )
+    revision = models.PositiveSmallIntegerField(default=1)
+    drawing = models.ForeignKey(
+        DrawingRevision, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='proof_rounds',
+        help_text='The drawing revision that was actually sent out.',
+    )
+
+    sent_at = models.DateTimeField(default=timezone.now)
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='proofs_sent',
+    )
+    outcome = models.CharField(
+        max_length=12, choices=ProofOutcome.choices, default=ProofOutcome.SENT,
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='proofs_recorded',
+    )
+    customer_comment = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-revision']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['so_item', 'revision'], name='uniq_proof_rev_per_item',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.so_item} Proof Rev {self.revision:02d}'
+
+    @property
+    def label(self):
+        return f'Proof Rev {self.revision:02d}'
+
+    @property
+    def is_open(self):
+        return self.outcome == ProofOutcome.SENT
+
+    @property
+    def days_waiting(self):
+        if not self.is_open:
+            return None
+        return (timezone.now() - self.sent_at).days
+
+    @transaction.atomic
+    def record(self, outcome, user, comment=''):
+        """Salesperson writes down what the customer said."""
+        self.outcome = outcome
+        self.customer_comment = (comment or '').strip()
+        self.responded_at = timezone.now()
+        self.recorded_by = user
+        self.save(update_fields=[
+            'outcome', 'customer_comment', 'responded_at', 'recorded_by',
+            'updated_at'])
+        return self
 
 
 class DesignQuery(TimeStampedModel):

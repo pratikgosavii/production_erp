@@ -29,4 +29,5 @@ urlpatterns = [
     path('manager/approvals/<int:pk>/reject/', views.quotation_reject, name='quotation_reject'),
     path('manager/approvals/<int:pk>/revision/', views.quotation_request_revision,
          name='quotation_request_revision'),
+    path('proof/<int:pk>/record/', views.record_proof, name='record_proof'),
 ]

@@ -41,6 +41,12 @@ class ReserveSheetForm(forms.Form):
         self.fields['sheet'].queryset = available_sheets_for(item)
 
 
+#: Stock a designer may reserve. LEFTOVER belongs here: a plate that was cut
+#: and still has usable material is stock, and excluding it quietly forced
+#: every job onto a fresh sheet while the remnants aged on the rack.
+RESERVABLE_STATUSES = [SheetStatus.AVAILABLE, SheetStatus.LEFTOVER]
+
+
 def available_sheets_for(item):
     """Stores inventory filtered to this item's material + thickness."""
     if item is None or item.material is None or item.thickness is None:
@@ -48,9 +54,10 @@ def available_sheets_for(item):
     return (
         Sheet.objects
         .filter(material=item.material, thickness=item.thickness,
-                status=SheetStatus.AVAILABLE)
+                status__in=RESERVABLE_STATUSES)
         .select_related('material', 'thickness', 'size', 'rack', 'parent', 'supplier')
-        .order_by('is_offcut', 'uid')
+        # Offcuts and leftovers first: use up the remnants before cutting new.
+        .order_by('-is_offcut', 'uid')
     )
 
 

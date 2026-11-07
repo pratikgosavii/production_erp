@@ -40,7 +40,8 @@ ROLE_LANDING = [
     # sending the floor there meant signing in landed straight on "No access".
     ('is_floor_manager', 'production:floor_queue'),
     ('is_stores', 'stores:dashboard'),
-    ('is_qa', 'stores:dashboard'),  # QA module deferred (§3.10)
+    # QA lands on the NCR register — it is their own screen now.
+    ('is_qa', 'quality:register'),
 ]
 
 
