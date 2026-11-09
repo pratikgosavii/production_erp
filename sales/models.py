@@ -4,7 +4,7 @@ A quotation lives under its QTN only. No Sales Order exists until Accounts
 confirm the PO (§1.1) — that is why the PO fields hang off this model rather
 than off SalesOrder.
 """
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.db import models, transaction
@@ -125,8 +125,20 @@ class Quotation(TimeStampedModel):
         return sum((i.line_amount for i in self.items.all()), Decimal('0.00'))
 
     @property
+    def tooling_total(self):
+        """Quotation-level tooling plus whatever was entered against lines.
+
+        Both are real charges and the form has always shown them added
+        together - the totals block says so in as many words. Summing them
+        here is what makes the saved figure match the one on screen.
+        """
+        per_item = sum((i.tooling_charge or Decimal('0.00')
+                        for i in self.items.all()), Decimal('0.00'))
+        return self.tooling_charges + per_item
+
+    @property
     def charges_total(self):
-        return self.tooling_charges + self.packing_forwarding + self.freight
+        return self.tooling_total + self.packing_forwarding + self.freight
 
     @property
     def taxable_amount(self):
@@ -134,7 +146,10 @@ class Quotation(TimeStampedModel):
 
     @property
     def gst_amount(self):
-        return (self.taxable_amount * self.gst_percent / Decimal('100')).quantize(Decimal('0.01'))
+        # Half-UP, not Python's default half-even: 1,599.225 of tax is
+        # 1,599.23 on an invoice, not 1,599.22.
+        return (self.taxable_amount * self.gst_percent / Decimal('100')).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     @property
     def grand_total(self):
@@ -357,7 +372,8 @@ class QuotationItem(TimeStampedModel):
 
     @property
     def line_amount(self):
-        return (self.effective_rate * self.quantity).quantize(Decimal('0.01'))
+        return (self.effective_rate * self.quantity).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     @property
     def unapproved_tiers(self):

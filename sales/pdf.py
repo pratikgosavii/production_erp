@@ -366,8 +366,8 @@ def _item_block(item, width):
 def _totals(quotation, width):
     gst_percent = _dec(quotation.gst_percent).normalize()
     rows = [['Sub Total (all line items)', _rs(quotation.sub_total)]]
-    if _dec(quotation.tooling_charges):
-        rows.append(['Tooling / Screen Charges (one-time)', _rs(quotation.tooling_charges)])
+    if _dec(quotation.tooling_total):
+        rows.append(['Tooling / Screen Charges (one-time)', _rs(quotation.tooling_total)])
     if _dec(quotation.packing_forwarding):
         rows.append(['Packing &amp; Forwarding', _rs(quotation.packing_forwarding)])
     if _dec(quotation.freight):

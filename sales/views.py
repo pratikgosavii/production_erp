@@ -1307,8 +1307,8 @@ def _detail_totals(quotation):
     rows = [
         {'label': 'Sub Total', 'value': _money(quotation.sub_total)},
     ]
-    if quotation.tooling_charges:
-        rows.append({'label': 'Tooling Charges', 'value': _money(quotation.tooling_charges)})
+    if quotation.tooling_total:
+        rows.append({'label': 'Tooling Charges', 'value': _money(quotation.tooling_total)})
     if quotation.packing_forwarding:
         rows.append({'label': 'Packing & Forwarding',
                      'value': _money(quotation.packing_forwarding)})
