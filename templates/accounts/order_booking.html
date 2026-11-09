@@ -243,8 +243,13 @@
 {% block sidebar_content %}
 <div class="nav-section">
   <div class="nav-label">Accounts</div>
-  <a href="{% url 'accounts:order_booking' %}" class="nav-item active">
+  <a href="{% url 'accounts:order_booking' %}"
+     class="nav-item {% if active_filter != 'approval' %}active{% endif %}">
     <span class="icon">📦</span> Order Booking
+  </a>
+  <a href="?filter=approval"
+     class="nav-item {% if active_filter == 'approval' %}active{% endif %}">
+    <span class="icon">🖊️</span> Needs Approval{% if counts.approval %} ({{ counts.approval }}){% endif %}
   </a>
 </div>
 {% endblock %}
@@ -277,6 +282,7 @@
     </form>
     {% if search %}<a class="chip" href="?{% if active_filter != 'all' %}filter={{ active_filter }}{% endif %}">✕ Clear "{{ search }}"</a>{% endif %}
     <a class="chip {% if active_filter == 'all' %}active{% endif %}" href="?{% if search %}q={{ search|urlencode }}{% endif %}">All ({{ counts.all }})</a>
+    <a class="chip {% if active_filter == 'approval' %}active{% endif %}" href="?filter=approval{% if search %}&q={{ search|urlencode }}{% endif %}">Needs Approval ({{ counts.approval }})</a>
     <a class="chip {% if active_filter == 'delayed' %}active{% endif %}" href="?filter=delayed{% if search %}&q={{ search|urlencode }}{% endif %}">Delayed ({{ counts.delayed }})</a>
     <a class="chip {% if active_filter == 'held' %}active{% endif %}" href="?filter=held{% if search %}&q={{ search|urlencode }}{% endif %}">Held ({{ counts.held }})</a>
     <a class="chip {% if active_filter == 'onhold' %}active{% endif %}" href="?filter=onhold{% if search %}&q={{ search|urlencode }}{% endif %}">On Hold ({{ counts.onhold }})</a>
@@ -407,6 +413,8 @@
   </tbody>
 </table>
 </div>
+{% include "core/_pagination.html" %}
+
 
 <!-- ======== CONFIRM & BOOK MODAL ======== -->
 <div class="modal-overlay" id="confirmModal">

@@ -14,6 +14,96 @@
 
 {% block extra_css %}
 <style>
+  .toolbar a.chip { text-decoration: none; }
+  .toolbar .chip-note { font-size: 10.5px; color: var(--ink-soft); align-self: center; }
+
+  /* ---- process strip ---- */
+  .proc-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); margin-bottom: 16px; }
+  @media (max-width: 760px) { .proc-strip { grid-template-columns: 1fr; } }
+  .proc-strip .proc { background: var(--card); padding: 13px 16px; }
+  .proc-strip .n { font-family: 'IBM Plex Mono'; font-size: 21px; font-weight: 600; line-height: 1; }
+  .proc-strip .t { font-size: 12px; font-weight: 600; margin-top: 7px; }
+  .proc-strip .t .mk { color: var(--steel); }
+  .proc-strip .b { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
+
+  /* ---- scorecard ---- */
+  .score-card { background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+  .sc-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 11px 16px; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .sc-head b { font-size: 12px; }
+  .sc-head span { font-size: 10.5px; color: var(--ink-soft); }
+  .sc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
+  @media (max-width: 760px) { .sc-grid { grid-template-columns: repeat(2, 1fr); } }
+  .sc-grid > div { background: var(--card); padding: 13px 16px; }
+  .sc-grid .n { font-family: 'IBM Plex Mono'; font-size: 19px; font-weight: 600; }
+  .sc-grid .l { font-size: 10.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.4; }
+  .sc-grid .t { font-size: 10px; color: var(--ink-soft); margin-top: 6px; }
+  .sc-grid .t.good { color: var(--green); }
+  .sc-grid .t.bad { color: var(--red); }
+  .sc-wip { padding: 10px 16px; background: var(--amber-bg); color: var(--amber);
+    font-size: 11px; border-top: 1px solid var(--line); }
+
+  /* ---- start here next ---- */
+  .next-up { background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--navy); border-radius: var(--radius); margin-bottom: 18px; }
+  .nu-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-soft); padding: 10px 16px 0; }
+  .nu-body { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 8px 16px 12px; }
+  .nu-proc { font-size: 11px; font-weight: 600; color: var(--steel); }
+  .nu-code { font-family: 'IBM Plex Mono'; font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .nu-spec { font-size: 11px; color: var(--ink-soft); margin-top: 3px; }
+  .nu-facts { display: flex; gap: 22px; margin-left: auto; flex-wrap: wrap; }
+  .nu-facts > div { display: flex; flex-direction: column; gap: 3px; }
+  .nu-facts .l { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+  .nu-facts .v { font-size: 12px; font-weight: 600; }
+  .nu-facts .v.late { color: var(--red); }
+  .nu-go { background: var(--navy); color: #fff; font-size: 12px; font-weight: 600;
+    padding: 9px 16px; border-radius: 3px; text-decoration: none; white-space: nowrap; }
+  .nu-go:hover { background: var(--steel); }
+  .nu-why { font-size: 11px; color: var(--ink-soft); padding: 0 16px 12px; font-style: italic; }
+
+  /* ---- queue tables ---- */
+  .qsection { background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); margin-bottom: 18px; overflow: hidden; }
+  .qsection.muted { opacity: .92; }
+  .qs-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 11px 16px; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .qs-head b { font-size: 12px; }
+  .qs-head .cnt { font-family: 'IBM Plex Mono'; font-size: 11px; font-weight: 700;
+    background: var(--navy); color: #fff; padding: 1px 7px; border-radius: 10px; }
+  .qs-head .hint { font-size: 10.5px; color: var(--ink-soft); margin-left: auto; }
+  table.qtable { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  table.qtable th { text-align: left; padding: 8px 14px; font-size: 9px;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft);
+    background: #fafbfc; border-bottom: 1px solid var(--line); font-weight: 700; }
+  table.qtable td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.qtable tr:last-child td { border-bottom: none; }
+  table.qtable tr.late td { background: var(--red-bg); }
+  table.qtable .mono { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  table.qtable .sub { font-size: 10px; color: var(--ink-soft); margin-top: 3px; font-weight: 400; }
+  table.qtable .proc-cell { white-space: nowrap; font-weight: 600; }
+  table.qtable .proc-cell .mk { color: var(--steel); }
+  table.qtable .none { text-align: center; color: var(--ink-soft); padding: 22px; }
+  table.qtable a.open { color: var(--blue); font-weight: 600; text-decoration: none; white-space: nowrap; }
+  table.qtable a.open:hover { text-decoration: underline; }
+  table.qtable .row-acts { white-space: nowrap; }
+  table.qtable a.query {
+    color: var(--ink-soft); font-weight: 600; text-decoration: none;
+    margin-left: 10px; white-space: nowrap;
+  }
+  table.qtable a.query:hover { color: var(--amber); text-decoration: underline; }
+  .pill { font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .pill.ready { background: var(--green-bg); color: var(--green); }
+  .pill.approved { background: var(--blue-bg); color: var(--blue); }
+  .pill.drawn { background: var(--amber-bg); color: var(--amber); }
+  .pill.nodrawing { background: var(--gray-bg); color: var(--gray); }
+
+  .eod { background: var(--amber-bg); border: 1px solid var(--amber); color: var(--amber);
+    border-radius: var(--radius); padding: 11px 16px; font-size: 11.5px; margin-bottom: 18px; }
+  .eod b { margin-right: 6px; }
+
   /* Notice bar */
   .notice-bar {
     background: var(--blue-bg); color: var(--blue); font-size: 12px;
@@ -157,102 +247,185 @@
   <div class="cell owed"><div class="n">{{ counts.items_pending }}</div><div class="l">Item codes awaiting a drawing</div></div>
 </div>
 
-<div class="page-head">
-  <h1>My Design Queue</h1>
-  <div class="toolbar">
-    <input type="text" placeholder="Search customer / SO no...">
-    <span class="chip active">All ({{ counts.total }})</span>
-    <span class="chip">Not Started ({{ counts.not_started }})</span>
-    <span class="chip">In Progress ({{ counts.in_progress }})</span>
-    <span class="chip">Query Pending ({{ counts.query }})</span>
-  </div>
-</div>
-
-<div class="job-grid">
-
-  {% for c in cards %}
-  {% url 'design:job_detail' c.order.number as job_url %}
-  <div class="job-card {{ c.card_class }}">
-    <div class="job-top">
-      <div>
-        <div class="so-no">{{ c.order.number }}</div>
-        <div class="job-date">Received {{ c.order.booked_on|date:"d M Y"|default:"—" }}</div>
-      </div>
-      <span class="order-type {{ c.order.order_type|lower }}">{{ c.order.get_order_type_display }}</span>
-    </div>
-    <div class="cust-name">{{ c.order.customer.name }}</div>
-    <span class="stage-pill {{ c.stage_class }}">{{ c.stage_label }}</span>
-
-    <!-- Per-item progress: a drawing is owed for every item code -->
-    <div class="prog-line">
-      <span><b>{{ c.drawn }}</b> of <b>{{ c.total_items }}</b> items drawn · <b>{{ c.approved }}</b> approved</span>
-      {% if c.ready %}<span>{{ c.ready }} ready</span>{% endif %}
-    </div>
-    <div class="prog-bar" title="{{ c.approved }} approved, {{ c.drawn }} drawn of {{ c.total_items }}">
-      {% if c.total_items %}
-      <div class="seg approved" style="width: {% widthratio c.approved c.total_items 100 %}%;"></div>
-      <div class="seg drawn" style="width: {% widthratio c.drawn_pending c.total_items 100 %}%;"></div>
-      {% endif %}
-    </div>
-
-    <div class="item-list">
-      {% for r in c.rows %}
-      <div class="ir">
-        <a class="ic-code" href="{{ job_url }}?item={{ r.pk }}" title="{{ r.code }}">
-          <span class="pos">{{ r.position }}.</span>{{ r.code }}
-        </a>
-        <span class="st-chip {{ r.state_class }}">{{ r.state_label }}</span>
-      </div>
-      {% empty %}
-      <div class="empty">This order has no item codes on it.</div>
-      {% endfor %}
-    </div>
-
-    {% if c.query %}
-    <div class="query-note"><b>Query:</b> {{ c.query.subject }}{% if c.query_note %} — {{ c.query_note|truncatechars:110 }}{% endif %}</div>
-    {% endif %}
-
-    <div class="meta-row"><span>Expected Delivery</span><b>{{ c.order.expected_delivery|date:"d M Y"|default:"Not set" }}</b></div>
-
-    <div class="actions">
-      {% if c.next_item %}
-        {% if c.started %}
-          <a href="{{ job_url }}?item={{ c.next_item.pk }}" class="btn btn-primary">Continue</a>
-        {% else %}
-          <form method="post" action="{% url 'design:start_design' c.order.number %}" style="display:contents;">
-            {% csrf_token %}
-            <input type="hidden" name="item" value="{{ c.next_item.pk }}">
-            <button type="submit" class="btn btn-primary">Start</button>
-          </form>
-        {% endif %}
-        {% if c.query %}
-          <a href="{{ job_url }}?item={{ c.next_item.pk }}#qThread" class="btn btn-outline">Query Thread</a>
-        {% else %}
-          <a href="{{ job_url }}?item={{ c.next_item.pk }}#qThread" class="btn btn-outline">Raise Query</a>
-        {% endif %}
-      {% else %}
-        <a href="{{ job_url }}" class="btn btn-outline">Open Order</a>
-      {% endif %}
-    </div>
-  </div>
-  {% empty %}
-  <div class="job-card" style="grid-column: 1 / -1;">
-    <div class="cust-name">Nothing in the design queue</div>
-    <div class="meta-row"><span>No sales order is currently at the design stage for you.</span></div>
+<!-- Process first: the checks inside a job change with it, so it is the
+     first thing the designer should see, not a column halfway along. -->
+<div class="proc-strip">
+  {% for p in by_process %}
+  <div class="proc">
+    <div class="n">{{ p.count }}</div>
+    <div class="t"><span class="mk">{{ p.mark }}</span> {{ p.label }}</div>
+    <div class="b">{{ p.blurb }}</div>
   </div>
   {% endfor %}
-
 </div>
 
-{% endblock %}
+<div class="score-card">
+  <div class="sc-head">
+    <b>My Scorecard</b>
+    <span>Week of {{ scorecard.week_start|date:"d" }}–{{ scorecard.week_end|date:"d M" }}
+      · updates automatically · every figure is counted, not estimated</span>
+  </div>
+  <div class="sc-grid">
+    <div>
+      <div class="n">{{ scorecard.on_time }} / {{ scorecard.dated }}</div>
+      <div class="l">Jobs finished on time</div>
+      <div class="t {% if scorecard.on_time_trend.0 == '▲' %}good{% elif scorecard.on_time_trend.0 == '▼' %}bad{% endif %}">
+        {{ scorecard.on_time_trend.0 }} {{ scorecard.on_time_trend.1 }}
+      </div>
+    </div>
+    <div>
+      <div class="n">{{ scorecard.returned }}</div>
+      <div class="l">Proofs / DXF returned by customer</div>
+      <div class="t {% if scorecard.returned_trend.0 == '▲' %}good{% elif scorecard.returned_trend.0 == '▼' %}bad{% endif %}">
+        {{ scorecard.returned_trend.0 }} {{ scorecard.returned_trend.1 }}
+      </div>
+    </div>
+    <div>
+      <div class="n">{{ scorecard.rework }}</div>
+      <div class="l">Rework caused by design error</div>
+      <div class="t {% if scorecard.rework_trend.0 == '▲' %}good{% elif scorecard.rework_trend.0 == '▼' %}bad{% endif %}">
+        {{ scorecard.rework_trend.0 }} {{ scorecard.rework_trend.1 }}
+      </div>
+    </div>
+    <div>
+      <div class="n">{{ scorecard.open_jobs }}</div>
+      <div class="l">Design queries still open: {{ scorecard.open_queries }}</div>
+      <div class="t">jobs open right now</div>
+    </div>
+  </div>
+  {% if scorecard.wip_over %}
+  <div class="sc-wip">
+    <b>{{ scorecard.open_jobs }} jobs open</b> — more than {{ scorecard.wip_limit }} at once.
+    Finish one before starting another; half-done jobs are where records get lost.
+  </div>
+  {% endif %}
+</div>
 
-{% block extra_js %}
-<script>
-  document.querySelectorAll('.toolbar .chip').forEach(chip => {
-    chip.addEventListener('click', function() {
-      document.querySelectorAll('.toolbar .chip').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
-</script>
+{% if next_up %}
+<div class="next-up">
+  <div class="nu-tag">Start here next</div>
+  <div class="nu-body">
+    <div class="nu-left">
+      <div class="nu-proc"><span class="mk">{{ next_up.process_mark }}</span> {{ next_up.process_short }}</div>
+      <div class="nu-code">{{ next_up.code }}</div>
+      <div class="nu-spec">{{ next_up.customer }} · {{ next_up.spec }} · {{ next_up.item.quantity }} Nos</div>
+    </div>
+    <div class="nu-facts">
+      <div><span class="l">Due</span><span class="v {% if next_up.overdue %}late{% endif %}">{{ next_up.due|date:"d M"|default:"—" }}</span></div>
+      <div><span class="l">Waiting</span><span class="v">{{ next_up.sitting }}</span></div>
+      <div><span class="l">Stage</span><span class="v">{{ next_up.action }}</span></div>
+      <div><span class="l">Folder</span><span class="v">{{ next_up.folder }}</span></div>
+    </div>
+    <a class="nu-go" href="{% url 'design:job_detail' next_up.order.number %}?item={{ next_up.pk }}">Open Job Card →</a>
+  </div>
+  <div class="nu-why">{{ next_up.why }}</div>
+</div>
+{% endif %}
+
+{% comment %}
+Search and the status chips sit above the tables now - they used to live over
+the card grid, and that grid has gone. They filter the per-SO view the counts
+in the strip are drawn from.
+{% endcomment %}
+<div class="page-head">
+  <div class="toolbar">
+    <form method="get" action="{% url 'design:queue' %}" style="display:contents">
+      <input type="text" name="q" value="{{ search }}"
+             placeholder="Search customer / SO no / item code...">
+      <input type="hidden" name="filter" value="{{ active_filter }}">
+    </form>
+    <a href="?filter=all{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'all' %}active{% endif %}">All ({{ counts.total }})</a>
+    <a href="?filter=notstarted{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'notstarted' %}active{% endif %}">Not Started ({{ counts.not_started }})</a>
+    <a href="?filter=inprogress{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'inprogress' %}active{% endif %}">In Progress ({{ counts.in_progress }})</a>
+    <a href="?filter=query{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'query' %}active{% endif %}">Query Pending ({{ counts.query }})</a>
+    {% if search or active_filter != 'all' %}
+    <span class="chip-note">{{ shown }} job(s) match</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="qsection">
+  <div class="qs-head">
+    <b>Your turn</b><span class="cnt">{{ my_rows|length }}</span>
+    <span class="hint">Process shown first — the checks inside change with it</span>
+  </div>
+  <table class="qtable">
+    <thead>
+      <tr><th>Process</th><th>Item Code</th><th>Customer / Spec</th>
+          <th>Sitting</th><th>Your next action</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in my_rows %}
+      <tr{% if r.overdue %} class="late"{% endif %}>
+        <td class="proc-cell"><span class="mk">{{ r.process_mark }}</span> {{ r.process_short }}</td>
+        <td class="mono">{{ r.code }}<div class="sub">{{ r.order.number }}</div></td>
+        <td>{{ r.customer }}<div class="sub">{{ r.spec }}</div></td>
+        <td>{{ r.sitting }}<div class="sub">due {{ r.due|date:"d M"|default:"—" }}</div></td>
+        <td><b>{{ r.action }}</b><div class="sub">{{ r.why }}</div></td>
+        <td><span class="pill {{ r.state_class }}">{% if r.overdue %}Overdue{% else %}{{ r.state_label }}{% endif %}</span></td>
+        <td class="row-acts">
+          <a class="open" href="{% url 'design:job_detail' r.order.number %}?item={{ r.pk }}">Open</a>
+          <a class="query" href="{% url 'design:job_detail' r.order.number %}?item={{ r.pk }}#qThread"
+             title="Raise a query with Sales on {{ r.code }}">Query</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="none">Nothing waiting on you.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if blocked_rows %}
+<div class="qsection muted">
+  <div class="qs-head">
+    <b>Waiting on someone else</b><span class="cnt">{{ blocked_rows|length }}</span>
+    <span class="hint">Not your delay — shown so you know where they are</span>
+  </div>
+  <table class="qtable">
+    <thead>
+      <tr><th>Process</th><th>Item Code</th><th>Customer</th>
+          <th>Waiting</th><th>Waiting for</th><th>With whom</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in blocked_rows %}
+      <tr>
+        <td class="proc-cell"><span class="mk">{{ r.process_mark }}</span> {{ r.process_short }}</td>
+        <td class="mono">{{ r.code }}<div class="sub">{{ r.order.number }}</div></td>
+        <td>{{ r.customer }}</td>
+        <td>{{ r.sitting }}</td>
+        <td>{{ r.waiting.0 }}</td>
+        <td>{{ r.waiting.1 }}</td>
+        <td class="row-acts">
+          <a class="open" href="{% url 'design:job_detail' r.order.number %}?item={{ r.pk }}">View</a>
+          <a class="query" href="{% url 'design:job_detail' r.order.number %}?item={{ r.pk }}#qThread"
+             title="Raise a query with Sales on {{ r.code }}">Query</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if stale %}
+<div class="eod">
+  <b>End-of-day check</b>
+  {{ stale|length }} job{{ stale|pluralize }} had no update today.
+  Either move {{ stale|pluralize:"it,them" }} on, or write one line saying what
+  {{ stale|pluralize:"it is,they are" }} waiting for.
+</div>
+{% endif %}
+
+{% comment %}
+The per-SO cards that used to sit here have gone. Every item they listed is
+already in "Your turn" / "Waiting on someone else" above, so the page was
+showing the same ten jobs twice in two shapes. The spec's design queue has
+no card grid either. Raise Query moved onto the table rows so it stays one
+click away.
+{% endcomment %}
 {% endblock %}

@@ -71,15 +71,20 @@ img { max-width: 100%; }
   align-items: center;
   gap: 12px;
 }
-.topbar .brand .mark {
-  width: 30px; height: 30px;
-  border: 1.5px solid #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'IBM Plex Mono'; font-size: 12px; font-weight: 600;
-  transform: rotate(45deg);
+/* flex-shrink:0 on both, or the topbar squashes the wordmark horizontally
+   and the aspect ratio quietly goes with it. */
+.topbar .brand .brand-logo { display: flex; align-items: center; flex: 0 0 auto; }
+.topbar .brand .brand-logo img {
+  height: 28px; width: auto; display: block; flex: 0 0 auto;
 }
-.topbar .brand .mark span { transform: rotate(-45deg); }
-.topbar .brand .title { font-weight: 600; font-size: 15px; }
+.topbar .brand .brand-rule {
+  width: 1px; height: 26px; flex: 0 0 auto;
+  background: rgba(255, 255, 255, .22);
+}
+.topbar .brand .title {
+  font-weight: 600; font-size: 13px;
+  letter-spacing: .06em; color: #c7d4de;
+}
 .topbar .brand .sub {
   font-size: 11px; color: #9db2c4;
   letter-spacing: .04em; text-transform: uppercase;
@@ -362,3 +367,90 @@ table.data-table tr:hover {
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
 .gap-1 { gap: 8px; }
 .gap-2 { gap: 16px; }
+
+/* ===========================================================================
+   Internal margin & benchmark panel (templates/sales/_margin_panel.html)
+   Shared by the quotation detail page and the Sales Manager's approval queue,
+   so the rules live here rather than in either page's own <style>.
+   =========================================================================== */
+/* Internal margin panel - manager only (SS 2). */
+.margin-card {
+  background: var(--card); border: 1px solid var(--line);
+  border-left: 3px solid var(--steel); border-radius: var(--radius);
+  margin-bottom: 18px; overflow: hidden;
+}
+.margin-card.red   { border-left-color: var(--red); }
+.margin-card.amber { border-left-color: var(--amber); }
+.margin-card.green { border-left-color: var(--green); }
+.margin-card.empty { padding: 18px 20px; font-size: 12px; color: var(--ink-soft); }
+.mg-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--paper);
+}
+.mg-title { font-size: 12px; font-weight: 700; }
+.mg-only {
+  font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-soft); border: 1px solid var(--line); background: #fff;
+  padding: 3px 9px; border-radius: 3px;
+}
+.mg-line { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.mg-line:last-of-type { border-bottom: none; }
+.mg-line-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 11px; }
+.mg-line-head b { font-family: 'IBM Plex Mono'; font-size: 12.5px; }
+.mg-spec { font-size: 11px; color: var(--ink-soft); }
+.mg-flag { font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
+.mg-flag.red   { background: var(--red-bg);   color: var(--red); }
+.mg-flag.amber { background: var(--amber-bg); color: var(--amber); }
+.mg-flag.green { background: var(--green-bg); color: var(--green); }
+.mg-flag.uncosted { background: var(--gray-bg); color: var(--gray); }
+.mg-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+/* Benchmark and variance hidden -> four figures, not six. */
+.mg-grid.four { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1000px) { .mg-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 620px)  { .mg-grid { grid-template-columns: repeat(2, 1fr); } }
+.mg-grid > div { background: #fff; padding: 9px 11px; }
+.mg-grid .l { font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 4px; }
+.mg-grid .v { font-family: 'IBM Plex Mono'; font-size: 13px; font-weight: 700; }
+.mg-grid .v i { font-style: normal; font-size: 10px; font-weight: 500; color: var(--ink-soft); }
+.mg-grid .v.red { color: var(--red); } .mg-grid .v.amber { color: var(--amber); }
+.mg-grid .v.green { color: var(--green); }
+.mg-grid .v.down { color: var(--red); } .mg-grid .v.up { color: var(--green); }
+.mg-reason { font-size: 11px; line-height: 1.6; margin-top: 10px; padding: 9px 12px; border-radius: var(--radius); }
+.mg-reason.red   { background: var(--red-bg);   color: var(--red); }
+.mg-reason.amber { background: var(--amber-bg); color: var(--amber); }
+.mg-reason.uncosted { background: var(--gray-bg); color: var(--ink-soft); }
+.mg-foot { padding: 11px 18px; background: var(--paper); border-top: 1px solid var(--line); font-size: 11.5px; color: var(--ink-soft); }
+.mg-foot b { color: var(--ink); font-family: 'IBM Plex Mono'; }
+.mg-warn { color: var(--amber); font-weight: 600; margin-left: 8px; }
+
+/* ===========================================================================
+   Pager (templates/core/_pagination.html)
+   =========================================================================== */
+.pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap;
+  padding: 11px 14px; margin-top: 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  font-size: 11.5px; color: var(--ink-soft);
+}
+.pager.one-page { justify-content: center; }
+.pager b { color: var(--ink); font-family: 'IBM Plex Mono'; }
+.pager-links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pager-links a,
+.pager-links span {
+  min-width: 28px; padding: 5px 9px; border-radius: 3px; text-align: center;
+  border: 1px solid transparent; line-height: 1;
+}
+.pager-links a {
+  color: var(--blue); text-decoration: none; border-color: var(--line); background: #fff;
+}
+.pager-links a:hover { border-color: var(--steel); background: var(--paper); }
+.pager-links .here {
+  background: var(--navy); color: #fff; font-weight: 700; border-color: var(--navy);
+  font-family: 'IBM Plex Mono';
+}
+.pager-links .off { color: var(--gray); }
+.pager-links .gap { color: var(--gray); min-width: 0; padding: 5px 2px; }
+@media (max-width: 620px) {
+  .pager { justify-content: center; }
+}

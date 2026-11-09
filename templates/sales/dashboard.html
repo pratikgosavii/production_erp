@@ -164,20 +164,7 @@
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">Sales</div>
-  <a href="{% url 'sales:dashboard' %}" class="nav-item active">
-    <span class="icon">📋</span> My Quotations
-  </a>
-  <a href="{% url 'sales:queries' %}" class="nav-item">
-    <span class="icon">❓</span> Design Queries{% if open_query_count %} ({{ open_query_count }}){% endif %}
-  </a>
-  <a href="{% url 'masters:customers' %}" class="nav-item">
-    <span class="icon">🏢</span> Customers
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include 'sales/_sidebar.html' with nav='quotations' %}{% endblock %}
 
 {% block content %}
 <!-- Summary strip -->
@@ -367,6 +354,8 @@
   {% endfor %}
   </tbody>
 </table>
+{% include "core/_pagination.html" %}
+
 
 <!-- ======== UPLOAD PO / DRAWING MODAL (§3.3) ======== -->
 <div class="modal-overlay" id="poModal">

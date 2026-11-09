@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from .models import (
-    Customer, Finish, Grade, ItemCode, ItemCodeRate, Material, ProcessStation,
-    Rack, ReorderLevel, SheetSize, Supplier, Thickness,
+    Customer, Finish, Grade, ItemCode, ItemCodeRate, Material, MaterialRate,
+    ProcessStation, Rack, ReorderLevel, SheetSize, Supplier, Thickness,
 )
 
 
@@ -26,10 +26,14 @@ class ItemCodeRateInline(admin.TabularInline):
 @admin.register(ItemCode)
 class ItemCodeAdmin(admin.ModelAdmin):
     list_display = (
-        'code', 'customer', 'spec_line', 'approved_rate', 'approval_state',
-        'approved_via', 'approved_on', 'is_active',
+        'code', 'customer', 'process', 'spec_line', 'approved_rate',
+        'approval_state', 'approved_via', 'approved_on', 'is_active',
     )
-    list_filter = ('approval_state', 'is_active', 'customer')
+    # Process is filterable and editable in place: it decides which checks the
+    # designer is prompted for, so it has to be correctable without opening
+    # each part one at a time.
+    list_filter = ('process', 'approval_state', 'is_active', 'customer')
+    list_editable = ('process',)
     search_fields = ('code', 'description', 'customer__name')
     autocomplete_fields = ('customer',)
     readonly_fields = ('approved_on', 'approved_by', 'approved_via')
@@ -53,6 +57,30 @@ class ProcessStationAdmin(admin.ModelAdmin):
     list_display = ('sequence', 'name', 'is_active')
     list_editable = ('is_active',)
     ordering = ('sequence',)
+
+
+@admin.register(MaterialRate)
+class MaterialRateAdmin(admin.ModelAdmin):
+    """Cost and benchmark per sq.inch — what the margin panel reads.
+
+    Without a row here the Sales Manager's margin analysis simply says the
+    pairing is uncosted, which is the honest answer but not a useful one. The
+    panel tells them to add it to the material master, so the material master
+    has to be a place they can actually reach.
+    """
+
+    list_display = ('material', 'thickness', 'cost_per_sq_in',
+                    'benchmark_rate_per_sq_in', 'margin_at_benchmark', 'note')
+    list_filter = ('material', 'thickness')
+    list_editable = ('cost_per_sq_in', 'benchmark_rate_per_sq_in')
+    search_fields = ('material__name', 'thickness__name', 'note')
+
+    @admin.display(description='Margin at benchmark')
+    def margin_at_benchmark(self, obj):
+        bench = obj.benchmark_rate_per_sq_in
+        if not bench:
+            return '—'
+        return f'{(bench - obj.cost_per_sq_in) / bench * 100:.1f}%'
 
 
 @admin.register(ReorderLevel)

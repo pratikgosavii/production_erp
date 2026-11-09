@@ -1,0 +1,103 @@
+{% comment %}
+The internal margin panel, shared by the quotation detail page and the Sales
+Manager's approval queue. It lives in one file so the two cannot drift: the
+manager decides from the queue, then opens the detail page, and the same line
+must read the same way in both.
+
+Takes:
+  rows    - _margin_rows(quotation)
+  summary - _margin_summary(quotation), may be None
+Both callers are already behind a manager-only check; this partial does not
+gate itself.
+{% endcomment %}
+{% if rows %}
+<div class="margin-card {{ summary.flag }}">
+  <div class="mg-head">
+    <div class="mg-title">Margin{% if rows.0.m.show_benchmark %} &amp; benchmark{% endif %}</div>
+    <span class="mg-only">Manager only</span>
+  </div>
+
+  {% for r in rows %}
+  <div class="mg-line {% if not r.m.costed %}uncosted{% else %}{{ r.m.flag }}{% endif %}">
+    <div class="mg-line-head">
+      <b>{{ r.code }}</b>
+      <span class="mg-spec">{{ r.spec }} · {{ r.qty }} Nos @ {{ r.rate }}</span>
+      {% if r.m.costed %}
+        {% if r.m.show_verdict %}
+        <span class="mg-flag {{ r.m.flag }}">
+          {% if r.m.flag == 'red' %}Below margin floor
+          {% elif r.m.flag == 'amber' %}Under benchmark
+          {% else %}Healthy{% endif %}
+        </span>
+        {% endif %}
+      {% else %}
+        <span class="mg-flag uncosted">Not costed</span>
+      {% endif %}
+    </div>
+
+    {% if r.m.costed %}
+    <div class="mg-grid{% if not r.m.show_benchmark %} four{% endif %}">
+      <div><div class="l">Area / plate</div><div class="v">{{ r.m.area }} <i>sq.in</i></div></div>
+      <div><div class="l">Rate / sq.inch (quoted)</div><div class="v">₹{{ r.m.quoted }}</div></div>
+      <div><div class="l">Cost / sq.inch</div><div class="v">₹{{ r.m.cost }}</div></div>
+      {% if r.m.show_benchmark %}
+      <div>
+        <div class="l">Benchmark / sq.inch</div>
+        <div class="v">₹{{ r.m.benchmark }}{% if r.m.is_override %} <i>override</i>{% endif %}</div>
+      </div>
+      {% endif %}
+      <div>
+        <div class="l">Margin</div>
+        <div class="v{% if r.m.show_verdict %} {{ r.m.flag }}{% endif %}">₹{{ r.m.margin_rs }} <i>({{ r.m.margin_pct }}%)</i></div>
+      </div>
+      {% if r.m.show_benchmark %}
+      <div>
+        <div class="l">Variance vs benchmark</div>
+        <div class="v {% if r.m.variance_pct < 0 %}down{% else %}up{% endif %}">
+          {% if r.m.variance_pct > 0 %}+{% endif %}{{ r.m.variance_pct }}%
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% if r.m.reason %}
+    <div class="mg-reason {{ r.m.flag }}"><b>Flag reason:</b> {{ r.m.reason }}</div>
+    {% endif %}
+    {% else %}
+    <div class="mg-reason uncosted">
+      No cost on file for {{ r.spec }} — margin cannot be worked out. Add it to the
+      material master before approving.
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% if summary %}
+  <div class="mg-foot">
+    {% if not summary.show_verdict %}
+      {% comment %}
+      Figures without a verdict: report the thinnest margin as a fact, call
+      nothing good or bad while costs are placeholders.
+      {% endcomment %}
+      Thinnest margin is <b>{{ summary.worst.m.margin_pct }}%</b> on
+      <b>{{ summary.worst.code }}</b>, across <b>{{ summary.total }}</b> line(s).
+      <span class="mg-warn">Costs are placeholders — figures only, no verdict.</span>
+    {% elif summary.flagged_count %}
+      <b>{{ summary.flagged_count }}</b> of <b>{{ summary.total }}</b>
+      line(s) flagged — thinnest margin is
+      <b>{{ summary.worst.m.margin_pct }}%</b> on
+      <b>{{ summary.worst.code }}</b>.
+    {% else %}
+      All <b>{{ summary.total }}</b> line(s) clear the 15% margin floor.
+    {% endif %}
+    {% if summary.uncosted %}
+      <span class="mg-warn">{{ summary.uncosted }} line(s) have no cost on file.</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="margin-card empty">
+  Nothing to analyse — these lines have no parseable plate size, so area and
+  rate per sq.inch cannot be worked out.
+</div>
+{% endif %}

@@ -27,6 +27,7 @@ from django.views.decorators.http import require_POST
 from core.constants import Health, OrderStatus, OrderType, QuotationStatus, Stage
 from core.decorators import role_required
 from core.models import AuditLog
+from core.pagination import paginate
 from core.services import log, notify
 from masters.models import ItemCode
 from production.models import JobCard
@@ -313,10 +314,16 @@ def _build_rows():
 
 
 # ----------------------------------------------------------------- filtering
-FILTERS = ['all', 'delayed', 'held', 'onhold', 'cancelled', 'repeat', 'mine']
+FILTERS = ['all', 'approval', 'delayed', 'held', 'onhold', 'cancelled',
+           'repeat', 'mine']
 
 
 def _matches(row, name, user):
+    if name == 'approval':
+        # Accounts' own to-do list: a quotation sitting on this desk that has
+        # not been booked or rejected yet. Booked orders are somebody else's
+        # problem, and the mixed All view buries these behind 50-odd rows.
+        return row.kind == 'QTN' and not row.is_cancelled
     if name == 'delayed':
         return row.health == 'red'
     if name == 'held':
@@ -377,8 +384,10 @@ def order_booking(request):
 
     counts = {name: sum(1 for r in rows if _matches(r, name, request.user)) for name in FILTERS}
 
+    page, pager = paginate(request, visible)
     return render(request, 'accounts/order_booking.html', {
-        'rows': visible,
+        'rows': page,
+        **pager,
         'summary': _summary(rows),
         'counts': counts,
         'active_filter': active,

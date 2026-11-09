@@ -13,6 +13,8 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from xml.sax.saxutils import escape
 
+import os
+
 from django.conf import settings
 
 from reportlab.lib.colors import HexColor, white
@@ -20,8 +22,9 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
-    KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
 # ── Colours (same palette as the reference build) ──
@@ -37,6 +40,11 @@ GREEN = HexColor('#1e7c3f')
 # ── Company block. The ERP has no company master, so anything beyond the name
 # is optional and only printed when the deployment supplies it in settings. ──
 COMPANY_NAME = getattr(settings, 'COMPANY_NAME', 'Ravi Raj Anodisers')
+
+#: Printed above the company address. Optional on purpose - a deployment that
+#: has not dropped a logo in still gets a correct quotation, just a plainer one.
+COMPANY_LOGO = getattr(
+    settings, 'COMPANY_LOGO_PATH', settings.BASE_DIR / 'static' / 'img' / 'raviraj-logo.png')
 COMPANY_LINES = [
     getattr(settings, 'COMPANY_ADDRESS', ''),
     ' | '.join(bit for bit in (
@@ -155,11 +163,36 @@ def _tier_range(tier):
 # ---------------------------------------------------------------------------
 # Story sections
 # ---------------------------------------------------------------------------
+def _logo_flowable(max_width_mm=52):
+    """The logo, scaled to a fixed width with its aspect ratio kept.
+
+    Returns None when the file is missing or unreadable rather than raising -
+    a quotation that cannot be downloaded is a worse failure than one without
+    a logo on it.
+    """
+    try:
+        path = str(COMPANY_LOGO)
+        if not os.path.exists(path):
+            return None
+        iw, ih = ImageReader(path).getSize()
+        if not iw or not ih:
+            return None
+        w = max_width_mm * mm
+        return Image(path, width=w, height=w * ih / iw)
+    except Exception:
+        return None
+
+
 def _header(quotation, width):
-    company = Paragraph(
-        _lines(f'<b>{_txt(COMPANY_NAME)}</b>', *(_txt(l) for l in COMPANY_LINES)),
-        S_BLOCK,
-    )
+    name_block = _lines(f'<b>{_txt(COMPANY_NAME)}</b>', *(_txt(l) for l in COMPANY_LINES))
+    logo = _logo_flowable()
+    if logo is not None:
+        # The logo carries the company name, so drop the repeated text line
+        # and keep only the address/contact detail under it.
+        rest = _lines(*(_txt(l) for l in COMPANY_LINES))
+        company = [logo, Spacer(1, 2.5 * mm)] + ([Paragraph(rest, S_BLOCK)] if rest.strip() else [])
+    else:
+        company = Paragraph(name_block, S_BLOCK)
     info = Paragraph(
         _lines(
             '<b>QUOTATION</b>',
@@ -434,6 +467,18 @@ def build_quotation_pdf(quotation):
     story.append(Spacer(1, 2 * mm))
     story.append(_totals(quotation, width))
     story.append(Spacer(1, 8 * mm))
+
+    # Notes sit straight after the totals, before the standing terms: they are
+    # the exclusions and assumptions for THIS quotation, so they have to read
+    # as part of the pricing rather than as another boilerplate clause.
+    if quotation.notes.strip():
+        story.append(Paragraph('<b>NOTES</b>', S_SECTION))
+        story.append(Spacer(1, 2 * mm))
+        for line in quotation.notes.strip().splitlines():
+            line = line.strip()
+            if line:
+                story.append(Paragraph(_txt(line), S_TERM))
+        story.append(Spacer(1, 8 * mm))
 
     story.append(Paragraph('<b>TERMS &amp; CONDITIONS</b>', S_SECTION))
     story.append(Spacer(1, 2 * mm))

@@ -19,6 +19,8 @@ Nothing is ever "sent" to Production: readiness is derived (drawing + approval
 The forward panel on the job screen reports that state rather than faking a
 handoff button.
 """
+from datetime import date, timedelta
+
 from django.contrib import messages
 from django.db.models import Max, Q
 from django.http import Http404, HttpResponseRedirect
@@ -28,16 +30,23 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.models import SalesOrder, SOItem
-from core.constants import ProofOutcome, OrderStatus, QueryStatus
+from core.constants import (
+    JOB_FOLDER_ROOT, NCRSource, PROCESS_CARD, PROCESS_UI, OrderStatus, Process,
+    ProofOutcome, QueryStatus,
+)
 from core.decorators import role_required
 from core.models import AuditLog
 from core.services import log, notify
+
+from quality.models import NCR
 
 from .forms import (
     QueryReplyForm, RaiseQueryForm, ReserveSheetForm, RevisionUploadForm,
     SpecForm, available_sheets_for,
 )
-from .models import DesignQuery, DrawingRevision, MaterialReservation, ProofRound
+from .models import (
+    DesignCheck, DesignQuery, DrawingRevision, MaterialReservation, ProofRound,
+)
 
 DESIGN_STATUSES = [OrderStatus.IN_DESIGN, OrderStatus.DESIGN_QUERY]
 
@@ -65,6 +74,45 @@ def item_label(item):
         return code.code
     desc = (item.quotation_item.description or '').strip()
     return desc or f'Item #{item.position}'
+
+
+def job_folder(item):
+    """Where this item's files belong. Derived, never typed.
+
+    One path per item per revision, so "saved in the job folder" is a check a
+    designer can actually pass or fail rather than a matter of opinion.
+    """
+    rev = item.current_drawing.revision if item.current_drawing else 0
+    return '\\'.join([JOB_FOLDER_ROOT, item.order.number,
+                       item_label(item), f'Rev{rev:02d}']) + '\\'
+
+
+def _gates(item, checks_done, checks_total):
+    """The four gates, in the order they unlock.
+
+    Each one reports whether it is met and whether it is even reachable yet:
+    a gate the designer cannot act on is shown locked rather than merely
+    unticked, because "not done" and "not your turn" are different problems.
+    """
+    g1 = item.current_drawing is not None
+    g2 = checks_done >= checks_total and checks_total > 0
+    g3 = item.proof_approved
+    g4 = item.material_reserved
+    card = PROCESS_CARD[Process(item.process)]
+    return [
+        {'n': 1, 'label': 'Design finalised', 'done': g1, 'open': True,
+         'detail': (item.current_drawing.label if item.current_drawing
+                    else 'No drawing uploaded yet')},
+        {'n': 2, 'label': 'Six checks', 'done': g2, 'open': g1,
+         'detail': f'{checks_done} of {checks_total}'},
+        {'n': 3, 'label': card['gate3'], 'done': g3, 'open': g2,
+         'detail': {'approved': 'Approved by customer',
+                    'waiting': 'Sent - awaiting customer',
+                    'changes': 'Changes requested',
+                    'none': 'Not sent yet'}[item.proof_state]},
+        {'n': 4, 'label': 'Material reserved', 'done': g4, 'open': g3,
+         'detail': 'Sheet reserved' if g4 else 'No sheet reserved'},
+    ]
 
 
 def _item_row(item, selected_pk=None):
@@ -186,6 +234,203 @@ def _form_error(request, form):
             return
 
 
+# ---------------------------------------------------------------------------
+# Design queue, process-aware (spec 07)
+# ---------------------------------------------------------------------------
+#: What Design is prompted to do next, per process, once the job is open.
+PROCESS_ACTION = {
+    Process.ETCHING: ('Send visual proof', 'Etching needs customer sign-off on every job'),
+    Process.MILLING: ('Apply etch-factor compensation', 'Oversize each side by 1.5 x thickness'),
+    Process.LASER: ('Kerf compensation + micro-joints', 'Then export the DXF to the machine folder'),
+}
+
+
+def _sitting(started_at, booked_on=None):
+    """How long this job has been sitting, in the queue's own words.
+
+    Measured from when the designer opened it; before that, from when the order
+    was booked, because an untouched job has still been waiting.
+    """
+    if started_at is not None:
+        delta = timezone.now() - started_at
+        days, seconds = delta.days, delta.seconds
+    elif booked_on is not None:
+        days, seconds = (timezone.localdate() - booked_on).days, 0
+    else:
+        return 'New'
+    if days >= 1:
+        return f'{days} day{"s" if days > 1 else ""}'
+    hours = seconds // 3600
+    return f'{hours} hr{"s" if hours != 1 else ""}' if hours else 'Just now'
+
+
+def _next_action(item):
+    """The one thing to do next on this item, and why.
+
+    Order matters: a job cannot be proofed before it is drawn, and nesting is
+    only worth raising once the proof is in. Returning the FIRST unmet step
+    rather than a list is deliberate - a queue that lists everything outstanding
+    is a queue nobody reads.
+    """
+    process = Process(item.process)
+    if item.current_drawing is None:
+        label, why = PROCESS_ACTION[process]
+        if process is Process.ETCHING:
+            return 'Start the drawing', 'Nothing drawn yet'
+        return f'Start - {label.lower()}', why
+    if process is Process.ETCHING and item.proof_state == 'none':
+        return 'Send visual proof', 'Drawn, but the customer has not seen it'
+    if item.proof_state == 'changes':
+        proof = item.current_proof
+        return ('Redraw from proof feedback',
+                (proof.customer_comment or 'Customer asked for changes')[:70] if proof
+                else 'Customer asked for changes')
+    if not item.design_approved:
+        label, why = PROCESS_ACTION[process]
+        return label, why
+    if item.awaiting_material:
+        return 'Reserve material', 'Design approved - nothing reserved yet'
+    return 'Done', 'Approved and material issued'
+
+
+def _waiting_on(item):
+    """(what we are waiting for, with whom) - or None when it is Design's move."""
+    if item.proof_state == 'waiting':
+        proof = item.current_proof
+        rev = f'Rev {proof.revision:02d}' if proof else 'the proof'
+        return (f'Customer sign-off on visual proof {rev}',
+                item.order.salesperson.short_name
+                if item.order.salesperson else 'Sales')
+    query = item.order.queries.filter(
+        so_item=item, status=QueryStatus.OPEN).select_related('raised_by').first()
+    if query is not None:
+        return (query.subject or 'Answer to an open design query',
+                query.assigned_to.short_name if query.assigned_to else 'Sales')
+    return None
+
+
+def _queue_row(item):
+    action, why = _next_action(item)
+    state_label, state_class = item_state(item)
+    ui = PROCESS_UI[Process(item.process)]
+    return {
+        'item': item,
+        'pk': item.pk,
+        'order': item.order,
+        'code': item_label(item),
+        'process': item.process,
+        'process_short': ui['short'],
+        'process_mark': ui['mark'],
+        'customer': item.order.customer.name,
+        'spec': _spec_text(item),
+        'sitting': _sitting(item.design_started_at, item.order.booked_on),
+        'due': item.order.expected_delivery,
+        'overdue': bool(item.order.expected_delivery
+                        and item.order.expected_delivery < timezone.localdate()
+                        and not item.design_approved),
+        'action': action,
+        'why': why,
+        'state_label': state_label,
+        'state_class': state_class,
+        'waiting': _waiting_on(item),
+        # The spec shows a Folder fact on the headline card. The folder is
+        # derived from order/item/revision, so it exists exactly when there is
+        # a revision to name it after.
+        'folder': 'Created' if item.current_drawing is not None else 'Not yet',
+    }
+
+
+def _spec_text(item):
+    bits = [item.material.name if item.material else '',
+            item.thickness.name if item.thickness else '']
+    size = (item.quotation_item.size or '').strip()
+    if size:
+        bits.append(size)
+    return ' '.join(b for b in bits if b).strip() or '-'
+
+
+#: WIP ceiling. Not a rule the system enforces - a nudge, as the spec words it.
+WIP_LIMIT = 3
+
+
+def _trend(now, before, higher_is_better=True):
+    """This week against last week, as the spec's little arrow.
+
+    Returns (mark, wording). A flat week says so rather than showing an arrow
+    with nothing behind it.
+    """
+    if before is None:
+        return '', 'no comparison yet'
+    if now == before:
+        return '\u25ac', 'same as last week'
+    up = now > before
+    good = up if higher_is_better else not up
+    return ('\u25b2' if good else '\u25bc',
+            f'{"up" if up else "down"} from {before}')
+
+
+def _week_window(weeks_back=0):
+    monday = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
+    start = monday - timedelta(weeks=weeks_back)
+    return start, start + timedelta(days=7)
+
+
+def _approved_in(user, start, end):
+    qs = SOItem.objects.filter(design_approved=True,
+                               design_approved_at__date__gte=start,
+                               design_approved_at__date__lt=end)
+    if not (user.is_superuser or getattr(user, 'is_admin', False)):
+        qs = qs.filter(design_approved_by=user)
+    return list(qs.select_related('order'))
+
+
+def _on_time(items):
+    dated = [i for i in items if i.order.expected_delivery]
+    hit = sum(1 for i in dated
+              if i.design_approved_at.date() <= i.order.expected_delivery)
+    return hit, len(dated)
+
+
+def _scorecard(user, rows):
+    """This week's numbers, each against last week's. Counted, never estimated."""
+    this_start, this_end = _week_window(0)
+    last_start, last_end = _week_window(1)
+
+    on_time, dated = _on_time(_approved_in(user, this_start, this_end))
+    prev_on_time, prev_dated = _on_time(_approved_in(user, last_start, last_end))
+
+    returned = ProofRound.objects.filter(
+        outcome=ProofOutcome.CHANGES,
+        responded_at__date__gte=this_start, responded_at__date__lt=this_end).count()
+    prev_returned = ProofRound.objects.filter(
+        outcome=ProofOutcome.CHANGES,
+        responded_at__date__gte=last_start, responded_at__date__lt=last_end).count()
+
+    rework = NCR.objects.filter(
+        source=NCRSource.DESIGN,
+        raised_at__date__gte=this_start, raised_at__date__lt=this_end).count()
+    prev_rework = NCR.objects.filter(
+        source=NCRSource.DESIGN,
+        raised_at__date__gte=last_start, raised_at__date__lt=last_end).count()
+
+    open_jobs = sum(1 for r in rows if r['state_class'] not in ('ready', 'approved'))
+    return {
+        'week_start': this_start,
+        'week_end': this_end - timedelta(days=1),
+        'on_time': on_time, 'dated': dated,
+        'on_time_trend': _trend(on_time, prev_on_time if prev_dated else None),
+        'returned': returned,
+        'returned_trend': _trend(returned, prev_returned, higher_is_better=False),
+        'rework': rework,
+        'rework_trend': _trend(rework, prev_rework, higher_is_better=False),
+        'open_jobs': open_jobs,
+        'wip_limit': WIP_LIMIT,
+        # The nudge only earns its place when there is actually too much open.
+        'wip_over': open_jobs > WIP_LIMIT,
+        'open_queries': DesignQuery.objects.filter(status=QueryStatus.OPEN).count(),
+    }
+
+
 # ---------------------------------------------------------------- screens
 @role_required('is_designer')
 def queue(request):
@@ -251,7 +496,87 @@ def queue(request):
             'next_item': next_item,
         })
 
-    return render(request, 'design/queue.html', {'cards': cards, 'counts': counts})
+    # ---- the process-aware layer (spec 07) --------------------------------
+    # Built from the same orders, but keyed on the ITEM rather than the order:
+    # a designer works one part at a time, and two parts on one SO can be two
+    # different processes with two different checks.
+    rows = []
+    for order in _design_orders(request.user):
+        for item in order.items.all():
+            if item.design_approved and item.is_ready:
+                continue            # finished - it belongs to Production now
+            rows.append(_queue_row(item))
+
+    # ---- search and the status chips, applied to the ITEM rows ------------
+    # These are what the tables below render, so this is what filtering has to
+    # act on. Counts come from the unfiltered list, so a chip always says how
+    # many it would show.
+    def _status_of(r):
+        if r['waiting'] is not None:
+            return 'query'
+        return 'notstarted' if r['item'].current_drawing is None else 'inprogress'
+
+    counts['total'] = len(rows)
+    counts['not_started'] = sum(1 for r in rows if _status_of(r) == 'notstarted')
+    counts['in_progress'] = sum(1 for r in rows if _status_of(r) == 'inprogress')
+    counts['query'] = sum(1 for r in rows if _status_of(r) == 'query')
+
+    search = (request.GET.get('q') or '').strip()
+    if search:
+        needle = search.lower()
+        rows = [r for r in rows
+                if needle in r['code'].lower()
+                or needle in r['order'].number.lower()
+                or needle in r['customer'].lower()
+                or needle in r['spec'].lower()]
+
+    active = (request.GET.get('filter') or 'all').lower()
+    if active in ('notstarted', 'inprogress', 'query'):
+        rows = [r for r in rows if _status_of(r) == active]
+    else:
+        active = 'all'
+
+    mine = [r for r in rows if r['waiting'] is None]
+    blocked = [r for r in rows if r['waiting'] is not None]
+
+    # Overdue first, then longest-waiting; "start here next" is simply the top
+    # of that list, so the headline card and the table can never disagree.
+    def _rank(r):
+        due = r['due'] or date.max
+        return (not r['overdue'], due, -(r['item'].pk))
+
+    mine.sort(key=_rank)
+    blocked.sort(key=_rank)
+
+    by_process = []
+    for proc in Process:
+        hits = [r for r in rows if r['process'] == proc.value]
+        ui = PROCESS_UI[proc]
+        by_process.append({
+            'process': proc.value, 'label': proc.label, 'mark': ui['mark'],
+            'blurb': ui['blurb'], 'count': len(hits),
+        })
+
+    # The end-of-day nudge: anything open that nobody has touched today.
+    today = timezone.localdate()
+    stale = [r for r in mine
+             if not (r['item'].design_started_at
+                     and r['item'].design_started_at.date() == today)]
+
+    context = {
+        'counts': counts,
+        'search': search,
+        'active_filter': active,
+        'shown': len(rows),
+        'by_process': by_process,
+        'next_up': mine[0] if mine else None,
+        'my_rows': mine,
+        'blocked_rows': blocked,
+        'scorecard': _scorecard(request.user, rows),
+        'stale': stale,
+        'today': today,
+    }
+    return render(request, 'design/queue.html', context)
 
 
 @role_required('is_designer')
@@ -291,7 +616,25 @@ def job_detail(request, so_no):
             released_at__isnull=True,
         ).select_related('sheet', 'sheet__rack', 'reserved_by').first()
 
+    # ---- the four gates, the checks behind gate 2, and the job folder ----
+    checks, checks_done, checks_total, gates, folder, card = [], 0, 0, [], '', {}
+    if item is not None:
+        checks = DesignCheck.state_for(item)
+        checks_done, checks_total = DesignCheck.progress(item)
+        gates = _gates(item, checks_done, checks_total)
+        folder = job_folder(item)
+        card = PROCESS_CARD[Process(item.process)]
+
     return render(request, 'design/job_detail.html', {
+        'checks': checks,
+        'checks_done': checks_done,
+        'checks_total': checks_total,
+        'checks_complete': checks_total > 0 and checks_done >= checks_total,
+        'gates': gates,
+        'job_folder': folder,
+        'card': card,
+        'process_label': item.process_label if item is not None else '',
+        'process_mark': item.process_ui['mark'] if item is not None else '',
         'so_no': order.number,
         'order': order,
         'item': item,
@@ -603,3 +946,50 @@ def send_proof(request, so_no):
         f'{proof.label} recorded as sent for {item_label(item)}. Sales records '
         f"the customer's answer when it comes back.")
     return _redirect_to_job(order, item)
+
+
+@require_POST
+@role_required('is_designer')
+def toggle_check(request, so_no):
+    """Tick or untick one of the six pre-release checks.
+
+    Ticking is recorded against the person who did it. Unticking deletes the
+    row rather than flagging it, so the card never has to reason about a check
+    that was ticked, unticked and ticked again by two different people.
+    """
+    order = _get_order(so_no)
+    item = _pick_item(order, _order_items(order), request.GET.get('item')
+                      or request.POST.get('item'))
+    if item is None:
+        raise Http404('No such item on this order.')
+
+    # The card disables these boxes until a drawing exists; the rule is
+    # enforced here as well, because a disabled button is a hint, not a gate.
+    if item.current_drawing is None:
+        messages.error(
+            request,
+            'Upload the drawing first — there is nothing to check against yet.')
+        return _back_to_item(order, item)
+
+    key = (request.POST.get('key') or '').strip()
+    valid = {k for k, _l, _w in DesignCheck.definitions_for(item)}
+    if key not in valid:
+        # A key from another process, or a stale form - refuse rather than
+        # writing a tick that no gate will ever count.
+        messages.error(request, 'That check does not belong to this job.')
+        return _back_to_item(order, item)
+
+    existing = item.design_checks.filter(key=key).first()
+    if existing is not None:
+        existing.delete()
+        log(request.user, 'SOItem', item_label(item), 'Design check cleared', detail=key)
+    else:
+        DesignCheck.objects.create(so_item=item, key=key, checked_by=request.user)
+        log(request.user, 'SOItem', item_label(item), 'Design check ticked', detail=key)
+
+    return _back_to_item(order, item)
+
+
+def _back_to_item(order, item):
+    url = reverse('design:job_detail', args=[order.number])
+    return HttpResponseRedirect(f'{url}?item={item.pk}#checks')

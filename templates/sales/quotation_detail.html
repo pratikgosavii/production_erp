@@ -91,6 +91,9 @@
   .po-hint { font-size: 10.5px; color: var(--ink-soft); line-height: 1.45; margin-bottom: 8px; }
 
   /* ---------- Section titles ---------- */
+  /* The margin panel styles now live in erp.css — the approval queue
+     renders the same partial and needs them too. */
+
   .section-title {
     font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
     color: var(--ink-soft); margin: 22px 0 12px;
@@ -220,6 +223,8 @@
   .trail-item .td { font-size: 11px; color: var(--ink-soft); margin-top: 3px; line-height: 1.5; }
   .trail-item .td q { font-style: italic; }
 
+  .quote-notes { font-size: 12.5px; line-height: 1.7; color: var(--ink); white-space: normal; }
+
   .doc-chip {
     display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; margin-top: 6px;
     border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
@@ -248,19 +253,7 @@
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">{{ role_label }}</div>
-  <a href="{{ back_url }}" class="nav-item">
-    <span class="icon">📋</span> {{ back_label }}
-  </a>
-  {% if request.user.is_salesman %}
-  {% endif %}
-  <a href="{% url 'sales:quotation_detail' quotation.pk %}" class="nav-item active">
-    <span class="icon">🧾</span> {{ quotation.number }}
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include 'sales/_sidebar.html' with nav_quote=quotation.number %}{% endblock %}
 
 {% block content %}
 <div class="crumb"><a href="{{ back_url }}">{{ back_label }}</a> → <b>{{ quotation.number }} v{{ quotation.version }}</b></div>
@@ -446,6 +439,25 @@
   </div>
 </div>
 
+{% if quotation.enquiry_drawing %}
+<!-- Sits above the line items on purpose: whoever is reviewing the price
+     should be able to open the drawing it was quoted against before they
+     read the numbers, not after. -->
+<div class="section-title">
+  Customer Drawing
+  <span class="hint">Attached by {{ quotation.salesperson.short_name|default:"Sales" }} with the enquiry</span>
+</div>
+<div class="fact-card">
+  <a class="doc-chip dwg" href="{{ quotation.enquiry_drawing.url }}" target="_blank" rel="noopener">
+    <div class="ic">DWG</div>
+    <div>
+      <div class="name">{{ quotation.enquiry_drawing.name|cut:"enquiry_drawings/" }}</div>
+      <div class="meta">Drawing quoted against</div>
+    </div>
+  </a>
+</div>
+{% endif %}
+
 <!-- ======== 4. LINE ITEMS — item master table ======== -->
 <div class="section-title">
   Item Code Master — Rates &amp; Slabs
@@ -565,6 +577,20 @@
 </div>
 
 <!-- ======== 5. TOTALS ======== -->
+{% if show_margin %}
+{% comment %} Internal margin analysis (spec SS 2). The benchmark rate and the
+variance against it are hidden for now - see SHOW_BENCHMARK in sales/views.py.
+Manager and
+Admin only - none of this belongs on a customer PDF, and the salesperson who
+raised the quote does not see it either. {% endcomment %}
+<div class="section-title">
+  Internal — Margin Analysis
+  <span class="hint">Never printed. Cost comes from the material master.</span>
+</div>
+
+{% include 'sales/_margin_panel.html' with rows=margin_rows summary=margin_summary %}
+{% endif %}
+
 <div class="section-title">Totals</div>
 <div class="totals-card">
   {% for t in totals %}
@@ -572,6 +598,13 @@
   {% endfor %}
   <div class="t-row grand"><span class="tl">Grand Total</span><span class="tv">{{ grand_total }}</span></div>
 </div>
+
+{% if quotation.notes %}
+<div class="section-title">Notes <span class="hint">Printed on the customer's PDF</span></div>
+<div class="fact-card">
+  <div class="quote-notes">{{ quotation.notes|linebreaksbr }}</div>
+</div>
+{% endif %}
 
 <!-- ======== 6. ITEM CODES THIS APPROVAL WOULD LOCK IN ======== -->
 {% if code_rows %}

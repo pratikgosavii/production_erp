@@ -25,16 +25,13 @@
       repeating-linear-gradient(90deg, transparent, transparent 38px, #fff 39px);
   }
   .brand-top { position: relative; z-index: 1; }
-  .brand-top .mark {
-    width: 46px; height: 46px; border: 2px solid #fff;
-    display: flex; align-items: center; justify-content: center;
-    transform: rotate(45deg); margin-bottom: 26px;
+  .brand-top .login-logo {
+    display: block; width: 260px; max-width: 100%; height: auto; margin-bottom: 22px;
   }
-  .brand-top .mark span {
-    transform: rotate(-45deg);
-    font-family: 'IBM Plex Mono'; font-weight: 700; font-size: 16px;
+  .brand-top h1 {
+    font-size: 18px; font-weight: 600; margin: 0 0 6px;
+    letter-spacing: .08em; color: #c7d4de;
   }
-  .brand-top h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; line-height: 1.25; }
   .brand-top .tagline { font-size: 13.5px; color: #a9bfd0; max-width: 340px; line-height: 1.6; }
 
   .left-features { position: relative; z-index: 1; margin-top: 40px; }
@@ -111,8 +108,9 @@
 {% block body %}
 <div class="left">
   <div class="brand-top">
-    <div class="mark"><span>RR</span></div>
-    <h1>Ravi Raj Anodisers<br>ERP</h1>
+    <img class="login-logo" src="{% static 'img/raviraj-logo-light.png' %}"
+         alt="Ravi Raj Anodisers">
+    <h1>ERP</h1>
     <div class="tagline">Centralized platform for quotations, orders, design, production and dispatch.</div>
   </div>
 

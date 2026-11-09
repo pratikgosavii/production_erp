@@ -131,6 +131,125 @@ class OrderType(models.TextChoices):
     REPEAT = 'REPEAT', 'Repeat'
 
 
+class Process(models.TextChoices):
+    """The three things Ravi Raj actually does to a sheet.
+
+    Design treats them differently and that is the point of carrying the field:
+    etching needs a visual proof on every job, milling needs etch-factor
+    compensation on the artwork, and laser needs kerf compensation plus a
+    minimum feature check before the DXF goes to the machine.
+
+    Everything on the system before this field existed was chemical etching,
+    which is why that is the default.
+    """
+
+    ETCHING = 'ETCHING', 'Chemical Etching'
+    MILLING = 'MILLING', 'Chemical Milling'
+    LASER = 'LASER', 'Laser Cutting'
+
+
+#: Short labels and the mark used on the design queue, per process.
+PROCESS_UI = {
+    Process.ETCHING: {'short': 'Chem Etching', 'mark': '▦',
+                      'blurb': 'Nameplates, grilles - visual proof needed'},
+    Process.MILLING: {'short': 'Chem Milling', 'mark': '◈',
+                      'blurb': 'Precision parts - etch-factor compensation'},
+    Process.LASER: {'short': 'Laser Cut', 'mark': '◉',
+                    'blurb': 'DXF to machine - kerf compensation'},
+}
+
+
+#: The six checks a designer ticks before a job may go to the customer.
+#: Keyed so a tick survives re-wording of the label; the key is what is stored.
+#: Ordered - the card renders them in this order and counts "n of 6" from it.
+PROCESS_CHECKS = {
+    Process.ETCHING: [
+        ('proofread', 'Text proofread against the customer drawing',
+         'Wrong text is the most common reason proofs come back'),
+        ('size', 'Overall size matches the spec',
+         'Check the item row above, not your memory'),
+        ('layers', 'Half-etch and through-etch on separate layers',
+         'Mixed layers means the etch station cannot read depth'),
+        ('fill', 'Fill colours on the correct layer',
+         'Wrong layer means the fill station gets no separation'),
+        ('weights', 'Etch line weights at or above shop minimum',
+         'Thinner lines will not hold after etching'),
+        ('saved', 'File saved in the job folder',
+         'Saved elsewhere means nobody downstream can find it'),
+    ],
+    Process.MILLING: [
+        ('critdims', 'Critical dimensions verified against customer drawing',
+         'Milling is a tolerance job - appearance is not the test'),
+        ('etchfactor', 'Etch-factor compensation applied',
+         'Undercut is roughly 1.5 x thickness per side - without it every part is undersize'),
+        ('tolerance', 'Stated tolerance confirmed achievable',
+         'If the tolerance is not holdable on this thickness, say so now, not after etching'),
+        ('tabs', 'Holding tabs placed',
+         'Parts without tabs drop into the bath and are lost'),
+        ('registration', 'Front/back artwork registered',
+         'Two-sided etch misaligns if registration marks are missing'),
+        ('saved', 'File saved in the job folder',
+         'Saved elsewhere means nobody downstream can find it'),
+    ],
+    Process.LASER: [
+        ('dims', 'Dimensions verified against customer drawing',
+         'Check the drawing, not an earlier DXF'),
+        ('kerf', 'Kerf compensation applied',
+         'Without it every cut part comes out undersize by the kerf'),
+        ('minfeature', 'Minimum feature size checked - hole diameter >= material thickness',
+         'Holes smaller than thickness will not cut clean'),
+        ('leadin', 'Lead-in / lead-out placed off the finished edge',
+         'A lead-in on the visible edge leaves a witness mark'),
+        ('microjoints', 'Micro-joints placed so parts do not drop',
+         'Parts dropping into the bed get scratched or lost'),
+        ('exported', 'DXF exported to the job folder',
+         'The operator loads from this folder only'),
+    ],
+}
+
+#: What the same gate is called, per process. Etching sends a visual proof;
+#: milling sends a dimensional sheet; laser sends a DXF for confirmation.
+PROCESS_CARD = {
+    Process.ETCHING: {
+        'file_label': 'Design File',
+        'critical_label': 'Fill / finish',
+        'gate3': 'Visual proof approval',
+        'proof_title': 'Customer Visual Proof - manual hand-off',
+        'download': 'Download Proof PDF',
+        'template': 'etching template',
+        'template_note': 'The etching template carries the correct layers, fill-colour '
+                         'separation and the title block. Never start from a blank page '
+                         'or an old job file.',
+    },
+    Process.MILLING: {
+        'file_label': 'Design File',
+        'critical_label': 'Tolerance',
+        'gate3': 'Dimensional approval',
+        'proof_title': 'Customer Dimensional Approval - manual hand-off',
+        'download': 'Download Dimensional Sheet',
+        'template': 'milling template',
+        'template_note': 'The milling template carries the etch-factor layer, '
+                         'critical-dimension callouts and tab positions. Never start '
+                         'from a blank page or an old job file.',
+    },
+    Process.LASER: {
+        'file_label': 'Machine File',
+        'critical_label': 'Min feature',
+        'gate3': 'DXF confirmation',
+        'proof_title': 'Customer DXF Confirmation - manual hand-off',
+        'download': 'Download DXF + PDF',
+        'template': 'laser template',
+        'template_note': 'The laser template carries the cut/engrave layer split and '
+                         'lead-in defaults. Export the DXF into the machine folder - do '
+                         'not hand a .cdr to the operator.',
+    },
+}
+
+#: Where a job's files live. One place, derived - never typed by hand, because
+#: a file saved somewhere else is a file nobody downstream can find.
+JOB_FOLDER_ROOT = r'D:\Jobs'
+
+
 class Currency(models.TextChoices):
     INR = 'INR', 'INR (Rs.)'
     USD = 'USD', 'USD ($)'
@@ -204,6 +323,9 @@ class NCRSource(models.TextChoices):
 
     PRODUCTION = 'PRODUCTION', 'Production rejection'
     QC = 'QC', 'QC inspection failure'
+    #: Rework traced back to the drawing rather than the shop floor. Design's
+    #: scorecard counts these, so without the door there is nothing to count.
+    DESIGN = 'DESIGN', 'Design error'
     CUSTOMER = 'CUSTOMER', 'Customer complaint'
     SUPPLIER = 'SUPPLIER', 'Supplier non-conformance'
     AUDIT = 'AUDIT', 'Audit finding'

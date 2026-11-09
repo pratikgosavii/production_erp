@@ -3,7 +3,9 @@ from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
 
-from core.constants import ProofOutcome, QueryStatus, SheetStatus
+from core.constants import (
+    PROCESS_CHECKS, Process, ProofOutcome, QueryStatus, SheetStatus,
+)
 from core.models import TimeStampedModel
 
 
@@ -292,3 +294,72 @@ class MaterialReservation(TimeStampedModel):
         self.save(update_fields=['released_at', 'updated_at'])
         self.sheet.status = SheetStatus.AVAILABLE
         self.sheet.save(update_fields=['status', 'updated_at'])
+
+
+class DesignCheck(TimeStampedModel):
+    """One of the six pre-release checks, ticked for one item (spec 07).
+
+    Stored per key rather than as a count, for two reasons: the six checks
+    differ by process, so a count means nothing on its own, and "who ticked
+    this, and when" is the part that matters when a part comes back wrong.
+
+    A row exists only once the check has been ticked. Unticking deletes it -
+    the card asks the model what is ticked, so there is no third state to get
+    out of step.
+    """
+
+    so_item = models.ForeignKey(
+        'accounts.SOItem', on_delete=models.CASCADE, related_name='design_checks')
+    key = models.CharField(max_length=30)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='design_checks')
+    checked_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        # One tick per check per item - a double POST must not double count.
+        constraints = [
+            models.UniqueConstraint(fields=['so_item', 'key'],
+                                    name='uniq_design_check_per_item'),
+        ]
+        ordering = ['key']
+
+    def __str__(self):
+        return f'{self.so_item_id}:{self.key}'
+
+    @staticmethod
+    def definitions_for(item):
+        """[(key, label, why)] for this item's process."""
+        return PROCESS_CHECKS[Process(item.process)]
+
+    @classmethod
+    def state_for(cls, item):
+        """The six checks with their tick state, in the order they are worked."""
+        done = {c.key: c for c in item.design_checks.select_related('checked_by')}
+        rows = []
+        for key, label, why in cls.definitions_for(item):
+            hit = done.get(key)
+            rows.append({
+                'key': key, 'label': label, 'why': why,
+                'done': hit is not None,
+                'by': hit.checked_by.short_name if hit else '',
+                'at': hit.checked_at if hit else None,
+            })
+        return rows
+
+    @classmethod
+    def complete(cls, item):
+        """Are all six ticked? Counted against THIS process's keys only.
+
+        Checked against the definition list rather than by counting rows, so a
+        part whose process changed after some ticks were made does not read as
+        complete on the strength of another process's checks.
+        """
+        wanted = {k for k, _l, _w in cls.definitions_for(item)}
+        ticked = set(item.design_checks.values_list('key', flat=True))
+        return wanted.issubset(ticked)
+
+    @classmethod
+    def progress(cls, item):
+        wanted = [k for k, _l, _w in cls.definitions_for(item)]
+        ticked = set(item.design_checks.values_list('key', flat=True))
+        return sum(1 for k in wanted if k in ticked), len(wanted)

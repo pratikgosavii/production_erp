@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 from core.constants import SheetStatus
 from core.decorators import role_required
 from core.models import Sequence
+from core.pagination import paginate
 from core.services import log
 from masters.models import Rack, ReorderLevel
 
@@ -141,8 +142,10 @@ def dashboard(request):
         'order__customer', 'dispatched_by',
     ).prefetch_related('order__items__quotation_item')
 
+    page, pager = paginate(request, filtered)
     return render(request, 'stores/dashboard.html', {
-        'sheets': filtered,
+        'sheets': page,
+        **pager,
         'summary': {
             'total': sum(by_status.values()),
             'available': by_status.get(SheetStatus.AVAILABLE, 0),

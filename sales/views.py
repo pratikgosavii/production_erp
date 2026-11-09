@@ -18,9 +18,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.constants import ProofOutcome, ItemCodeApproval, OrderType, QuotationStatus, QueryStatus
+from core.constants import ProofOutcome, ItemCodeApproval, OrderType, QuotationStatus, QueryStatus, Process
 from core.decorators import landing_url_name, role_required
 from core.models import AuditLog
+from core.pagination import paginate
 from core.services import log, notify, plate_area_sq_in
 from design.models import DesignQuery
 from masters.models import Customer, Finish, ItemCode, Material, Thickness
@@ -107,6 +108,104 @@ def _rate_per_sq_in(rate, area):
     if not area or area <= 0 or not rate:
         return None
     return (Decimal(rate) / area).quantize(Decimal('0.01'))
+
+
+#: A quote below this margin is flagged red; the spec's floor (SS 2).
+MARGIN_FLOOR_PCT = Decimal('15')
+#: Quoting this far under the benchmark is flagged amber even if margin holds.
+VARIANCE_FLOOR_PCT = Decimal('-10')
+
+#: Benchmark rate and the variance against it are hidden for now - the stored
+#: benchmarks are placeholders, so flagging a quote against them says more
+#: about the placeholder than about the price. Everything is still computed
+#: and MaterialRate keeps the column; set this True to show it all again.
+SHOW_BENCHMARK = False
+
+#: The red/green verdict is hidden for the same reason: margin is measured
+#: against MaterialRate.cost_per_sq_in, and every one of those rows is still a
+#: placeholder. The figures are shown either way - this only controls whether
+#: the panel passes judgement on them. Turn it back on once real costs land.
+SHOW_MARGIN_VERDICT = False
+
+
+def _margin_metrics(item):
+    """Internal margin and benchmark analysis for one quoted line (SS 2).
+
+    Never leaves the internal screens - none of it belongs on a customer PDF.
+
+        Area/Plate   = (L / 25.4) x (W / 25.4)
+        Rate/Sq.In   = quoted rate / area
+        Margin Rs    = Rate/Sq.In - Cost/Sq.In
+        Margin %     = Margin Rs / Rate/Sq.In x 100
+        Variance %   = (Quoted - Benchmark) / Benchmark x 100
+
+    Returns None when the inputs are missing - an unparseable size, or a
+    material+thickness nobody has costed yet. A blank panel is honest; a
+    fabricated margin is not.
+    """
+    area = _plate_area_sq_in(item.size or (item.item_code.size if item.item_code else ''))
+    quoted = _rate_per_sq_in(item.effective_rate, area)
+    if not area or not quoted:
+        return None
+
+    code = item.item_code
+    spec = code.spec_rate if code else None
+    if spec is None:
+        from masters.models import MaterialRate
+        if item.material_id and item.thickness_id:
+            spec = MaterialRate.objects.filter(
+                material_id=item.material_id,
+                thickness_id=item.thickness_id).first()
+    if spec is None:
+        return {'area': area, 'quoted': quoted, 'costed': False}
+
+    cost = spec.cost_per_sq_in
+    bench = (code.benchmark_override if code and code.benchmark_override
+             else spec.benchmark_rate_per_sq_in)
+
+    margin_rs = (quoted - cost).quantize(Decimal('0.01'))
+    margin_pct = ((margin_rs / quoted) * 100).quantize(Decimal('0.1')) if quoted else Decimal('0')
+    variance_pct = (((quoted - bench) / bench) * 100).quantize(Decimal('0.1')) if bench else Decimal('0')
+
+    # Red beats amber: a thin margin is the worse problem of the two.
+    if not SHOW_MARGIN_VERDICT:
+        # Figures only. No colour, no badge, no reason - there is nothing
+        # trustworthy to base a verdict on until costs are real.
+        flag, reason = 'none', ''
+    elif not SHOW_BENCHMARK:
+        # Margin against cost is the only test left, so the reason cannot
+        # reach for the benchmark to explain which side is at fault.
+        if margin_pct < MARGIN_FLOOR_PCT:
+            flag, reason = 'red', (
+                f'Margin {margin_pct}% is below the {MARGIN_FLOOR_PCT}% floor - '
+                f'the quoted rate is Rs.{quoted} per sq.inch against a cost of '
+                f'Rs.{cost}. Check the rate or the material sourcing before approving.')
+        else:
+            flag, reason = 'green', ''
+    elif margin_pct < MARGIN_FLOOR_PCT:
+        flag, reason = 'red', (
+            f'Margin {margin_pct}% is below the {MARGIN_FLOOR_PCT}% floor. '
+            + ('Rate is in line with benchmark, but the cost base is high for this '
+               'order - check material sourcing before approving.'
+               if variance_pct >= VARIANCE_FLOOR_PCT else
+               'The rate is also under benchmark - this is priced too low.'))
+    elif variance_pct < VARIANCE_FLOOR_PCT:
+        flag, reason = 'amber', (
+            f'Quoted {abs(variance_pct)}% under the benchmark rate. Margin still '
+            f'holds at {margin_pct}%, so this is a pricing decision, not a cost one.')
+    else:
+        flag, reason = 'green', ''
+
+    return {
+        'costed': True, 'area': area, 'quoted': quoted,
+        'cost': cost, 'benchmark': bench,
+        'margin_rs': margin_rs, 'margin_pct': margin_pct,
+        'variance_pct': variance_pct,
+        'flag': flag, 'reason': reason,
+        'is_override': bool(code and code.benchmark_override),
+        'show_benchmark': SHOW_BENCHMARK,
+        'show_verdict': SHOW_MARGIN_VERDICT,
+    }
 
 
 def _area_metrics(item):
@@ -255,8 +354,9 @@ def dashboard(request):
         active = 'all'
     visible = rows if active == 'all' else [q for q in rows if q.bucket == active]
 
+    page, pager = paginate(request, visible)
     context = {
-        'quotations': visible,
+        'quotations': page,
         'counts': counts,
         'active_filter': active,
         'search': search,
@@ -270,6 +370,7 @@ def dashboard(request):
         'today': today,
         'default_delivery': today + timedelta(days=21),
     }
+    context.update(pager)
     context.update(_user_context(request, 'Sales'))
     return render(request, 'sales/dashboard.html', context)
 
@@ -478,7 +579,7 @@ def _date_value(bound_field):
     return value.strftime('%Y-%m-%d') if hasattr(value, 'strftime') else str(value)
 
 
-def _resolve_item_code(customer, code_text, item):
+def _resolve_item_code(customer, code_text, item, process=None):
     """An unknown code is created PENDING against this customer (§6 auto-create)."""
     code_text = (code_text or '').strip()
     if not code_text:
@@ -490,6 +591,7 @@ def _resolve_item_code(customer, code_text, item):
             description=item.description or '',
             material=item.material, thickness=item.thickness,
             size=item.size or '', finish=item.finish,
+            process=process or Process.ETCHING,
             approval_state=ItemCodeApproval.PENDING,
         )
 
@@ -505,6 +607,11 @@ def _resolve_item_code(customer, code_text, item):
     if not code.size and item.size:
         code.size = item.size
         changed.append('size')
+    # Process is corrected in place, not just filled when blank: if Sales say
+    # this part is laser cut, that is the answer, and Design's checks follow.
+    if process and code.process != process:
+        code.process = process
+        changed.append('process')
     if changed:
         code.save(update_fields=changed + ['updated_at'])
     return code
@@ -576,6 +683,7 @@ def _persist(request, form, item_formset, tier_sets, customer, submit):
         item.quotation = quotation
         item.item_code = _resolve_item_code(
             customer, item_form.cleaned_data.get('item_code_text'), item,
+            process=item_form.cleaned_data.get('process'),
         )
         if item.item_code and not item.description:
             item.description = item.item_code.description
@@ -629,7 +737,8 @@ def _quotation_form(request, quotation):
             )
             return redirect('sales:dashboard')
 
-        form = QuotationForm(request.POST, instance=instance)
+        # request.FILES, or the customer drawing field posts and is dropped.
+        form = QuotationForm(request.POST, request.FILES, instance=instance)
         bill_form = BillToForm(request.POST)
         item_formset = ItemFormSet(request.POST, instance=instance, prefix='items')
         tier_sets = _tier_formsets(item_formset, request.POST)
@@ -755,6 +864,7 @@ def _quotation_form(request, quotation):
             for t in Thickness.objects.filter(is_active=True)
         ],
         'finishes': Finish.objects.filter(is_active=True),
+        'process_choices': Process.choices,
         'customer_master': _customer_master(),
         'item_code_master': _item_code_master(),
         'customer_names': {str(c.pk): c.name for c in Customer.objects.filter(is_active=True)},
@@ -890,6 +1000,12 @@ def _decorate_for_manager(quotation):
     quotation.revised_codes = sum(1 for r in quotation.code_rows
                                   if not r['is_new'] and r['kind'] != 'conflict')
     quotation.pending_days = quotation.days_pending or 0
+
+    # The margin panel is built here too, not only on the detail page: the
+    # whole point of the approval queue is deciding without opening each quote.
+    quotation.margin_rows = _margin_rows(quotation)
+    quotation.margin_summary = _margin_summary(quotation)
+    quotation.margin_flag = (quotation.margin_summary or {}).get('flag') or 'uncosted'
     return quotation
 
 
@@ -933,13 +1049,15 @@ def manager_quotations(request):
         for value, label in QuotationStatus.choices
     ]
 
+    page, pager = paginate(request, rows)
     context = {
-        'rows': rows,
+        'rows': page,
         'chips': [c for c in chips if c[2] or c[0] == status or c[0] == 'all'],
         'active_status': status,
         'search': q,
         'total_shown': len(rows),
     }
+    context.update(pager)
     context.update(_user_context(request, 'Sales Manager'))
     return render(request, 'sales/manager_quotations.html', context)
 
@@ -968,25 +1086,40 @@ def manager_approvals(request):
     high_value = [q for q in queue if q.grand_total > Decimal('50000')]
     resubmitted = [q for q in queue if q.version > 1]
     with_codes = [q for q in queue if q.code_rows]
+    red = [q for q in queue if q.margin_flag == 'red']
+    amber = [q for q in queue if q.margin_flag == 'amber']
+    green = [q for q in queue if q.margin_flag == 'green']
+    flagged = red + amber
 
     active = request.GET.get('filter') or 'all'
     visible = {
         'high': high_value,
         'resubmitted': resubmitted,
         'codes': with_codes,
+        'flagged': flagged,
     }.get(active, queue)
 
     days = [q.pending_days for q in queue]
+    page, pager = paginate(request, visible)
     context = {
-        'quotations': visible,
-        'active_filter': active if active in {'high', 'resubmitted', 'codes'} else 'all',
+        'quotations': page,
+        'active_filter': active if active in {'high', 'resubmitted', 'codes',
+                                              'flagged'} else 'all',
         'search': search,
         'count_all': len(queue),
         'count_high': len(high_value),
         'count_resubmitted': len(resubmitted),
         'count_codes': len(with_codes),
+        'count_flagged': len(flagged),
+        'count_red': len(red),
+        'count_amber': len(amber),
+        'count_green': len(green),
+        # The template hides the badge, the counters and the Flagged tab on
+        # this flag; without it in the context they would all vanish silently.
+        'show_margin_verdict': SHOW_MARGIN_VERDICT,
         'avg_days': round(sum(days) / len(days), 1) if days else 0,
     }
+    context.update(pager)
     context.update(_user_context(request, 'Sales Manager'))
     return render(request, 'sales/manager_approvals.html', context)
 
@@ -1207,6 +1340,48 @@ def _detail_activity(quotation):
     return rows
 
 
+def _margin_rows(quotation):
+    """One analysis row per quoted line, for the internal panel."""
+    rows = []
+    for item in quotation.items.select_related(
+            'item_code', 'material', 'thickness').prefetch_related('tiers'):
+        m = _margin_metrics(item)
+        if m is None:
+            continue
+        code = item.item_code
+        rows.append({
+            'code': code.code if code else (item.description or f'Item #{item.position}'),
+            'spec': f'{item.material.name if item.material else "-"} '
+                    f'{item.thickness.name if item.thickness else ""}'.strip(),
+            'qty': item.quantity,
+            'rate': _rate(item.effective_rate),
+            'm': m,
+        })
+    return rows
+
+
+def _margin_summary(quotation):
+    """The worst line decides the colour of the whole quotation.
+
+    With the verdict switched off there is no colour to decide: the footer
+    still reports the thinnest margin, because that is a fact, but nothing is
+    called good or bad.
+    """
+    rows = [r for r in _margin_rows(quotation) if r['m'].get('costed')]
+    if not rows:
+        return None
+    worst = min(rows, key=lambda r: r['m']['margin_pct'])
+    flagged = [r for r in rows if r['m']['flag'] not in ('green', 'none')]
+    return {
+        'flag': worst['m']['flag'] if SHOW_MARGIN_VERDICT else 'none',
+        'worst': worst,
+        'flagged_count': len(flagged),
+        'total': len(rows),
+        'show_verdict': SHOW_MARGIN_VERDICT,
+        'uncosted': sum(1 for r in _margin_rows(quotation) if not r['m'].get('costed')),
+    }
+
+
 @role_required('is_salesman', 'is_sales_manager', 'is_accounts')
 def quotation_detail(request, pk):
     """Quotation — Full Detail. Read-only apart from the contextual actions."""
@@ -1253,6 +1428,11 @@ def quotation_detail(request, pk):
         'items_total': _money(quotation.sub_total),
         'totals': _detail_totals(quotation),
         'code_rows': _code_rows(quotation),
+        # Internal only (SS 2) - cost, margin and benchmark never go near a
+        # customer PDF, and a salesperson does not see them either.
+        'margin_rows': _margin_rows(quotation) if is_manager else [],
+        'margin_summary': _margin_summary(quotation) if is_manager else None,
+        'show_margin': is_manager,
         'activity': _detail_activity(quotation),
         # Contextual actions — every one of them POSTs to an existing view.
         'can_approve': is_manager and quotation.status == QuotationStatus.PENDING_APPROVAL,

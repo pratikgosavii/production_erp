@@ -46,6 +46,7 @@ from core.constants import (
     Disposition, OrderStatus, OrderType, Priority, RejectionReason, StationStatus,
 )
 from core.decorators import role_required
+from core.pagination import paginate
 from core.services import log, notify
 
 from .forms import PriorityForm, StationSelectionForm, UrgentSplitForm
@@ -280,8 +281,10 @@ def dashboard(request):
 
     rows = [r for r in rows if _matches_filter(r, active)]
 
+    page, pager = paginate(request, rows)
     return render(request, 'production/dashboard.html', {
-        'rows': rows,
+        'rows': page,
+        **pager,
         'summary': summary,
         'chips': chips,
         'active_filter': active,

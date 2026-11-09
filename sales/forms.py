@@ -8,6 +8,8 @@ NAME (``bound_field.html_name``), which is what makes the formsets work.
 from decimal import Decimal, InvalidOperation
 
 from django import forms
+
+from core.constants import Process
 from django.forms import inlineformset_factory
 
 from masters.models import Customer, Finish, Material, Thickness
@@ -59,12 +61,14 @@ class QuotationForm(forms.ModelForm):
             'quote_date', 'valid_until', 'enquiry_ref', 'currency',
             'payment_terms', 'delivery_terms', 'lead_time',
             'tooling_charges', 'packing_forwarding', 'freight', 'gst_percent',
+            'notes', 'enquiry_drawing',
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['valid_until'].required = False
-        for name in ('tooling_charges', 'packing_forwarding', 'freight', 'gst_percent'):
+        for name in ('tooling_charges', 'packing_forwarding', 'freight', 'gst_percent',
+                     'notes', 'enquiry_drawing'):
             self.fields[name].required = False
 
     def _money(self, name, default=Decimal('0.00')):
@@ -118,6 +122,10 @@ class QuotationItemForm(forms.ModelForm):
     """
 
     item_code_text = forms.CharField(required=False, max_length=60)
+    #: Not a model field on purpose. How a part is made belongs to the PART,
+    #: so this writes through to ItemCode.process on save rather than being
+    #: stored a second time on the quotation line.
+    process = forms.ChoiceField(required=False, choices=Process.choices)
     material = forms.CharField(required=False)
     thickness = forms.CharField(required=False)
     finish = forms.CharField(required=False)
@@ -140,6 +148,12 @@ class QuotationItemForm(forms.ModelForm):
             self.initial['thickness'] = _thickness_label(instance.thickness)
             self.initial['finish'] = instance.finish.name if instance.finish else ''
             self.initial['item_code_text'] = instance.item_code.code if instance.item_code else ''
+            self.initial['process'] = (instance.item_code.process
+                                       if instance.item_code else Process.ETCHING)
+
+    def clean_process(self):
+        # A blank select must not silently become something else.
+        return self.cleaned_data.get('process') or Process.ETCHING
 
     def clean_material(self):
         return lookup_named(Material, self.cleaned_data.get('material'))

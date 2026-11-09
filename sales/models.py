@@ -14,7 +14,8 @@ from core.constants import (
 )
 from core.models import Sequence, TimeStampedModel
 from masters.models import (
-    BandOverlapError, Customer, Finish, ItemCode, Material, Thickness,
+    BAND_OPEN_END, BandOverlapError, Customer, Finish, ItemCode, Material,
+    Thickness,
     band_overlap_message, band_range_label, normalise_band_range,
 )
 
@@ -55,6 +56,17 @@ class Quotation(TimeStampedModel):
     packing_forwarding = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     freight = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('18.00'))
+    #: Free text under the charges block - exclusions, assumptions, anything the
+    #: numbers above do not say on their own. Printed on the customer's PDF, so
+    #: it is not a place for internal remarks.
+    notes = models.TextField(blank=True)
+
+    #: The drawing the customer sent WITH the enquiry, attached by Sales while
+    #: the quotation is being written. Distinct from drawing_file below, which
+    #: arrives later with the purchase order - at quoting time there is no PO
+    #: yet, and the manager reviewing the price needs to see what was quoted
+    #: against.
+    enquiry_drawing = models.FileField(upload_to='enquiry_drawings/', blank=True)
 
     # Submitted stamp drives the "3d pending" column on the approval queue.
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -160,9 +172,24 @@ class Quotation(TimeStampedModel):
         return found
 
     @property
+    def self_overlaps(self):
+        """[(item, tier_a, tier_b)] - ladders that overlap themselves."""
+        found = []
+        for item in self.items.prefetch_related('tiers'):
+            for a, b in item.self_overlaps:
+                found.append((item, a, b))
+        return found
+
+    @property
     def band_conflict_text(self):
         """The conflicts as one readable sentence per clashing slab."""
         lines, seen = [], set()
+        for item in self.items.select_related('item_code').prefetch_related('tiers'):
+            text = item.self_overlap_text
+            if text:
+                code = item.item_code.code if item.item_code else 'this item'
+                lines.append(f'{code}: {text} - each quantity must fall in '
+                             f'exactly one slab.')
         for item, tier, _band in self.band_conflicts:
             key = (item.pk, tier.pk)
             if key in seen:
@@ -400,8 +427,44 @@ class QuotationItem(TimeStampedModel):
         return found
 
     @property
+    def self_overlaps(self):
+        """Typed slabs on THIS item that cover the same quantity as each other.
+
+        band_conflicts only compares a slab against bands already on the rate
+        card, so a brand-new item code - which has no bands yet - slipped
+        through with a ladder like 0-100, 50-200. Nothing caught it until
+        Quotation.approve() wrote the first band and the second one collided,
+        which handed the Sales Manager an exception for the salesperson's typo.
+        """
+        rows = []
+        for tier in self.tiers.all():
+            if not tier.rate_per_unit:
+                continue                       # a blank row nobody filled in
+            lo, hi = normalise_band_range(tier.qty_from, tier.qty_to)
+            rows.append((lo, hi if hi is not None else BAND_OPEN_END, tier))
+
+        rows.sort(key=lambda r: r[0])
+        found = []
+        for i, (lo, hi, tier) in enumerate(rows):
+            for lo2, hi2, other in rows[i + 1:]:
+                if lo2 <= hi and lo <= hi2:
+                    found.append((tier, other))
+        return found
+
+    @property
+    def self_overlap_text(self):
+        lines = []
+        for a, b in self.self_overlaps:
+            lines.append(
+                f'{band_range_label(*normalise_band_range(a.qty_from, a.qty_to))} '
+                f'and '
+                f'{band_range_label(*normalise_band_range(b.qty_from, b.qty_to))} '
+                f'both cover the same quantity')
+        return '; '.join(lines)
+
+    @property
     def has_band_conflict(self):
-        return bool(self.band_conflicts)
+        return bool(self.band_conflicts) or bool(self.self_overlaps)
 
     @property
     def band_state(self):

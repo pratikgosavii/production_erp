@@ -10,7 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 
-from core.constants import ApprovalSource, ItemCodeApproval
+from core.constants import ApprovalSource, ItemCodeApproval, Process
 from core.models import TimeStampedModel
 
 # A band with no upper limit runs to "everything above qty_from". Comparisons
@@ -184,6 +184,14 @@ class ItemCode(TimeStampedModel):
     code = models.CharField(max_length=60)
     description = models.CharField(max_length=200, blank=True)
 
+    #: How this part is made. It belongs on the part, not on the order: the
+    #: same part is produced the same way every time it is reordered, and
+    #: Design's checks differ per process.
+    process = models.CharField(
+        max_length=10, choices=Process.choices, default=Process.ETCHING,
+        help_text='Drives the checks Design is prompted for on the job card.',
+    )
+
     material = models.ForeignKey(Material, on_delete=models.SET_NULL, null=True, blank=True)
     thickness = models.ForeignKey(Thickness, on_delete=models.SET_NULL, null=True, blank=True)
     size = models.CharField(max_length=60, blank=True, help_text='Part size, e.g. 150 x 110')
@@ -297,6 +305,20 @@ class ItemCode(TimeStampedModel):
             if qty_from <= other.upper_bound and other.qty_from <= upper:
                 clashes.append(other)
         return sorted(clashes, key=lambda b: b.qty_from)
+
+    #: Set only when this part reliably sells above or below the usual rate
+    #: for its metal. Blank means "use the material benchmark".
+    benchmark_override = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text='Benchmark rate per sq.inch for this part, if it differs.')
+
+    @property
+    def spec_rate(self):
+        """The cost/benchmark row for this code's material+thickness."""
+        if not (self.material_id and self.thickness_id):
+            return None
+        return MaterialRate.objects.filter(
+            material_id=self.material_id, thickness_id=self.thickness_id).first()
 
     def covered_at_rate(self, qty_from, qty_to, rate):
         """True when this slab is already approved, at this exact rate.
@@ -665,6 +687,53 @@ class ItemCodeRate(TimeStampedModel):
             'updated_at',
         ])
         return self
+
+
+class MaterialRate(TimeStampedModel):
+    """Cost and benchmark selling rate per square inch, by material+thickness.
+
+    Both figures are keyed here rather than on the item code because both are
+    driven by the metal, not by the part: a 0.5mm aluminium plate costs what
+    0.5mm aluminium costs, whatever shape it is cut into. An item code may
+    still override the benchmark when a particular part is known to sell above
+    or below the usual rate - see ItemCode.benchmark_rate_per_sq_in.
+
+    COST is what the plate costs us; BENCHMARK is what we normally achieve.
+    Margin compares the quote against cost; variance compares it against the
+    benchmark. They answer different questions and neither replaces the other.
+    """
+
+    material = models.ForeignKey('Material', on_delete=models.CASCADE,
+                                 related_name='rates')
+    thickness = models.ForeignKey('Thickness', on_delete=models.CASCADE,
+                                  related_name='rates')
+    cost_per_sq_in = models.DecimalField(max_digits=10, decimal_places=2)
+    benchmark_rate_per_sq_in = models.DecimalField(max_digits=10, decimal_places=2)
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['material__name', 'thickness__name']
+        constraints = [
+            models.UniqueConstraint(fields=['material', 'thickness'],
+                                    name='uniq_rate_per_spec'),
+        ]
+
+    def __str__(self):
+        return f'{self.material.name} {self.thickness.name}'
+
+    def clean(self):
+        super().clean()
+        if (self.cost_per_sq_in is not None
+                and self.benchmark_rate_per_sq_in is not None
+                and self.benchmark_rate_per_sq_in < self.cost_per_sq_in):
+            raise ValidationError({
+                'benchmark_rate_per_sq_in':
+                    'The benchmark cannot sit below cost - that is a loss, not a target.',
+            })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class ProcessStation(TimeStampedModel):

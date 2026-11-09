@@ -13,9 +13,16 @@
   <!-- Topbar -->
   <div class="topbar">
     <div class="brand">
-      <div class="mark"><span>RR</span></div>
+      {% comment %}
+      The wordmark already says "Ravi Raj Anodisers", so the title text beside
+      it would only repeat the logo. The screen name stays.
+      {% endcomment %}
+      <a class="brand-logo" href="{% url 'home' %}">
+        <img src="{% static 'img/raviraj-logo-light.png' %}" alt="Ravi Raj Anodisers">
+      </a>
+      <div class="brand-rule"></div>
       <div>
-        <div class="title">Ravi Raj Anodisers — ERP</div>
+        <div class="title">ERP</div>
         <div class="sub">{% block topbar_sub %}Dashboard{% endblock %}</div>
       </div>
     </div>

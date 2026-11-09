@@ -16,7 +16,7 @@
 <style>
   /* Summary strip */
   .summary-strip {
-    display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
     background: var(--line); border-bottom: 1px solid var(--line); margin: -24px -28px 24px;
   }
   .summary-strip .cell {
@@ -182,6 +182,42 @@
   .detail-inner {
     padding: 16px 20px;
   }
+  /* flag badge on the amount cell */
+  .mg-tag {
+    display: block; margin-top: 5px; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .mg-tag.red { color: var(--red); } .mg-tag.amber { color: var(--amber); }
+  .mg-tag.green { color: var(--green); } .mg-tag.uncosted { color: var(--gray); }
+  .summary-strip .cell.mg-red .n { color: var(--red); }
+  .summary-strip .cell.mg-amber .n { color: var(--amber); }
+  .summary-strip .cell.mg-green .n { color: var(--green); }
+  .chip.flag.active { background: var(--red); border-color: var(--red); color: #fff; }
+
+  /* customer drawing, inside the expanded row */
+  .dwg-chip {
+    display: inline-flex; align-items: center; gap: 9px; margin-bottom: 14px;
+    padding: 8px 12px; border: 1px solid var(--line); border-radius: 3px;
+    background: #fff; color: var(--ink); text-decoration: none;
+  }
+  .dwg-chip:hover { border-color: var(--steel); }
+  .dwg-chip .ic {
+    width: 26px; height: 26px; border-radius: 3px; background: var(--steel); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8.5px; font-weight: 700; flex-shrink: 0;
+  }
+  .dwg-chip b { display: block; font-size: 11.5px; font-weight: 600; }
+  .dwg-chip i { display: block; font-style: normal; font-size: 10px; color: var(--ink-soft); }
+
+  .rule-note {
+    font-size: 10.5px; color: var(--ink-soft); margin: 8px 0 14px; font-style: italic;
+  }
+  .q-notes {
+    font-size: 11.5px; line-height: 1.6; color: var(--ink); margin-bottom: 14px;
+    padding: 9px 12px; background: var(--paper); border-radius: 3px;
+  }
+  .q-notes b { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+
   .detail-grid {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px;
   }
@@ -264,28 +300,16 @@
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">Sales Manager</div>
-  <a href="{% url 'sales:manager_approvals' %}" class="nav-item active">
-    <span class="icon">✅</span> Approval Queue
-  </a>
-  <a href="{% url 'sales:manager_quotations' %}" class="nav-item">
-    <span class="icon">📄</span> All Quotations
-  </a>
-  <a href="{% url 'masters:customers' %}" class="nav-item">
-    <span class="icon">🏢</span> Customers
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include 'sales/_sidebar.html' with nav='approvals' %}{% endblock %}
 
 {% block content %}
 <!-- Summary Strip -->
 <div class="summary-strip">
-  <div class="cell pending"><div class="n">{{ count_all }}</div><div class="l">Pending approval</div></div>
-  <div class="cell high"><div class="n">{{ count_high }}</div><div class="l">High value (&gt;₹50K)</div></div>
-  <div class="cell resub"><div class="n">{{ count_resubmitted }}</div><div class="l">Resubmitted (v2+)</div></div>
-  <div class="cell codes"><div class="n">{{ count_codes }}</div><div class="l">Carrying unapproved item codes</div></div>
+  <div class="cell pending"><div class="n">{{ count_all }}</div><div class="l">Pending review</div></div>
+  {% if show_margin_verdict %}
+  <div class="cell mg-red"><div class="n">{{ count_red }}</div><div class="l">Red — low margin</div></div>
+  <div class="cell mg-green"><div class="n">{{ count_green }}</div><div class="l">Green — safe to approve</div></div>
+  {% endif %}
   <div class="cell avg"><div class="n">{{ avg_days }} days</div><div class="l">Avg. days pending</div></div>
 </div>
 
@@ -298,6 +322,10 @@
     </form>
     <a href="?filter=all{% if search %}&q={{ search|urlencode }}{% endif %}"
        class="chip {% if active_filter == 'all' %}active{% endif %}">All ({{ count_all }})</a>
+    {% if show_margin_verdict %}
+    <a href="?filter=flagged{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip flag {% if active_filter == 'flagged' %}active{% endif %}">Flagged ({{ count_flagged }})</a>
+    {% endif %}
     <a href="?filter=high{% if search %}&q={{ search|urlencode }}{% endif %}"
        class="chip {% if active_filter == 'high' %}active{% endif %}">High Value ({{ count_high }})</a>
     <a href="?filter=resubmitted{% if search %}&q={{ search|urlencode }}{% endif %}"
@@ -344,7 +372,19 @@
         <span class="rate-sub">slab ₹{{ q.slab_low|floatformat:0 }}–{{ q.slab_high|floatformat:0 }}</span>
         {% endif %}
       </td>
-      <td><span class="amt">₹{{ q.amount_display }}</span></td>
+      <td>
+        <span class="amt">₹{{ q.amount_display }}</span>
+        {% if not show_margin_verdict %}
+        {% elif q.margin_summary %}
+        <span class="mg-tag {{ q.margin_flag }}">
+          {% if q.margin_flag == 'red' %}Low margin
+          {% elif q.margin_flag == 'amber' %}Underquoted
+          {% else %}Within range{% endif %}
+        </span>
+        {% else %}
+        <span class="mg-tag uncosted">Not costed</span>
+        {% endif %}
+      </td>
       <td style="font-size:11.5px;">
         {% if q.submitted_at %}
           {{ q.submitted_at|date:'d M Y' }}
@@ -421,6 +461,37 @@
             <div class="dg-item"><div class="dg-label">Lead Time</div><div class="dg-value">{{ q.lead_time|default:"—" }}</div></div>
           </div>
 
+          {% if q.enquiry_drawing %}
+          <a class="dwg-chip" href="{{ q.enquiry_drawing.url }}" target="_blank" rel="noopener">
+            <span class="ic">DWG</span>
+            <span>
+              <b>{{ q.enquiry_drawing.name|cut:"enquiry_drawings/" }}</b>
+              <i>Customer drawing this price was quoted against</i>
+            </span>
+          </a>
+          {% endif %}
+
+          {% comment %}
+          The same partial the detail page uses, so the manager reads identical
+          figures whether they decide from here or open the quotation.
+          {% endcomment %}
+          {% include 'sales/_margin_panel.html' with rows=q.margin_rows summary=q.margin_summary %}
+
+          {% if show_margin_verdict %}
+          <div class="rule-note">
+            Rule: margin below the 15% floor flags red.
+          </div>
+          {% else %}
+          <div class="rule-note">
+            Cost per sq.inch is a placeholder until Ravi Raj supply real figures,
+            so these are shown as figures only — no pass or fail.
+          </div>
+          {% endif %}
+
+          {% if q.notes %}
+          <div class="q-notes"><b>Notes on this quotation:</b> {{ q.notes|linebreaksbr }}</div>
+          {% endif %}
+
           <div class="line-items-preview">
             <table>
               <thead>
@@ -478,6 +549,8 @@
               </tbody>
             </table>
           </div>
+{% include "core/_pagination.html" %}
+
 
           {% if q.code_rows %}
           <div class="code-panel">

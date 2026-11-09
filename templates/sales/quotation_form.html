@@ -45,10 +45,14 @@
 
   /* Quantity sits first: it drives both the slab and the rate band. */
   .spec-grid {
-    display: grid; grid-template-columns: repeat(5, 1fr);
+    display: grid; grid-template-columns: repeat(6, 1fr);
     gap: 12px; margin-bottom: 16px;
   }
+  @media (max-width: 1180px) { .spec-grid { grid-template-columns: repeat(3, 1fr); } }
   .spec-grid .item-quantity { font-family: 'IBM Plex Mono', monospace; }
+  .spec-grid .field-hint {
+    font-size: 9.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.4;
+  }
 
   /* ---- Pricing tiers table ---- */
   .tier-section { margin-top: 8px; }
@@ -104,6 +108,15 @@
     border-radius: 0 3px 3px 0; font-size: 11px; color: var(--ink); line-height: 1.6;
   }
   .slab-warn.show { display: block; }
+  /* Why Submit is greyed out, said where the button is - the offending item
+     is usually scrolled far above it. */
+  .gate-note {
+    font-size: 11.5px; color: var(--amber); background: var(--amber-bg);
+    border: 1px solid #e6cfa6; border-radius: var(--radius);
+    padding: 7px 12px; margin-right: auto; line-height: 1.5;
+  }
+  .gate-note b { font-family: 'IBM Plex Mono'; }
+  .gate-note a { color: var(--amber); font-weight: 600; }
   /* Slab already approved at this exact rate — reads as settled, not as an
      alert, because there is nothing for anyone to do about it. */
   .tier-covered .est-amount { color: var(--green); font-weight: 600; }
@@ -119,6 +132,31 @@
   }
   .tooling-row label { font-size: 11px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; margin-bottom: 0; }
   .tooling-row input { width: 160px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; font-family: 'IBM Plex Mono'; font-size: 12.5px; }
+
+  /* ---- Customer drawing on the enquiry block ---- */
+  .file-current {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--blue-bg, #e6eef4); border: 1px solid var(--line);
+    border-radius: 3px; padding: 7px 11px; margin-bottom: 8px; font-size: 11.5px;
+  }
+  .file-current a { color: var(--blue, #2d5a7a); font-weight: 600; text-decoration: none; }
+  .file-current a:hover { text-decoration: underline; }
+  .file-replace { color: var(--ink-soft); }
+  .file-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+
+  /* ---- Notes under the charges ---- */
+  .notes-block { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .notes-block label {
+    display: block; font-size: 11px; font-weight: 600; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 7px;
+  }
+  .notes-block textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: 'IBM Plex Sans', sans-serif; font-size: 12.5px; line-height: 1.6;
+    color: var(--ink); resize: vertical; background: #fff;
+  }
+  .notes-block textarea:focus { outline: none; border-color: var(--steel); }
+  .notes-hint { font-size: 10.5px; color: var(--ink-soft); margin-top: 6px; }
 
   /* ---- Additional charges ---- */
   .charges-grid {
@@ -390,17 +428,7 @@
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">Sales</div>
-  <a href="{% url 'sales:dashboard' %}" class="nav-item">
-    <span class="icon">📋</span> My Quotations
-  </a>
-  <a href="{% url 'sales:quotation_create' %}" class="nav-item active">
-    <span class="icon">✏️</span> New Quotation
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include 'sales/_sidebar.html' with nav='new' %}{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -520,6 +548,27 @@
         <label>Lead Time</label>
         <input type="text" name="lead_time" placeholder="e.g. 3-4 Weeks from PO + Artwork Approval" value="{{ form.lead_time.value|default_if_none:'' }}">
       </div>
+
+      <!-- The drawing the customer sent with the enquiry. Attached here, at
+           quoting time, because the manager approving the price needs to see
+           what was quoted against - waiting for the PO is too late. -->
+      <div class="field full">
+        <label>Customer Drawing (optional)</label>
+        {% if quotation.enquiry_drawing %}
+        <div class="file-current">
+          <a href="{{ quotation.enquiry_drawing.url }}" target="_blank" rel="noopener">
+            📎 {{ quotation.enquiry_drawing.name|cut:"enquiry_drawings/" }}
+          </a>
+          <span class="file-replace">Choose a file below to replace it.</span>
+        </div>
+        {% endif %}
+        <input type="file" name="enquiry_drawing"
+               accept=".pdf,.dxf,.dwg,.png,.jpg,.jpeg,.cdr,.ai,.step,.stp,.igs">
+        <div class="file-hint">
+          PDF, DXF, DWG, STEP, CDR/AI or an image. Visible to the Sales Manager on the
+          approval queue, so the price can be checked against the drawing it was quoted from.
+        </div>
+      </div>
     </div>
   </div>
 
@@ -575,6 +624,15 @@
           <select class="spec-finish" name="{{ row.form.finish.html_name }}">
             {% for f in finishes %}<option {% if row.form.finish.value == f.name %}selected{% endif %}>{{ f.name }}</option>{% endfor %}
           </select>
+        </div>
+        <div class="field">
+          <label>Process</label>
+          <select class="spec-process" name="{{ row.form.process.html_name }}">
+            {% for value, label in process_choices %}
+            <option value="{{ value }}" {% if row.form.process.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="field-hint">Decides the checks Design is prompted for</div>
         </div>
       </div>
 
@@ -682,6 +740,16 @@
       </div>
       <div class="charge-note-full">Any further taxes / duties applicable at destination are extra, at actuals.</div>
     </div>
+
+    <!-- Notes sit under the charges because that is where the exclusions and
+         assumptions belong - right beside the numbers they qualify. This text
+         is printed on the customer's PDF, so it is not for internal remarks. -->
+    <div class="notes-block">
+      <label for="quoteNotes">Notes</label>
+      <textarea id="quoteNotes" name="notes" rows="4"
+                placeholder="Exclusions, assumptions, anything the figures above do not say on their own. Printed on the customer's quotation.">{{ form.notes.value|default_if_none:'' }}</textarea>
+      <div class="notes-hint">Appears on the quotation PDF, below the charges. Leave blank if there is nothing to add.</div>
+    </div>
   </div>
 
   <!-- ======== TOTALS ======== -->
@@ -759,6 +827,7 @@
   <div class="form-actions">
     <a href="{% url 'sales:dashboard' %}" class="btn btn-outline">Cancel</a>
     {% if editable %}
+    <div class="gate-note" id="gateNote" hidden></div>
     <button type="submit" name="action" value="draft" class="btn btn-outline">Save as Draft</button>
     <button type="submit" name="action" value="submit" class="btn btn-primary">Submit for Approval →</button>
     {% endif %}
@@ -878,7 +947,11 @@
   // Clones the empty PriceTier form and bumps this item's tier TOTAL_FORMS.
   function addTier(btn) {
     const card  = btn.closest('.item-card');
-    const tbody = btn.previousElementSibling.querySelector('tbody');
+    // Find the table from the CARD, not from the button's sibling: the amber
+    // slab warning sits between the two, so previousElementSibling is that
+    // div and the lookup returned null.
+    const tbody = card.querySelector('table.tiers tbody');
+    if (!tbody) { return; }
     const total = tierTotalInput(card);
     const index = total ? parseInt(total.value, 10) : tbody.rows.length;
 
@@ -1261,6 +1334,32 @@
     var bands = qaCardBands(card);
     var clashes = [];
 
+    // A ladder can collide with ITSELF, and a brand-new item code has no
+    // approved bands to check against - so this runs whether or not the code
+    // is known. Two slabs covering the same quantity make the price for that
+    // quantity a coin toss.
+    var typed = [];
+    card.querySelectorAll('table.tiers tbody tr').forEach(function (row) {
+      if (row.hidden) return;
+      var del = row.querySelector('.tier-delete');
+      if (del && del.value) return;
+      var rateEl = row.querySelector('.tier-rate');
+      if (!rateEl || !parseFloat(rateEl.value)) return;
+      var slab = qaSlabRange(row);
+      if (slab) { typed.push(slab); }
+    });
+    typed.forEach(function (a, i) {
+      var aHi = a.to === null ? BAND_OPEN_END : a.to;
+      typed.slice(i + 1).forEach(function (b) {
+        var bHi = b.to === null ? BAND_OPEN_END : b.to;
+        if (b.from <= aHi && a.from <= bHi) {
+          var text = qaRangeLabel(a.from, a.to) + ' and ' + qaRangeLabel(b.from, b.to)
+                   + ' both cover the same quantity';
+          if (clashes.indexOf(text) === -1) { clashes.push(text); }
+        }
+      });
+    });
+
     if (bands.length) {
       card.querySelectorAll('table.tiers tbody tr').forEach(function (row) {
         if (row.hidden) return;
@@ -1318,8 +1417,12 @@
     // "1+" reads like a slab name, but it means the upper limit box is empty —
     // which is why it collides with every band the customer has. Say that,
     // rather than repeating the same clash once per band it runs into.
+    var selfClash = clashes.some(function (c) { return / both cover /.test(c); });
     var openEnded = clashes.some(function (c) { return /^\d+\+ overlaps/.test(c); });
-    var advice = openEnded
+    var advice = selfClash
+      ? 'Each quantity must fall in exactly one slab — start the next slab one ' +
+        'above where the previous one ends.'
+      : openEnded
       ? 'One slab has no upper limit, so it covers every quantity and collides ' +
         'with the whole rate card — fill in its <b>to</b> quantity.'
       : 'Start the slab above the existing band, or quote that band’s exact ' +
@@ -1337,19 +1440,46 @@
   function qaGateSubmit() {
     var btn = document.querySelector('button[name="action"][value="submit"]');
     if (!btn) return;
-    var clashing = Array.prototype.some.call(
+    var offenders = [], firstBad = null;
+    Array.prototype.forEach.call(
       document.querySelectorAll('#itemsContainer .item-card'),
       function (card) {
-        if (card.style.display === 'none') return false;   // removed by the X
+        if (card.style.display === 'none') return;         // removed by the X
         var box = card.querySelector('.slab-warn');
-        return box && box.classList.contains('show');
+        if (!box || !box.classList.contains('show')) return;
+        if (!firstBad) { firstBad = card; }
+        var code = card.querySelector('.ic-field input[type=text]');
+        var typed = code && (code.value || '').trim();
+        var num = card.querySelector('.item-head, .item-title, h3, h4');
+        offenders.push(typed || (num ? num.textContent.trim().split('|')[0].trim()
+                                     : 'an item'));
       });
-    btn.disabled = clashing;
-    btn.title = clashing
-      ? 'Fix the overlapping slab before submitting — you can still save a draft.'
+    btn.disabled = !!offenders.length;
+    btn.title = offenders.length
+      ? 'Overlapping slab on ' + offenders.join(' and ')
+        + '. Fix it to submit — you can still save a draft.'
       : '';
-    btn.style.opacity = clashing ? '0.45' : '';
-    btn.style.cursor = clashing ? 'not-allowed' : '';
+    var note = document.getElementById('gateNote');
+    if (note) {
+      // The offending card is often scrolled out of sight, so a greyed-out
+      // Submit with no visible reason reads as the page being broken.
+      note.hidden = !offenders.length;
+      note.innerHTML = offenders.length
+        ? '⚠ Overlapping slab on <b>' + offenders.join('</b> and <b>')
+          + '</b> — <a href="#" id="gateJump">jump to it</a>.'
+        : '';
+      var jump = document.getElementById('gateJump');
+      if (jump) {
+        jump.addEventListener('click', function (e) {
+          e.preventDefault();
+          if (firstBad) {
+            firstBad.scrollIntoView({behavior: 'smooth', block: 'center'});
+          }
+        });
+      }
+    }
+    btn.style.opacity = offenders.length ? '0.45' : '';
+    btn.style.cursor = offenders.length ? 'not-allowed' : '';
   }
 
   function qaCheckAllSlabs() {

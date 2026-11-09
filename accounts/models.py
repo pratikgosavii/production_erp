@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db import models, transaction
 
 from core.constants import (
-    PREFIX_SALES_ORDER, Health, OrderStatus, OrderType, Priority, Stage,
+    PREFIX_SALES_ORDER, Health, OrderStatus, OrderType, Priority, Stage, PROCESS_UI, Process,
 )
 from core.models import Sequence, TimeStampedModel
 from core.services import health_for, stage_for
@@ -284,6 +284,24 @@ class SOItem(TimeStampedModel):
     @property
     def item_code(self):
         return self.quotation_item.item_code
+
+    @property
+    def process(self):
+        """The process from the part, falling back to etching.
+
+        An item quoted before the field existed, or a free-text line with no
+        item code behind it, still has to land somewhere on the design queue.
+        """
+        code = self.item_code
+        return code.process if code else Process.ETCHING
+
+    @property
+    def process_label(self):
+        return Process(self.process).label
+
+    @property
+    def process_ui(self):
+        return PROCESS_UI[Process(self.process)]
 
     @property
     def material(self):

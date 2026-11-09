@@ -15,6 +15,8 @@ urlpatterns = [
     # State changes: POST + redirect, one route each (§9 audit trail). Each
     # one acts on a single SOItem, never on the whole order.
     path('job/<str:so_no>/start/', views.start_design, name='start_design'),
+    path('job/<str:so_no>/check/', views.toggle_check, name='toggle_check'),
+
     path('job/<str:so_no>/spec/', views.save_spec, name='save_spec'),
     path('job/<str:so_no>/revision/', views.upload_revision, name='upload_revision'),
     path('job/<str:so_no>/reserve/', views.reserve_sheet, name='reserve_sheet'),

@@ -1,0 +1,51 @@
+{% comment %}
+Pager for the list screens. Include it straight after the table:
+
+  {% include "core/_pagination.html" %}
+
+It needs the context core.pagination.paginate() returns. Every link carries
+{{ querystring }}, which is the current filter and search with the page number
+stripped — so paging never silently drops the filter the user chose.
+
+Renders nothing at all when everything fits on one page.
+{% endcomment %}
+{% if is_paginated %}
+<nav class="pager" aria-label="Pagination">
+  <div class="pager-count">
+    Showing <b>{{ page.start_index }}</b>–<b>{{ page.end_index }}</b>
+    of <b>{{ total_rows }}</b>
+  </div>
+
+  <div class="pager-links">
+    {% if page.has_previous %}
+      <a href="?{{ querystring }}{{ page_param }}=1" title="First page">&laquo;</a>
+      <a href="?{{ querystring }}{{ page_param }}={{ page.previous_page_number }}">Previous</a>
+    {% else %}
+      <span class="off">&laquo;</span>
+      <span class="off">Previous</span>
+    {% endif %}
+
+    {% for n in page.paginator.page_range %}
+      {% if n == page.number %}
+        <span class="here">{{ n }}</span>
+      {% elif n > page.number|add:"-3" and n < page.number|add:"3" %}
+        <a href="?{{ querystring }}{{ page_param }}={{ n }}">{{ n }}</a>
+      {% elif n == 1 or n == page.paginator.num_pages %}
+        <a href="?{{ querystring }}{{ page_param }}={{ n }}">{{ n }}</a>
+      {% elif n == page.number|add:"-3" or n == page.number|add:"3" %}
+        <span class="gap">…</span>
+      {% endif %}
+    {% endfor %}
+
+    {% if page.has_next %}
+      <a href="?{{ querystring }}{{ page_param }}={{ page.next_page_number }}">Next</a>
+      <a href="?{{ querystring }}{{ page_param }}={{ page.paginator.num_pages }}" title="Last page">&raquo;</a>
+    {% else %}
+      <span class="off">Next</span>
+      <span class="off">&raquo;</span>
+    {% endif %}
+  </div>
+</nav>
+{% elif total_rows %}
+<div class="pager one-page">All <b>{{ total_rows }}</b> shown</div>
+{% endif %}

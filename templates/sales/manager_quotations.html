@@ -86,20 +86,7 @@
 </style>
 {% endblock %}
 
-{% block sidebar_content %}
-<div class="nav-section">
-  <div class="nav-label">Sales Manager</div>
-  <a href="{% url 'sales:manager_approvals' %}" class="nav-item">
-    <span class="icon">✅</span> Approval Queue
-  </a>
-  <a href="{% url 'sales:manager_quotations' %}" class="nav-item active">
-    <span class="icon">📄</span> All Quotations
-  </a>
-  <a href="{% url 'masters:customers' %}" class="nav-item">
-    <span class="icon">🏢</span> Customers
-  </a>
-</div>
-{% endblock %}
+{% block sidebar_content %}{% include 'sales/_sidebar.html' with nav='all' %}{% endblock %}
 
 {% block content %}
 {% for message in messages %}
@@ -185,4 +172,6 @@
   </tbody>
 </table>
 </div>
+{% include "core/_pagination.html" %}
+
 {% endblock %}

@@ -1,0 +1,47 @@
+{% comment %}
+Sales navigation, in one place.
+
+Every Sales screen used to hand-write its own copy, which is how the New
+Quotation page ended up offering two links while the dashboard offered four -
+the same person, mid-task, losing half their navigation.
+
+Salesperson and Sales Manager get different sets because their screens are
+different: the manager's approval queue is role_required('is_sales_manager'),
+so offering it to a salesperson would just be a link into "No access".
+
+Optional context:
+  nav       - 'quotations' | 'new' | 'queries' | 'approvals' | 'all'
+  nav_quote - a quotation number to pin as the current record
+{% endcomment %}
+<div class="nav-section">
+  <div class="nav-label">{% if request.user.is_sales_manager %}Sales Manager{% else %}Sales{% endif %}</div>
+
+  {% if request.user.is_sales_manager %}
+    <a href="{% url 'sales:manager_approvals' %}" class="nav-item {% if nav == 'approvals' %}active{% endif %}">
+      <span class="icon">✅</span> Approval Queue
+    </a>
+    <a href="{% url 'sales:manager_quotations' %}" class="nav-item {% if nav == 'all' %}active{% endif %}">
+      <span class="icon">📑</span> All Quotations
+    </a>
+  {% else %}
+    <a href="{% url 'sales:dashboard' %}" class="nav-item {% if nav == 'quotations' %}active{% endif %}">
+      <span class="icon">📋</span> My Quotations
+    </a>
+    <a href="{% url 'sales:quotation_create' %}" class="nav-item {% if nav == 'new' %}active{% endif %}">
+      <span class="icon">✏️</span> New Quotation
+    </a>
+    <a href="{% url 'sales:queries' %}" class="nav-item {% if nav == 'queries' %}active{% endif %}">
+      <span class="icon">❓</span> Design Queries{% if open_query_count %} ({{ open_query_count }}){% endif %}
+    </a>
+  {% endif %}
+
+  <a href="{% url 'masters:customers' %}" class="nav-item {% if nav == 'customers' %}active{% endif %}">
+    <span class="icon">🏢</span> Customers
+  </a>
+
+  {% if nav_quote %}
+  <a class="nav-item active">
+    <span class="icon">🧾</span> {{ nav_quote }}
+  </a>
+  {% endif %}
+</div>
