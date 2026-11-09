@@ -762,7 +762,7 @@
         <div class="totals-row subtotal">
           <div class="t-label">
             Sub Total
-            <span class="t-hint">Sum of highest batch slab per line item</span>
+            <span class="t-hint">Slab rate for the quantity entered, per line item</span>
           </div>
           <div class="t-value" id="sumSubTotal">₹{{ quotation.sub_total|default:"0.00"|floatformat:2 }}</div>
         </div>
@@ -903,21 +903,33 @@
   });
 
   // ---- Totals block ----
-  // Sub Total = for each item, the HIGHEST estimated tier amount (max qty x rate),
-  // i.e. the slab the order is expected to land in.
+  // Sub Total = for each item, the slab that CONTAINS the entered quantity,
+  // times that quantity. This has to match QuotationItem.line_amount exactly:
+  // it used to take the highest (qty_to x rate) across the ladder and ignore
+  // the quantity altogether, so a 240-off order against 0-100/101-500/501-1000
+  // showed the 1000-off figure - Rs.2,00,000 on screen against Rs.72,000 saved.
+  // The manager, the PDF and the sales order all read the saved number.
   function recalcTotals() {
     let subTotal = 0;
 
     document.querySelectorAll('#itemsContainer .item-card:not([hidden])').forEach(card => {
-      let best = 0;
+      const qtyInput = card.querySelector('.item-quantity');
+      const qty = parseFloat(qtyInput && qtyInput.value) || 0;
+      let lineAmount = 0;
       card.querySelectorAll('table.tiers tbody tr:not([hidden])').forEach(row => {
         const inputs = row.querySelectorAll('input[type=number]');
-        if (inputs.length >= 3) {
-          const est = (parseFloat(inputs[1].value) || 0) * (parseFloat(inputs[2].value) || 0);
-          if (est > best) best = est;
-        }
+        if (inputs.length < 3) return;
+        const from = parseFloat(inputs[0].value);
+        // A blank upper bound is an open-ended top slab, as on the server.
+        const toRaw = parseFloat(inputs[1].value);
+        const to = isNaN(toRaw) ? Infinity : toRaw;
+        const rate = parseFloat(inputs[2].value) || 0;
+        if (isNaN(from) || !qty) return;
+        if (qty >= from && qty <= to) lineAmount = qty * rate;
       });
-      subTotal += best;
+      // No slab covers this quantity: show nothing rather than guess a rate.
+      // The submit gate refuses the quotation for the same reason.
+      subTotal += lineAmount;
     });
 
     // Tooling = additional-charges tooling + per-item tooling rows
