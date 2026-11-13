@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Repeat Rate Master — Accounts{% endblock %}
+{% block topbar_sub %}Order Booking — Repeat Rate Master{% endblock %}
+
+{% block topbar_right %}
+<div class="user-info">
+  <span class="role-tag">Accounts</span>
+  <span class="name">{{ request.user.short_name }}</span>
+  <a href="{% url 'users:logout' %}" class="logout">Sign out</a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ro-note {
+    background: var(--blue-bg); border: 1px solid var(--line); color: var(--blue);
+    border-radius: var(--radius); padding: 11px 14px; font-size: 11.5px;
+    line-height: 1.6; margin-bottom: 18px;
+  }
+  .ro-note b { color: var(--navy); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px 20px; margin-bottom: 18px;
+  }
+  .section-title {
+    font-size: 12.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 14px;
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .section-title .hint {
+    font-size: 10.5px; font-weight: 400; text-transform: none;
+    letter-spacing: 0; color: var(--ink-soft); margin-left: auto;
+  }
+
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; }
+  @media (max-width: 860px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr; } }
+  .field input:disabled, .field select:disabled {
+    background: var(--paper); color: var(--ink-soft); cursor: not-allowed;
+  }
+  .callout { padding: 10px 13px; border-radius: var(--radius); font-size: 11.5px; line-height: 1.6; }
+  .callout.new { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+  .callout.known { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+  .callout b { display: block; margin-bottom: 2px; }
+  .field label {
+    display: block; font-size: 10.5px; font-weight: 600; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%; padding: 8px 11px; border: 1px solid var(--line);
+    border-radius: 3px; font-size: 12.5px; background: #fff; color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .field input[type=number] { font-family: 'IBM Plex Mono', monospace; }
+
+  table.rates { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  table.rates th {
+    background: var(--navy); color: #fff; text-align: left; padding: 8px 11px;
+    font-size: 9px; text-transform: uppercase; letter-spacing: .03em; font-weight: 600;
+  }
+  table.rates th.r, table.rates td.r { text-align: right; }
+  table.rates td { padding: 10px 11px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  table.rates tr.off td { opacity: .55; }
+  table.rates .mono { font-family: 'IBM Plex Mono'; font-weight: 600; }
+  table.rates .sub { font-size: 10px; color: var(--ink-soft); margin-top: 3px; font-weight: 400; }
+  table.rates input[type=number] {
+    width: 110px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: 'IBM Plex Mono'; font-size: 12px; text-align: right;
+  }
+  .pill {
+    font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+  }
+  .pill.on  { background: var(--green-bg); color: var(--green); }
+  .pill.offp { background: var(--gray-bg); color: var(--gray); }
+
+  .btn {
+    padding: 8px 14px; border-radius: 3px; font-size: 11.5px; font-weight: 600;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer;
+  }
+  .btn.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btn.small { padding: 6px 11px; font-size: 11px; }
+  .row-acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+  .empty { color: var(--ink-soft); font-size: 12px; font-style: italic; padding: 18px 0; }
+</style>
+{% endblock %}
+
+{% block sidebar_content %}
+<div class="nav-section">
+  <div class="nav-label">Accounts</div>
+  <a href="{% url 'accounts:order_booking' %}" class="nav-item">
+    <span class="icon">📦</span> Order Booking
+  </a>
+  <a href="{% url 'accounts:order_booking' %}?filter=approval" class="nav-item">
+    <span class="icon">🖊️</span> Needs Approval
+  </a>
+  <a href="{% url 'accounts:repeat_order' %}" class="nav-item">
+    <span class="icon">🔁</span> Repeat Order
+  </a>
+  <a href="{% url 'accounts:repeat_rates' %}" class="nav-item active">
+    <span class="icon">🏷️</span> Repeat Rate Master
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="ro-note">
+  <b>What a repeat item code costs — one rate each, no slabs.</b>
+  A quotation is banded because it prices a range of possible quantities. A
+  repeat order prices an item code you have already shipped, so there is one
+  agreed figure here and the quantity arrives with the PO. An item code needs a
+  rate on this
+  list before it can be re-ordered, and raising an order at anything other than
+  the figure here sends it to the Sales Manager.
+</div>
+
+<div class="card">
+  <div class="section-title">
+    Set a repeat rate
+    <span class="hint">For an item code they already have, or a new one you add here</span>
+  </div>
+
+  <form method="post" id="rrForm">
+    {% csrf_token %}
+    <div class="grid3">
+      <div class="field">
+        <label for="rrCustomer">Customer</label>
+        <select name="customer" id="rrCustomer" required>
+          <option value="">Select a customer…</option>
+          {% for c in customers %}
+          <option value="{{ c.pk }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="rrCodePick">Item Code</label>
+        <select id="rrCodePick" disabled>
+          <option value="">Select a customer first…</option>
+        </select>
+        {% comment %}
+        The real field. A native <datalist> rendered as a wide unstyled overlay
+        across the form, so the choice is an ordinary select and this input is
+        revealed only when "type a new code" is chosen. One of the two always
+        feeds item_code_text.
+        {% endcomment %}
+        <input type="text" name="item_code_text" id="rrCode" autocomplete="off"
+               maxlength="60" placeholder="e.g. BS-FLG-310"
+               style="margin-top:8px; display:none;">
+        <div class="hint" id="rrCodeHint">Pick a customer first.</div>
+      </div>
+      <div class="field">
+        <label for="rrRate">Rate / Unit</label>
+        <input type="number" step="0.01" min="0.01" name="rate_per_unit" id="rrRate"
+               required placeholder="0.00">
+        <div class="hint">One figure for this item code. No slabs.</div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:18px;">
+      Specification
+      <span class="hint" id="rrSpecHint">Comes with the code when it already exists.</span>
+    </div>
+    <div class="grid3">
+      <div class="field">
+        <label for="rrMaterial">Material</label>
+        <select name="material" id="rrMaterial" data-spec>
+          <option value="">—</option>
+          {% for m in materials %}<option value="{{ m.name }}">{{ m.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="rrThickness">Thickness</label>
+        <select name="thickness" id="rrThickness" data-spec>
+          <option value="">—</option>
+          {% for t in thicknesses %}<option value="{{ t.name }}">{{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="rrSize">Size (mm) — L × W</label>
+        <input type="text" name="size" id="rrSize" data-spec placeholder="e.g. 150 x 110">
+      </div>
+      <div class="field">
+        <label for="rrFinish">Finish / Fill</label>
+        <select name="finish" id="rrFinish" data-spec>
+          <option value="">—</option>
+          {% for f in finishes %}<option value="{{ f.name }}">{{ f.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="rrProcess">Process</label>
+        <select name="process" id="rrProcess" data-spec>
+          {% for value, label in processes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+        <div class="hint">Decides the checks Design is prompted for.</div>
+      </div>
+      <div class="field">
+        <label for="rrDesc">Description</label>
+        <input type="text" name="description" id="rrDesc" data-spec maxlength="200"
+               placeholder="e.g. Valve Tag 75x40">
+      </div>
+    </div>
+
+    <div class="grid3" style="margin-top:14px; align-items:end;">
+      <div class="field" style="grid-column: span 2;">
+        <label for="rrNote">Note (optional)</label>
+        <input type="text" name="note" id="rrNote" maxlength="200"
+               placeholder="e.g. agreed with the customer in Oct">
+      </div>
+      <div class="field">
+        <button type="submit" class="btn primary" id="rrSubmit">Save Repeat Rate</button>
+      </div>
+    </div>
+
+    <div id="rrVerdict" style="margin-top:12px;"></div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-title">
+    Repeat Rates
+    <span class="hint">{{ active_count }} active of {{ total_count }}</span>
+  </div>
+
+  {% if rates %}
+  <table class="rates">
+    <thead>
+      <tr>
+        <th style="width:20%">Customer</th>
+        <th style="width:20%">Item Code</th>
+        <th style="width:20%">Spec</th>
+        <th class="r" style="width:14%">Rate / Unit</th>
+        <th style="width:12%">Set By</th>
+        <th class="r" style="width:14%">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rates %}
+      <tr class="{% if not r.is_active %}off{% endif %}">
+        <td>{{ r.item_code.customer.name }}</td>
+        <td>
+          <span class="mono">{{ r.item_code.code }}</span>
+          {% if r.item_code.description %}<div class="sub">{{ r.item_code.description }}</div>{% endif %}
+        </td>
+        <td>
+          {{ r.item_code.material.name|default:"—" }} {{ r.item_code.thickness.name|default:"" }}
+          <div class="sub">{{ r.item_code.size|default:"size not set" }}</div>
+        </td>
+        <td class="r">
+          <form method="post" style="display:inline-flex; gap:6px; align-items:center;">
+            {% csrf_token %}
+            <input type="hidden" name="item_code" value="{{ r.item_code.pk }}">
+            <input type="number" step="0.01" min="0.01" name="rate_per_unit" value="{{ r.rate_per_unit }}">
+            <button type="submit" class="btn small" title="Save this rate">Save</button>
+          </form>
+          {% if r.note %}<div class="sub">{{ r.note }}</div>{% endif %}
+        </td>
+        <td>
+          {{ r.set_by.short_name|default:"—" }}
+          <div class="sub">{{ r.updated_at|date:"d M Y" }}</div>
+        </td>
+        <td>
+          <div class="row-acts">
+            <span class="pill {% if r.is_active %}on{% else %}offp{% endif %}">
+              {% if r.is_active %}Active{% else %}Off{% endif %}
+            </span>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="deactivate">
+              <input type="hidden" name="rate" value="{{ r.pk }}">
+              <button type="submit" class="btn small">
+                {% if r.is_active %}Deactivate{% else %}Re-activate{% endif %}
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "core/_pagination.html" %}
+  {% else %}
+  <div class="empty">
+    No repeat rates yet. Set one above and that item code can be re-ordered from the
+    Repeat Order screen.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Every active code per customer, so the field can offer the customer's own
+  // codes while still accepting a string nobody has used yet.
+  const CODES = {{ codes_json|safe }};
+
+  const $ = id => document.getElementById(id);
+  const custSel = $('rrCustomer'), codeIn = $('rrCode'), pick = $('rrCodePick');
+  const NEW = '__new__';
+  const specFields = () => [...document.querySelectorAll('[data-spec]')];
+
+  function codesFor() {
+    return CODES[custSel.value] || [];
+  }
+
+  function matched() {
+    const value = chosen().toLowerCase();
+    if (!value || pick.value === NEW) {
+      // While adding, a typed string that collides with an existing code still
+      // counts as that code - the server resolves it the same way.
+      return pick.value === NEW && value
+        ? (codesFor().find(c => c.code.toLowerCase() === value) || null)
+        : null;
+    }
+    return codesFor().find(c => c.code.toLowerCase() === value) || null;
+  }
+
+  function fillList() {
+    const codes = codesFor();
+    pick.innerHTML = '';
+    pick.disabled = !custSel.value;
+    if (!custSel.value) {
+      pick.add(new Option('Select a customer first…', ''));
+    } else {
+      pick.add(new Option(codes.length ? 'Select an item code…' : 'This customer has no item codes yet', ''));
+      codes.forEach(c => {
+        const label = c.code + (c.description ? ' — ' + c.description : '')
+                    + (c.has_rate ? '  (rate already set)' : '');
+        pick.add(new Option(label, c.code));
+      });
+      pick.add(new Option('+ Add a new item code…', NEW));
+    }
+    codeIn.style.display = 'none';
+    codeIn.value = '';
+    $('rrCodeHint').textContent = custSel.value
+      ? codes.length + " existing item code(s). Pick one to price it, or add a new one."
+      : "Pick a customer first.";
+  }
+
+  function chosen() {
+    // Whichever of the two is in play feeds the posted field.
+    if (pick.value === NEW) return codeIn.value.trim();
+    return pick.value;
+  }
+
+  function onPick() {
+    const isNew = pick.value === NEW;
+    codeIn.style.display = isNew ? 'block' : 'none';
+    if (isNew) {
+      codeIn.value = '';
+      codeIn.focus();
+    } else {
+      // The select carries the value when an existing code is chosen.
+      codeIn.value = pick.value;
+    }
+    syncSpec();
+  }
+
+  // A known item code already has a specification; this screen agrees a rate for
+  // it, it does not redefine it. A code nobody has used needs one, so the
+  // same fields open up and Accounts fills them.
+  function syncSpec() {
+    const hit = matched();
+    const typed = chosen();
+
+    // Leaving a matched code must clear its spec. Otherwise a new code quietly
+    // inherits the last code's material and size, and Accounts saves an item
+    // code described as something it is not.
+    const wasMatched = codeIn.dataset.matched || '';
+    const nowMatched = hit ? hit.code : '';
+    const leavingAMatch = wasMatched && wasMatched !== nowMatched;
+    codeIn.dataset.matched = nowMatched;
+
+    specFields().forEach(f => {
+      f.disabled = !!hit;
+      if (hit) {
+        f.value = hit[f.id === 'rrDesc' ? 'description'
+                 : f.id.replace('rr', '').toLowerCase()] || '';
+      } else if (leavingAMatch) {
+        f.value = f.tagName === 'SELECT' ? (f.id === 'rrProcess' ? f.options[0].value : '') : '';
+      }
+    });
+
+    const wrap = $('rrVerdict');
+    const hint = $('rrSpecHint');
+    if (!custSel.value || !typed) {
+      wrap.innerHTML = '';
+      hint.textContent = 'Comes with the code when it already exists.';
+      return;
+    }
+    if (hit) {
+      hint.textContent = 'From the item code — not editable here.';
+      wrap.innerHTML = '<div class="callout known"><b>' + hit.code + ' already exists.</b>' +
+        (hit.has_rate
+          ? 'It already has a repeat rate — saving will change it to the figure above.'
+          : 'Its specification comes with the code. Saving sets its repeat rate.') + '</div>';
+    } else {
+      hint.textContent = 'New code — fill in the specification.';
+      wrap.innerHTML = '<div class="callout new"><b>' + typed + ' is a new code for this customer.</b>' +
+        'It will be created against them with the specification above, and can then be ' +
+        'repeat-ordered. It gets no Sales rate card until someone quotes it.</div>';
+    }
+  }
+
+  custSel.addEventListener('change', () => { fillList(); syncSpec(); });
+  pick.addEventListener('change', onPick);
+  codeIn.addEventListener('input', syncSpec);
+
+  fillList();
+  syncSpec();
+</script>
+{% endblock %}

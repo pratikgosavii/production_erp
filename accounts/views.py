@@ -18,22 +18,29 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
+import json
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.constants import Health, OrderStatus, OrderType, QuotationStatus, Stage
+from core.constants import (
+    Health, ItemCodeApproval, OrderStatus, OrderType, Process, QuotationStatus,
+    Stage,
+)
 from core.decorators import role_required
 from core.models import AuditLog
 from core.pagination import paginate
 from core.services import log, notify
+from users.models import User
 from masters.models import ItemCode
 from production.models import JobCard
 from sales.models import Quotation
 
-from .forms import BookOrderForm, ReasonForm, designer_queryset
+from .forms import (
+    BookOrderForm, ReasonForm, RepeatOrderForm, RepeatRateForm, designer_queryset,
+)
 from .models import SalesOrder
 
 # Quotations that land on the Accounts desk: the PO is in, or Sales are still
@@ -752,6 +759,245 @@ def order_detail(request, so_no):
 def _back(request):
     """Every state change is POST-then-redirect, back to the list."""
     return redirect(reverse('accounts:order_booking'))
+
+
+# ---------------------------------------------------------------------------
+# Repeat order raised by Accounts (spec 05 - PO Intake)
+# ---------------------------------------------------------------------------
+def _repeat_catalogue():
+    """Every part Accounts can re-order, with its spec and its agreed rate.
+
+    Rendered into the page as JSON so picking a customer narrows the item-code
+    list and picking a code fills the rate, with no round trip. Only parts
+    carrying an active repeat rate appear: without one there is no agreed
+    figure, so it is not a repeat order.
+    """
+    from masters.models import RepeatRate
+
+    out = []
+    for rr in (RepeatRate.objects
+               .filter(is_active=True, item_code__is_active=True)
+               .select_related('item_code', 'item_code__customer',
+                               'item_code__material', 'item_code__thickness',
+                               'item_code__finish')):
+        code = rr.item_code
+        out.append({
+            'id': code.pk,
+            'customer': code.customer_id,
+            'code': code.code,
+            'description': code.description,
+            'material': code.material.name if code.material else '',
+            'thickness': code.thickness.name if code.thickness else '',
+            'size': code.size,
+            'finish': code.finish.name if code.finish else '',
+            'process': Process(code.process).label,
+            'rate': str(rr.rate_per_unit),
+            'note': rr.note,
+        })
+    return out
+
+
+@role_required('is_accounts')
+def repeat_rates(request):
+    """The repeat-rate master. Accounts' own list of what a repeat part costs.
+
+    Separate from the Sales rate card on purpose: that one is banded and signed
+    off by the Sales Manager for quoting, this one is a single agreed figure
+    Accounts uses to re-order a part they have shipped before.
+    """
+    from masters.models import ItemCode, RepeatRate
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'deactivate':
+            rr = get_object_or_404(RepeatRate, pk=request.POST.get('rate'))
+            rr.is_active = not rr.is_active
+            rr.save(update_fields=['is_active', 'updated_at'])
+            log(request.user, 'RepeatRate', rr.item_code.code,
+                'Repeat rate ' + ('re-activated' if rr.is_active else 'deactivated'),
+                detail=f'Rs.{rr.rate_per_unit}')
+            messages.success(
+                request,
+                f'{rr.item_code.code} repeat rate '
+                + ('re-activated.' if rr.is_active else 'deactivated — it can no '
+                   'longer be used to raise a repeat order.'))
+            return redirect('accounts:repeat_rates')
+
+        form = RepeatRateForm(request.POST)
+        if form.is_valid():
+            code = form.item
+            if form.created_code:
+                code.save()
+                log(request.user, 'ItemCode', code.code, 'Item code created',
+                    detail=f'{code.customer.name} - created from the repeat-rate master')
+            rr, created = RepeatRate.objects.update_or_create(
+                item_code=code,
+                defaults={'rate_per_unit': form.cleaned_data['rate_per_unit'],
+                          'note': form.cleaned_data.get('note', ''),
+                          'is_active': True, 'set_by': request.user},
+            )
+            log(request.user, 'RepeatRate', code.code,
+                'Repeat rate set' if created else 'Repeat rate updated',
+                detail=f'{code.customer.name} - Rs.{rr.rate_per_unit}')
+            messages.success(
+                request,
+                f'{code.code} ({code.customer.name}) '
+                + ('created and ' if form.created_code else '')
+                + f'set at Rs.{rr.rate_per_unit} per unit.')
+            return redirect('accounts:repeat_rates')
+        for error in form.errors.values():
+            messages.error(request, '; '.join(error))
+
+    from masters.models import Customer, Finish, Material, Thickness
+
+    rates = (RepeatRate.objects
+             .select_related('item_code', 'item_code__customer', 'set_by')
+             .all())
+    have = set(rates.values_list('item_code_id', flat=True))
+
+    # Every code this customer already has, so the field can offer them for
+    # picking while still accepting a string nobody has used yet. Codes that
+    # already carry a rate are marked, since choosing one is an edit.
+    codes_by_customer = {}
+    for code in (ItemCode.objects.filter(is_active=True)
+                 .select_related('material', 'thickness', 'finish')
+                 .order_by('code')):
+        codes_by_customer.setdefault(str(code.customer_id), []).append({
+            'code': code.code,
+            'description': code.description,
+            'material': code.material.name if code.material else '',
+            'thickness': code.thickness.name if code.thickness else '',
+            'size': code.size,
+            'finish': code.finish.name if code.finish else '',
+            'process': code.process,
+            'has_rate': code.pk in have,
+        })
+
+    page, pager = paginate(request, list(rates))
+    context = {
+        'rates': page,
+        'customers': Customer.objects.filter(is_active=True).order_by('name'),
+        'codes_json': json.dumps(codes_by_customer),
+        'materials': Material.objects.filter(is_active=True).order_by('name'),
+        'thicknesses': Thickness.objects.filter(is_active=True).order_by('value_mm'),
+        'finishes': Finish.objects.filter(is_active=True).order_by('name'),
+        'processes': Process.choices,
+        'active_count': sum(1 for r in rates if r.is_active),
+        'total_count': rates.count(),
+        'nav': 'rates',
+        **pager,
+    }
+    return render(request, 'accounts/repeat_rates.html', context)
+
+
+@role_required('is_accounts')
+def repeat_order(request):
+    """Accounts raises a repeat PO for a part that already has an approved rate.
+
+    No new quotation from Sales and no fresh pricing approval: the band was
+    signed off once and is reused. What Accounts does here is record the PO,
+    attach the drawing, and confirm it - the same confirmation they perform on
+    a salesperson's PO, which is why they can do it on their own.
+
+    The rate is whatever Accounts agreed in the repeat-rate master - one figure
+    per part, no slabs - and the only thing entered per order is the quantity.
+    The rate cannot be changed here at all, by the form or by a hand-rolled
+    POST: it is read from the master. Changing what a repeat part costs is done
+    on the master, where it is recorded against whoever changed it.
+    """
+    from django.db import transaction
+    from masters.models import Customer
+    from sales.models import PriceTier, Quotation, QuotationItem
+
+    form = RepeatOrderForm(request.POST or None, request.FILES or None)
+
+    if request.method == 'POST' and form.is_valid():
+        item_code = form.item
+        data = form.cleaned_data
+        qty = data['quantity']
+        # The rate is NOT taken from the form. It is read from the master, so a
+        # hand-rolled POST cannot price an order either - the only place a
+        # repeat rate changes is the repeat-rate master, where the change is
+        # recorded against whoever made it.
+        quoted = form.repeat_rate.rate_per_unit
+
+        with transaction.atomic():
+            quotation = Quotation.objects.create(
+                customer=form.cust,
+                salesperson=request.user,
+                quote_date=timezone.localdate(),
+                order_type=OrderType.REPEAT,
+                currency=data['currency'],
+                payment_terms=data.get('payment_terms', ''),
+                delivery_terms=data.get('delivery_terms', ''),
+                lead_time=data.get('lead_time', ''),
+                tooling_charges=data['tooling_charges'],
+                packing_forwarding=data['packing_forwarding'],
+                freight=data['freight'],
+                gst_percent=data['gst_percent'],
+                # PO_UPLOADED, not APPROVED: the PO is attached here, so the
+                # quotation is already awaiting booking, and that is the only
+                # state the Order Booking queue will confirm from.
+                status=QuotationStatus.PO_UPLOADED,
+                po_number=data['po_number'],
+                po_date=data['po_date'],
+                po_file=data['po_file'],
+                drawing_file=data['drawing_file'],
+                expected_delivery=data.get('expected_delivery'),
+                notes=data.get('note', ''),
+            )
+            # Accounts is the approver here, which is the whole point: the
+            # price needed no new approval, so the only thing left to sign off
+            # is the paperwork, and they raised it.
+            quotation.approved_by = request.user
+            quotation.approved_at = timezone.now()
+            quotation.sent_to_accounts_at = timezone.now()
+            quotation.submitted_at = timezone.now()
+            quotation.save()
+
+            item = QuotationItem.objects.create(
+                quotation=quotation,
+                item_code=item_code,
+                description=item_code.description,
+                material=item_code.material,
+                thickness=item_code.thickness,
+                finish=item_code.finish,
+                size=item_code.size,
+                quantity=qty,
+                artwork_ref=data.get('artwork_ref', ''),
+                tooling_charge=data['tooling_charge'],
+            )
+            # One tier covering exactly this quantity. A repeat order is not
+            # a ladder - there is one rate and one quantity.
+            PriceTier.objects.create(
+                item=item, qty_from=qty, qty_to=qty, rate_per_unit=quoted,
+            )
+
+
+        log(request.user, 'Quotation', quotation.number, 'Repeat order raised',
+            detail=f'{item_code.code} - {qty} Nos @ Rs.{quoted} (agreed repeat rate)')
+        messages.success(
+            request,
+            f'{quotation.number} raised for {item_code.code} at the agreed repeat rate. '
+            f'Confirm it below to book the Sales Order.',
+        )
+        return redirect(f"{reverse('accounts:order_booking')}?filter=approval")
+
+    if request.method == 'POST':
+        for error in form.errors.values():
+            messages.error(request, '; '.join(error))
+
+    from core.constants import Currency
+    context = {
+        'form': form,
+        'customers': Customer.objects.filter(is_active=True).order_by('name'),
+        'catalogue': json.dumps(_repeat_catalogue()),
+        'currencies': Currency.choices,
+        'delivery_choices': ['Ex-Works', 'FOB', 'CIF'],
+        'nav': 'repeat',
+    }
+    return render(request, 'accounts/repeat_order.html', context)
 
 
 @role_required('is_accounts')

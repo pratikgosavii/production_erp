@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Customer, Finish, Grade, ItemCode, ItemCodeRate, Material, MaterialRate,
-    ProcessStation, Rack, ReorderLevel, SheetSize, Supplier, Thickness,
+    ProcessStation, Rack, ReorderLevel, RepeatRate, SheetSize, Supplier, Thickness,
 )
 
 
@@ -81,6 +81,21 @@ class MaterialRateAdmin(admin.ModelAdmin):
         if not bench:
             return '—'
         return f'{(bench - obj.cost_per_sq_in) / bench * 100:.1f}%'
+
+
+@admin.register(RepeatRate)
+class RepeatRateAdmin(admin.ModelAdmin):
+    """Accounts' agreed rate per repeat part. Not banded - see the model."""
+
+    list_display = ('item_code', 'customer', 'rate_per_unit', 'is_active', 'set_by', 'updated_at')
+    list_filter = ('is_active', 'item_code__customer')
+    list_editable = ('rate_per_unit', 'is_active')
+    search_fields = ('item_code__code', 'item_code__customer__name', 'note')
+    autocomplete_fields = ('item_code',)
+
+    @admin.display(description='Customer')
+    def customer(self, obj):
+        return obj.item_code.customer.name
 
 
 @admin.register(ReorderLevel)

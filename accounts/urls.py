@@ -5,6 +5,8 @@ app_name = 'accounts'
 
 urlpatterns = [
     path('order-booking/', views.order_booking, name='order_booking'),
+    path('repeat-order/', views.repeat_order, name='repeat_order'),
+    path('repeat-rates/', views.repeat_rates, name='repeat_rates'),
 
     # Read-only full detail of one booked Sales Order, addressed by its
     # business number (SO-1076), not its pk — the number is what people quote.

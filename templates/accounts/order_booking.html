@@ -251,6 +251,9 @@
      class="nav-item {% if active_filter == 'approval' %}active{% endif %}">
     <span class="icon">🖊️</span> Needs Approval{% if counts.approval %} ({{ counts.approval }}){% endif %}
   </a>
+  <a href="{% url 'accounts:repeat_order' %}" class="nav-item">
+    <span class="icon">🔁</span> Repeat Order
+  </a>
 </div>
 {% endblock %}
 

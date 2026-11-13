@@ -857,3 +857,47 @@ class ReorderLevel(TimeStampedModel):
 
     def __str__(self):
         return f'{self.material} {self.thickness} — min {self.minimum_qty}'
+
+
+class RepeatRate(TimeStampedModel):
+    """Accounts' own rate for a part they can re-order without Sales (spec 05).
+
+    Deliberately NOT a slab ladder. The Sales rate card is banded because a
+    quotation prices a range of possible quantities; a repeat order prices one
+    known part at one agreed figure, and Accounts enters the quantity when the
+    PO arrives. One rate per part, set here once.
+
+    Scoped through the item code, which is already per customer - so the same
+    code string for two customers is two rows, which is correct: they are two
+    different parts at two different agreed rates.
+    """
+
+    item_code = models.OneToOneField(
+        ItemCode, on_delete=models.CASCADE, related_name='repeat_rate',
+    )
+    rate_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
+    note = models.CharField(max_length=200, blank=True)
+    is_active = models.BooleanField(default=True)
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='repeat_rates_set',
+    )
+
+    class Meta:
+        ordering = ['item_code__customer__name', 'item_code__code']
+        verbose_name = 'repeat-order rate'
+
+    def __str__(self):
+        return f'{self.item_code.code} @ {self.rate_per_unit}'
+
+    @property
+    def customer(self):
+        return self.item_code.customer
+
+    def clean(self):
+        if self.rate_per_unit is not None and self.rate_per_unit <= 0:
+            raise ValidationError({'rate_per_unit': 'A repeat rate has to be more than zero.'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean(exclude=['set_by'])
+        super().save(*args, **kwargs)
