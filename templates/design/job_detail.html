@@ -1055,11 +1055,22 @@ function fallback(txt, done) {
     });
   }
 
-  /* Label the reserve button with whichever sheet is pre-selected. */
+  /* Label the reserve button with whichever sheet is pre-selected.
+
+     Scoped to the reserve form on purpose. The card showing the sheet already
+     reserved is also marked .selected and sits above the pickable ones, so
+     looking page-wide found that one and the button read "Reserve SHT-0002"
+     -- a sheet that is already reserved and not even in the list -- while the
+     radio sat on something else. Pressing it reserved the radio's sheet, not
+     the one named on the button. */
   document.addEventListener('DOMContentLoaded', function () {
-    var first = document.querySelector('.sheet-option.selected .uid');
+    var form = document.querySelector('form[action*="/reserve/"]');
     var btn = document.getElementById('btnReserve');
-    if (first && btn && !btn.disabled) { btn.textContent = 'Reserve ' + first.textContent.trim(); }
+    if (!form || !btn || btn.disabled) { return; }
+    var checked = form.querySelector('input[name="sheet"]:checked');
+    var card = checked ? checked.closest('.sheet-option') : form.querySelector('.sheet-option');
+    var uid = card ? card.querySelector('.uid') : null;
+    if (uid) { btn.textContent = 'Reserve ' + uid.textContent.trim(); }
   });
 </script>
 {% endblock %}
