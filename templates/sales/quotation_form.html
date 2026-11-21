@@ -493,8 +493,14 @@
       <div class="field full cu-field" id="cuField">
         <label>Customer <span class="opt">— pick from the master, or type a new name to add it on the spot</span></label>
         <div class="cu-wrap">
+          {# Chrome ignores autocomplete="off" on a field it reads as a name or
+             address — and this one is literally named customer_name — then drops
+             its saved-addresses popup over our suggestion list. "new-password"
+             is the value it does honour. The data- attributes are for the
+             password managers, which have their own heuristics. #}
           <input type="text" id="customerInput" name="customer_name" class="cu-input" placeholder="Type a customer name…"
-                 autocomplete="off" value="{{ customer_name_value }}">
+                 autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+                 data-lpignore="true" data-form-type="other" value="{{ customer_name_value }}">
           <div class="cu-suggest" id="customerSuggest"></div>
         </div>
         <!-- Hidden id keeps the customer-scoped item-code type-ahead working -->
@@ -645,7 +651,9 @@
       <div class="field ic-field">
         <label>Item Code <span class="opt">— from this customer's master, or type a new one</span></label>
         <div class="ic-wrap">
-          <input type="text" class="ic-input" name="{{ row.form.item_code_text.html_name }}" placeholder="Type an item code…" autocomplete="off" value="{{ row.form.item_code_text.value|default_if_none:'' }}">
+          <input type="text" class="ic-input" name="{{ row.form.item_code_text.html_name }}" placeholder="Type an item code…"
+                 autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+                 data-lpignore="true" data-form-type="other" value="{{ row.form.item_code_text.value|default_if_none:'' }}">
           <div class="ic-suggest"></div>
         </div>
         <div class="ic-status"></div>
