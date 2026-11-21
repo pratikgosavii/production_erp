@@ -1556,12 +1556,18 @@ def _owned_query(request, pk):
     return query
 
 
-@role_required('is_salesman')
+#: Accounts is here because a repeat order's quotation belongs to whoever
+#: raised it, and Accounts raise those. Without them, Design could record a
+#: proof as sent on a repeat order and nobody could ever record the customer's
+#: answer: the owner was refused this screen and no salesperson could see a
+#: proof that was not theirs. The sales manager was refused too, although the
+#: proof list below already has a branch for them.
+@role_required('is_salesman', 'is_sales_manager', 'is_accounts')
 def design_queries(request):
     """My Design Queries — the inbox §7.1 promised and never built.
 
     It also carries the open artwork proofs: both are "Design is waiting on a
-    person", and the salesperson is that person in each case.
+    person", and the owner of the quotation is that person in each case.
     """
     from design.models import ProofRound
     from core.constants import ProofOutcome as _PO
@@ -1643,7 +1649,7 @@ def query_reply(request, pk):
     return redirect(f"{reverse('sales:queries')}?status={request.POST.get('back') or 'open'}")
 
 
-@role_required('is_salesman', 'is_sales_manager')
+@role_required('is_salesman', 'is_sales_manager', 'is_accounts')
 @require_POST
 def record_proof(request, pk):
     """Sales writes down what the customer said about an artwork proof.
