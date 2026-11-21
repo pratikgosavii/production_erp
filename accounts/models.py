@@ -180,8 +180,24 @@ class SalesOrder(TimeStampedModel):
             assigned_designer=designer,
             status=OrderStatus.IN_DESIGN,
         )
+        from design.models import DrawingRevision
+
         for qi in quotation.items.all():
-            SOItem.objects.create(order=order, quotation_item=qi, position=qi.position)
+            item = SOItem.objects.create(
+                order=order, quotation_item=qi, position=qi.position)
+            # The drawing the customer sent in with the PO follows the order
+            # to Design. Without this it stopped at Accounts: the file sat on
+            # the quotation, the job page showed nothing, and the designer was
+            # still asked to tick "Text proofread against the customer
+            # drawing". Rev 00 is a reference, never current, so it does not
+            # satisfy the design gate -- only a drawing the designer produced
+            # does, and theirs starts at Rev 01.
+            if quotation.drawing_file:
+                DrawingRevision.objects.create(
+                    so_item=item, revision=0, source='Customer',
+                    file=quotation.drawing_file.name,
+                    uploaded_by=quotation.salesperson, is_current=False,
+                    note='Customer reference received with the PO')
 
         quotation.status = QuotationStatus.CONVERTED
         quotation.save(update_fields=['status', 'updated_at'])
