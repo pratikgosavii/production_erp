@@ -294,9 +294,13 @@
           <div class="sub">{{ r.item_code.size|default:"size not set" }}</div>
         </td>
         <td class="r">
+          {# Says which action it is. Without it this fell through to the
+             full add-a-rate form, which wants a customer and an item code
+             this row never posts, so every Save failed. #}
           <form method="post" style="display:inline-flex; gap:6px; align-items:center;">
             {% csrf_token %}
-            <input type="hidden" name="item_code" value="{{ r.item_code.pk }}">
+            <input type="hidden" name="action" value="rate">
+            <input type="hidden" name="rate" value="{{ r.pk }}">
             <input type="number" step="0.01" min="0.01" name="rate_per_unit" value="{{ r.rate_per_unit }}">
             <button type="submit" class="btn small" title="Save this rate">Save</button>
           </form>

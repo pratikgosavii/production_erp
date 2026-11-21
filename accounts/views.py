@@ -16,7 +16,7 @@ the Design queue or the Production dashboard about the same job.
 """
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import json
 from django.contrib import messages
@@ -824,6 +824,36 @@ def repeat_rates(request):
                 f'{rr.item_code.code} repeat rate '
                 + ('re-activated.' if rr.is_active else 'deactivated — it can no '
                    'longer be used to raise a repeat order.'))
+            return redirect('accounts:repeat_rates')
+
+        if action == 'rate':
+            # Changing the agreed figure on a row already on the list. The
+            # full form below is for adding one, and wants a customer and an
+            # item code the row does not post.
+            rr = posted_object_or_404(RepeatRate, request.POST.get('rate'))
+            raw = (request.POST.get('rate_per_unit') or '').strip()
+            try:
+                new_rate = Decimal(raw)
+            except (InvalidOperation, ValueError):
+                new_rate = None
+            if new_rate is None or new_rate <= 0:
+                messages.error(
+                    request,
+                    f'{rr.item_code.code} not changed — type a rate above zero.')
+                return redirect('accounts:repeat_rates')
+            was = rr.rate_per_unit
+            if new_rate == was:
+                messages.info(request, f'{rr.item_code.code} is already at Rs.{was}.')
+                return redirect('accounts:repeat_rates')
+            rr.rate_per_unit = new_rate
+            rr.set_by = request.user
+            rr.save(update_fields=['rate_per_unit', 'set_by', 'updated_at'])
+            log(request.user, 'RepeatRate', rr.item_code.code, 'Repeat rate changed',
+                detail=f'Rs.{was} -> Rs.{new_rate}',
+                from_value=str(was), to_value=str(new_rate))
+            messages.success(
+                request,
+                f'{rr.item_code.code} repeat rate changed from Rs.{was} to Rs.{new_rate}.')
             return redirect('accounts:repeat_rates')
 
         form = RepeatRateForm(request.POST)
