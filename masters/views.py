@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from core.formerrors import report_form_errors
 from core.constants import ApprovalSource, ItemCodeApproval
 from core.services import log
 
@@ -130,8 +131,7 @@ def item_code_save(request):
 
     form = ItemCodeForm(request.POST, instance=item)
     if not form.is_valid():
-        for field, errs in form.errors.items():
-            messages.error(request, f'{field}: {" ".join(errs)}')
+        report_form_errors(request, form, prefix='Item code not saved')
         return _codes_redirect(request)
 
     obj = form.save(commit=False)
@@ -158,8 +158,7 @@ def item_code_revise(request):
     """Revise Rate -> propose_revision(): back to PENDING with a reason."""
     form = ReviseRateForm(request.POST)
     if not form.is_valid():
-        for field, errs in form.errors.items():
-            messages.error(request, f'{field}: {" ".join(errs)}')
+        report_form_errors(request, form, prefix='Rate not revised')
         return _codes_redirect(request)
 
     item = form.cleaned_data['item']
@@ -254,6 +253,5 @@ def customer_save(request):
         messages.success(
             request, f'{obj.name} {"updated" if customer else "added"}.')
     else:
-        for field, errs in form.errors.items():
-            messages.error(request, ' '.join(errs))
+        report_form_errors(request, form, prefix='Customer not saved')
     return _back(request, 'masters:customers')

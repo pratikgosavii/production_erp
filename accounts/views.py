@@ -25,6 +25,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.formerrors import report_form_errors
 from core.constants import (
     Health, ItemCodeApproval, OrderStatus, OrderType, Process, QuotationStatus,
     Stage,
@@ -847,8 +848,7 @@ def repeat_rates(request):
                 + ('created and ' if form.created_code else '')
                 + f'set at Rs.{rr.rate_per_unit} per unit.')
             return redirect('accounts:repeat_rates')
-        for error in form.errors.values():
-            messages.error(request, '; '.join(error))
+        report_form_errors(request, form, prefix='Repeat rate not saved')
 
     from masters.models import Customer, Finish, Material, Thickness
 
@@ -986,8 +986,7 @@ def repeat_order(request):
         return redirect(f"{reverse('accounts:order_booking')}?filter=approval")
 
     if request.method == 'POST':
-        for error in form.errors.values():
-            messages.error(request, '; '.join(error))
+        report_form_errors(request, form, prefix='Repeat order not raised')
 
     from core.constants import Currency
     context = {

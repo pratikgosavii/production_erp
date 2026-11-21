@@ -30,6 +30,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.models import SalesOrder, SOItem
+from core.formerrors import report_form_errors
 from core.constants import (
     JOB_FOLDER_ROOT, NCRSource, PROCESS_CARD, PROCESS_UI, OrderStatus, Process,
     ProofOutcome, QueryStatus,
@@ -228,10 +229,8 @@ def _acted_item(request, so_no):
 
 def _form_error(request, form):
     """Surface a form's first complaint instead of redirecting in silence."""
-    for _field, errs in form.errors.items():
-        if errs:
-            messages.error(request, errs[0])
-            return
+    if report_form_errors(request, form):
+        return
 
 
 # ---------------------------------------------------------------------------
