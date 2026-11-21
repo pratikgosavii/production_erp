@@ -987,6 +987,19 @@ def send_proof(request, so_no):
             f'nothing to send as a proof.')
         return _redirect_to_job(order, item)
 
+    # The card promises "visual proof approval stays locked until all six are
+    # ticked" and Gate 3 shows a padlock. Only the screen was keeping that
+    # promise: the button posted here and a drawing nobody had proofread went
+    # out to the customer over the company's name.
+    done, total = DesignCheck.progress(item)
+    if total and done < total:
+        messages.error(
+            request,
+            f'Cannot send a proof for {item_label(item)}: {done} of the {total} '
+            f'pre-release checks are ticked. Finish them before the customer '
+            f'sees the artwork. Nothing was sent.')
+        return _redirect_to_job(order, item)
+
     open_round = item.proof_rounds.filter(outcome=ProofOutcome.SENT).first()
     if open_round is not None:
         messages.info(

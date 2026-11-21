@@ -944,14 +944,19 @@
       <form method="post" action="{% url 'design:send_proof' order.number %}">
         {% csrf_token %}
         <input type="hidden" name="item" value="{{ item.pk }}">
+        {# Gate 3 reads "Locked" until the six are ticked and the card says so
+           in as many words -- but the button was live, so a drawing nobody
+           had proofread could be walked in front of the customer. #}
         <button type="submit" class="btn btn-primary btn-sm" style="width:100%;margin-top:10px;"
-                {% if not item.current_drawing or item.proof_pending %}disabled{% endif %}>
+                {% if not item.current_drawing or item.proof_pending or not checks_complete %}disabled{% endif %}>
           {% if item.proof_pending %}Awaiting customer answer{% else %}Record Proof Sent{% endif %}
         </button>
       </form>
       <div class="gate-note" style="margin-top:8px;">
         {% if not item.current_drawing %}Upload a production drawing first.
         {% elif item.proof_pending %}Sales records the answer when the customer replies.
+        {% elif not checks_complete %}🔒 {{ checks_done }} of {{ checks_total }} pre-release checks ticked.
+          Finish them before the customer sees the artwork.
         {% else %}Download the drawing, hand it to Sales, then record it here.{% endif %}
       </div>
       {% endif %}
