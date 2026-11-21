@@ -7,6 +7,8 @@ not access control.
 from datetime import timedelta
 from decimal import Decimal
 
+import json
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -18,6 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from core.formerrors import error_field_names, form_error_text
 from core.constants import ProofOutcome, ItemCodeApproval, OrderType, QuotationStatus, QueryStatus, Process
 from core.decorators import landing_url_name, role_required
 from core.models import AuditLog
@@ -258,13 +261,9 @@ def _accounts_users():
     return User.objects.filter(is_accounts=True, is_active=True)
 
 
-def _form_error_text(*forms):
-    bits = []
-    for form in forms:
-        for field, errors in form.errors.items():
-            label = 'Form' if field == '__all__' else field.replace('_', ' ')
-            bits.append(f'{label}: {"; ".join(errors)}')
-    return ' — '.join(bits) or 'Please check the highlighted fields.'
+def _form_error_text(*forms, prefixes=None):
+    return (form_error_text(*forms, prefixes=prefixes)
+            or 'Please check the highlighted fields.')
 
 
 # ---------------------------------------------------------------------------
@@ -728,6 +727,7 @@ def _quotation_form(request, quotation):
     instance = quotation if quotation is not None else Quotation()
     ItemFormSet = QuotationItemEditFormSet if quotation is not None else QuotationItemFormSet
     submitted = False
+    error_fields = []
 
     if request.method == 'POST':
         if not editable:
@@ -801,7 +801,18 @@ def _quotation_form(request, quotation):
                     messages.success(request, f'{saved.number} saved as a draft.')
                 return redirect('sales:dashboard')
         else:
-            messages.error(request, 'Nothing saved — ' + _form_error_text(form, bill_form))
+            # The item rows and their slab ladders were missing here, so a bad
+            # rate on item 2 produced only the fallback — "check the
+            # highlighted fields" — on a form that highlighted nothing and was
+            # five screens long. Name the row as well as the field.
+            messages.error(request, 'Nothing saved — ' + _form_error_text(
+                form, bill_form,
+                (item_formset, 'Item {n}'),
+                *[(ts, f'Item {i} slab {{n}}')
+                  for i, ts in enumerate(tier_sets, start=1)],
+            ))
+            error_fields = error_field_names(form, bill_form, item_formset,
+                                             *tier_sets)
         submitted = True
     else:
         initial = {}
@@ -856,6 +867,10 @@ def _quotation_form(request, quotation):
         'blank_tiers': blank_tiers,
         'editable': editable,
         'was_submitted': submitted,
+        # The boxes that objected, so the page can mark them and jump to the
+        # first one instead of telling the operator to look for a highlight
+        # that was never applied.
+        'error_fields': json.dumps(error_fields),
         'quote_date_value': _date_value(form['quote_date']),
         'valid_until_value': _date_value(form['valid_until']),
         'materials': Material.objects.filter(is_active=True),

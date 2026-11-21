@@ -366,6 +366,16 @@
 
   /* auto-fill flash */
   .spec-flash { animation: specFlash 1.3s ease-out; }
+
+  /* A box the server objected to. The toast names it; this is so the eye can
+     find it on a form five screens long. */
+  .has-error,
+  .has-error:focus {
+    border-color: var(--red) !important;
+    background: #fdf2f1;
+    box-shadow: 0 0 0 3px rgba(178, 58, 47, .12);
+  }
+  .has-error-label { color: var(--red); }
   @keyframes specFlash {
     0%   { background: var(--green-bg); border-color: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
     70%  { background: var(--green-bg); border-color: var(--green); box-shadow: 0 0 0 3px var(--green-bg); }
@@ -856,6 +866,61 @@
 
 {% block extra_js %}
 <script>
+  /* ---------------------------------------------------------------------
+     WHICH BOX THE SERVER OBJECTED TO
+     The message used to say "please check the highlighted fields" on a form
+     that highlighted nothing, so the operator had five screens to search.
+     The view hands over the posted names of the boxes that failed; mark them
+     and put the first one on screen.
+     ------------------------------------------------------------------ */
+  (function () {
+    var bad = {{ error_fields|default:"[]"|safe }};
+    if (!bad || !bad.length) { return; }
+    var first = null;
+    bad.forEach(function (name) {
+      var el = document.querySelector('[name="' + name + '"]');
+      if (!el) { return; }
+      el.classList.add('has-error');
+      var field = el.closest('.field');
+      var label = field && field.querySelector('label');
+      if (label) { label.classList.add('has-error-label'); }
+      if (!first) { first = el; }
+      // Clear the mark once the operator starts fixing it.
+      el.addEventListener('input', function () {
+        el.classList.remove('has-error');
+        if (label) { label.classList.remove('has-error-label'); }
+      }, {once: true});
+    });
+    if (!first) { return; }
+    // Marking happens now so the red is painted with the rest of the page, but
+    // the scroll waits: this block runs first in the script, and the formset
+    // plumbing below re-numbers rows and rebuilds tier tables afterwards,
+    // which moves the box out from under us and leaves the page at the top.
+    var tries = 0;
+    var land = function () {
+      // Not 'smooth': a smooth scroll is dropped altogether when the operator
+      // has asked for reduced motion, and the whole point is that they end up
+      // looking at the box.
+      first.scrollIntoView({block: 'center'});
+      try { first.focus({preventScroll: true}); } catch (e) { first.focus(); }
+      // Then check it actually landed. At load the form is not yet its full
+      // height -- web fonts and the tier tables are still settling -- and a
+      // scroll past the bottom of a short page is silently clamped to the
+      // top, which is exactly the place the operator must not be left.
+      var box = first.getBoundingClientRect();
+      if ((box.top < 0 || box.bottom > window.innerHeight) && ++tries < 3) {
+        setTimeout(land, 120 * tries);
+      }
+    };
+    // setTimeout, not requestAnimationFrame: a page that is not being
+    // displayed -- restored into a background tab, say -- is not painting, so
+    // rAF does not fire and the operator would come back to the top of the
+    // form with no idea where the trouble is.
+    var whenSettled = function () { setTimeout(land, 0); };
+    if (document.readyState === 'complete') { whenSettled(); }
+    else { window.addEventListener('load', whenSettled); }
+  }());
+
   /* =====================================================================
      DJANGO FORMSET PLUMBING
      The line items are an inline formset (prefix "items") and each item
