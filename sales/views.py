@@ -861,7 +861,9 @@ def _quotation_form(request, quotation):
         'materials': Material.objects.filter(is_active=True),
         'thicknesses': [
             {'name': t.name, 'label': _thickness_label(t)}
-            for t in Thickness.objects.filter(is_active=True)
+            # By value, not by name: ordered as text, '10.0mm' would sort
+            # between '1.5mm' and '2.0mm'.
+            for t in Thickness.objects.filter(is_active=True).order_by('value_mm')
         ],
         'finishes': Finish.objects.filter(is_active=True),
         'process_choices': Process.choices,

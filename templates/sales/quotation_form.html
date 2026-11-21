@@ -606,6 +606,10 @@
         <div class="field">
           <label>Material</label>
           <select class="spec-material" name="{{ row.form.material.html_name }}">
+            {# Blank first, and selected unless the line actually names a
+               material. Without it the browser pre-selects Aluminium and the
+               line is saved with a spec nobody chose. #}
+            <option value="" {% if not row.form.material.value %}selected{% endif %}>—</option>
             {% for m in materials %}<option {% if row.form.material.value == m.name %}selected{% endif %}>{{ m.name }}</option>{% endfor %}
           </select>
         </div>
@@ -616,12 +620,14 @@
         <div class="field">
           <label>Thickness (mm)</label>
           <select class="spec-thickness" name="{{ row.form.thickness.html_name }}">
+            <option value="" {% if not row.form.thickness.value %}selected{% endif %}>—</option>
             {% for t in thicknesses %}<option {% if row.form.thickness.value == t.label %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
           </select>
         </div>
         <div class="field">
           <label>Finish / Fill</label>
           <select class="spec-finish" name="{{ row.form.finish.html_name }}">
+            <option value="" {% if not row.form.finish.value %}selected{% endif %}>—</option>
             {% for f in finishes %}<option {% if row.form.finish.value == f.name %}selected{% endif %}>{{ f.name }}</option>{% endfor %}
           </select>
         </div>
@@ -1098,6 +1104,12 @@
   // ---- Fill one spec control and flash it ----
   function icSetSelect(sel, value) {
     if (!sel) return;
+    // An item code that never recorded this part of its spec must leave the
+    // select on its blank option, not add an empty one of its own.
+    if (value === null || value === undefined || String(value).trim() === '') {
+      sel.selectedIndex = 0;
+      return;
+    }
     var hit = -1;
     for (var i = 0; i < sel.options.length; i++) {
       if (sel.options[i].text.trim().toLowerCase() === String(value).trim().toLowerCase()) {
