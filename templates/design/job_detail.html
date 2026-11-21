@@ -582,21 +582,34 @@
           <div class="s"><div class="l">Finish</div><div class="v txt">{{ item.quotation_item.finish.name|default:"—" }}</div></div>
           <div class="s designer">
             <div class="l">Holes <span class="by">Design</span></div>
-            <input type="text" class="dv" id="fldHoles" name="holes" value="{{ item.holes }}" placeholder="e.g. 4 × Ø4.5mm">
+            <input type="text" class="dv" id="fldHoles" name="holes" value="{{ item.holes }}" placeholder="e.g. 4 × Ø4.5mm"
+                   {% if item.design_approved %}readonly{% endif %}>
           </div>
           <div class="s designer wide">
             <div class="l">Drilling Detail <span class="by">Design</span></div>
             <input type="text" class="dv" id="fldDrilling" name="drilling_detail" value="{{ item.drilling_detail }}"
-                   placeholder="Hole pitch / centres, countersink, deburring notes...">
+                   placeholder="Hole pitch / centres, countersink, deburring notes..."
+                   {% if item.design_approved %}readonly{% endif %}>
           </div>
         </div>
         <div class="spec-note">
           Read-only fields come from quotation {{ order.quotation.number }}. Fields marked <i>Design</i> are entered here by the designer
           while preparing this item's drawing.
         </div>
+        {% if item.design_approved %}
+        {# Holes and drilling print on the job card the floor works to, so once
+           the item is approved they are part of what was signed off. #}
+        <div class="spec-note" style="color:var(--amber);">
+          🔒 Locked — this item is approved, and holes / drilling print on the
+          production job card. To change them, upload a new drawing revision:
+          that re-opens the six checks and the customer proof, so the change
+          gets approved rather than slipped in.
+        </div>
+        {% else %}
         <div class="btn-row">
           <button type="submit" class="btn btn-primary btn-sm">Save Design Fields</button>
         </div>
+        {% endif %}
       </form>
     </div>
 

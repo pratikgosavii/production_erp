@@ -779,8 +779,24 @@ def start_design(request, so_no):
 @role_required('is_designer')
 @require_POST
 def save_spec(request, so_no):
-    """§10.2·4 — holes / drilling detail, entered by Design."""
+    """§10.2·4 — holes / drilling detail, entered by Design, before approval."""
     order, item = _acted_item(request, so_no)
+
+    # These two print on the production job card -- they ARE the drilling the
+    # floor works to. Nothing stopped them being retyped after the item was
+    # approved and handed to the Production Manager: no revision, no second
+    # approval, no word to anyone, and the plates get drilled to a spec that
+    # was never signed off. A real change goes the long way round, by
+    # uploading a revision, which re-opens the six checks and the proof and so
+    # forces the approval again.
+    if item.design_approved:
+        messages.error(
+            request,
+            f'{item_label(item)} is already approved, and holes / drilling '
+            f'print on the job card the floor works to. Upload a new drawing '
+            f'revision to change them — that re-opens the checks and the '
+            f'approval. Nothing was changed.')
+        return _redirect_to_job(order, item)
 
     # Pressing Save on two empty boxes used to answer "Holes / drilling saved"
     # for a write that stored nothing. Clearing a spec that HAS something is a
