@@ -32,6 +32,7 @@ from core.constants import (
 from core.decorators import role_required
 from core.models import AuditLog
 from core.pagination import paginate
+from core.http import posted_object_or_404
 from core.services import log, notify
 from users.models import User
 from masters.models import ItemCode
@@ -811,7 +812,7 @@ def repeat_rates(request):
         action = request.POST.get('action')
 
         if action == 'deactivate':
-            rr = get_object_or_404(RepeatRate, pk=request.POST.get('rate'))
+            rr = posted_object_or_404(RepeatRate, request.POST.get('rate'))
             rr.is_active = not rr.is_active
             rr.save(update_fields=['is_active', 'updated_at'])
             log(request.user, 'RepeatRate', rr.item_code.code,

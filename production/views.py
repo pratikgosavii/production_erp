@@ -47,6 +47,7 @@ from core.constants import (
 )
 from core.decorators import role_required
 from core.pagination import paginate
+from core.http import posted_object_or_404
 from core.services import log, notify
 
 from .forms import PriorityForm, StationSelectionForm, UrgentSplitForm
@@ -505,9 +506,9 @@ def save_priority(request):
     # ---- plain form post (no-JavaScript fallback, and the older callers) ----
     fallback = reverse('production:dashboard')
     if request.POST.get('order'):
-        order = get_object_or_404(SalesOrder, pk=request.POST.get('order'))
+        order = posted_object_or_404(SalesOrder, request.POST.get('order'))
     elif request.POST.get('item'):
-        order = get_object_or_404(SOItem, pk=request.POST.get('item')).order
+        order = posted_object_or_404(SOItem, request.POST.get('item')).order
     else:
         messages.error(request, 'No sales order was named, so nothing was changed.')
         return redirect(_safe_next(request, fallback))
@@ -1162,9 +1163,9 @@ def start_station(request, jc_no):
     if not card.stations_confirmed_at:
         return redirect('production:job_card', jc_no=card.number)
 
-    row = get_object_or_404(
+    row = posted_object_or_404(
         JobCardStation.objects.select_related('station'),
-        pk=request.POST.get('station'), job_card=card,
+        request.POST.get('station'), job_card=card,
     )
     running = card.stations.filter(status=StationStatus.IN_PROGRESS).exclude(pk=row.pk).first()
     if running is not None:
@@ -1199,9 +1200,9 @@ def complete_station(request, jc_no):
     if not card.stations_confirmed_at:
         return redirect('production:job_card', jc_no=card.number)
 
-    row = get_object_or_404(
+    row = posted_object_or_404(
         JobCardStation.objects.select_related('station'),
-        pk=request.POST.get('station'), job_card=card,
+        request.POST.get('station'), job_card=card,
     )
     def refuse(msg):
         messages.error(request, f'{row.station.name} was not closed — {msg}')
