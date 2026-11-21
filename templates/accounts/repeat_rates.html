@@ -294,9 +294,10 @@
           <div class="sub">{{ r.item_code.size|default:"size not set" }}</div>
         </td>
         <td class="r">
-          {# Says which action it is. Without it this fell through to the
+          {% comment %}           Says which action it is. Without it this fell through to the
              full add-a-rate form, which wants a customer and an item code
-             this row never posts, so every Save failed. #}
+             this row never posts, so every Save failed. 
+          {% endcomment %}
           <form method="post" style="display:inline-flex; gap:6px; align-items:center;">
             {% csrf_token %}
             <input type="hidden" name="action" value="rate">

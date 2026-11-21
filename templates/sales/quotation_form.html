@@ -503,11 +503,12 @@
       <div class="field full cu-field" id="cuField">
         <label>Customer <span class="opt">— pick from the master, or type a new name to add it on the spot</span></label>
         <div class="cu-wrap">
-          {# Chrome ignores autocomplete="off" on a field it reads as a name or
+          {% comment %}           Chrome ignores autocomplete="off" on a field it reads as a name or
              address — and this one is literally named customer_name — then drops
              its saved-addresses popup over our suggestion list. "new-password"
              is the value it does honour. The data- attributes are for the
-             password managers, which have their own heuristics. #}
+             password managers, which have their own heuristics. 
+          {% endcomment %}
           <input type="text" id="customerInput" name="customer_name" class="cu-input" placeholder="Type a customer name…"
                  autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
                  data-lpignore="true" data-form-type="other" value="{{ customer_name_value }}">
@@ -622,9 +623,10 @@
         <div class="field">
           <label>Material</label>
           <select class="spec-material" name="{{ row.form.material.html_name }}">
-            {# Blank first, and selected unless the line actually names a
+            {% comment %}             Blank first, and selected unless the line actually names a
                material. Without it the browser pre-selects Aluminium and the
-               line is saved with a spec nobody chose. #}
+               line is saved with a spec nobody chose. 
+            {% endcomment %}
             <option value="" {% if not row.form.material.value %}selected{% endif %}>—</option>
             {% for m in materials %}<option {% if row.form.material.value == m.name %}selected{% endif %}>{{ m.name }}</option>{% endfor %}
           </select>
