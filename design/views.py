@@ -704,6 +704,20 @@ def start_design(request, so_no):
 def save_spec(request, so_no):
     """§10.2·4 — holes / drilling detail, entered by Design."""
     order, item = _acted_item(request, so_no)
+
+    # Pressing Save on two empty boxes used to answer "Holes / drilling saved"
+    # for a write that stored nothing. Clearing a spec that HAS something is a
+    # real edit -- an item may genuinely have no holes -- so only the case that
+    # changes nothing at all is turned away.
+    posted_blank = not (request.POST.get('holes') or '').strip() \
+        and not (request.POST.get('drilling_detail') or '').strip()
+    if posted_blank and not item.holes and not item.drilling_detail:
+        messages.error(
+            request,
+            f'Nothing to save for {item_label(item)} — type the holes or the '
+            'drilling detail first.')
+        return _redirect_to_job(order, item)
+
     form = SpecForm(request.POST, instance=item)
     if form.is_valid():
         form.save()
