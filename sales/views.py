@@ -45,6 +45,7 @@ BADGE_CLASS = {
     QuotationStatus.DRAFT: 'badge-gray',
     QuotationStatus.PENDING_APPROVAL: 'badge-amber',
     QuotationStatus.REJECTED: 'badge-red',
+    QuotationStatus.DECLINED: 'badge-gray',
     QuotationStatus.APPROVED: 'badge-green',
     QuotationStatus.SENT_TO_CUSTOMER: 'badge-green',
     QuotationStatus.AWAITING_PO: 'badge-green',
@@ -270,7 +271,7 @@ def _form_error_text(*forms, prefixes=None):
 # SCREEN 1 — My Quotations
 # ---------------------------------------------------------------------------
 FILTER_KEYS = [
-    'all', 'pending', 'rejected', 'awaiting_po',
+    'all', 'pending', 'rejected', 'declined', 'awaiting_po',
     'po_rejected', 'awaiting_drawing', 'ready', 'draft',
 ]
 
@@ -284,6 +285,7 @@ def _bucket(quotation):
         QuotationStatus.DRAFT: 'draft',
         QuotationStatus.PENDING_APPROVAL: 'pending',
         QuotationStatus.REJECTED: 'rejected',
+        QuotationStatus.DECLINED: 'declined',
         QuotationStatus.APPROVED: 'awaiting_po',
         QuotationStatus.SENT_TO_CUSTOMER: 'awaiting_po',
         QuotationStatus.AWAITING_PO: 'awaiting_po',
@@ -300,6 +302,8 @@ def _action_kind(quotation):
         return 'pending'
     if status == QuotationStatus.REJECTED:
         return 'rejected'
+    if status == QuotationStatus.DECLINED:
+        return 'declined'
     if status in OUT_WITH_CUSTOMER:
         return 'awaiting_po'
     if status == QuotationStatus.PO_UPLOADED:
@@ -1178,7 +1182,7 @@ def quotation_approve(request, pk):
         detail=('Locked item codes: ' + ', '.join(locked)) if locked else 'No new item codes',
         from_value=QuotationStatus.PENDING_APPROVAL, to_value=QuotationStatus.APPROVED)
     notify(quotation.salesperson,
-           f'{quotation.number} v{quotation.version} approved by {request.user.short_name}.',
+           f'{quotation.number} v{quotation.version} approved by {request.user.short_name}',
            link=reverse('sales:dashboard'), object_ref=quotation.number)
     messages.success(
         request,
@@ -1188,7 +1192,7 @@ def quotation_approve(request, pk):
     return redirect('sales:manager_approvals')
 
 
-def _send_back(request, pk, comment, action_label):
+def _send_back(request, pk, comment, action_label, declined=False):
     quotation, ok = _pending_or_redirect(request, pk)
     if not ok:
         return redirect('sales:manager_approvals')
@@ -1196,27 +1200,34 @@ def _send_back(request, pk, comment, action_label):
         messages.error(request, f'A comment is required to {action_label.lower()}.')
         return redirect('sales:manager_approvals')
 
-    quotation.reject(request.user, comment)
+    quotation.reject(request.user, comment, declined=declined)
+    landed = QuotationStatus.DECLINED if declined else QuotationStatus.REJECTED
     log(request.user, 'Quotation', quotation.number, action_label, detail=comment,
-        from_value=QuotationStatus.PENDING_APPROVAL, to_value=QuotationStatus.REJECTED)
+        from_value=QuotationStatus.PENDING_APPROVAL, to_value=landed)
+    verb = 'declined' if declined else 'sent back'
     notify(quotation.salesperson,
-           f'{quotation.number} sent back by {request.user.short_name}: {comment[:120]}',
+           f'{quotation.number} {verb} by {request.user.short_name}: {comment[:120]}',
            link=reverse('sales:dashboard'), object_ref=quotation.number)
     # short_name is already "Arjun P.", so no full stop of our own.
-    messages.success(request, f'{quotation.number} sent back to {quotation.salesperson.short_name}')
+    who = quotation.salesperson.short_name
+    messages.success(
+        request,
+        f'{quotation.number} declined — {who} cannot resubmit it' if declined
+        else f'{quotation.number} sent back to {who}')
     return redirect('sales:manager_approvals')
 
 
 @require_POST
 @role_required('is_sales_manager')
 def quotation_reject(request, pk):
-    return _send_back(request, pk, (request.POST.get('comment') or '').strip(), 'Rejected')
+    """Turned down for good -- not the same as asking for a revision."""
+    return _send_back(request, pk, (request.POST.get('comment') or '').strip(),
+                      'Rejected', declined=True)
 
 
 @require_POST
 @role_required('is_sales_manager')
 def quotation_request_revision(request, pk):
-    """No REVISION_REQUESTED state exists, so this is a reject with a prefix."""
     comment = (request.POST.get('comment') or '').strip()
     if comment:
         comment = f'Revision requested: {comment}'

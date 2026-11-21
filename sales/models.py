@@ -280,8 +280,10 @@ class Quotation(TimeStampedModel):
         self.approved_at = timezone.now()
         self.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
 
-    def reject(self, user, comment):
-        self.status = QuotationStatus.REJECTED
+    def reject(self, user, comment, declined=False):
+        """Send back for revision, or -- declined -- turn down for good."""
+        self.status = (QuotationStatus.DECLINED if declined
+                       else QuotationStatus.REJECTED)
         self.approved_by = user
         self.manager_comment = comment
         self.save(update_fields=['status', 'approved_by', 'manager_comment', 'updated_at'])

@@ -1121,7 +1121,7 @@ def request_drawing(request, pk):
     )
     log(
         request.user, 'Quotation', quotation.number, 'DRAWING_REQUESTED',
-        detail=f'Reminder sent to {quotation.salesperson.short_name}.',
+        detail=f'Reminder sent to {quotation.salesperson.short_name}',
     )
     messages.success(
         request,

@@ -814,7 +814,8 @@ def raise_query(request, so_no):
         notify(query.assigned_to, f'Design query on {order.number}: {query.subject}',
                object_ref=order.number)
         messages.success(
-            request, f'Query sent to {query.assigned_to.short_name}.'
+            # short_name already ends in a full stop ("Arjun P.").
+            request, f'Query sent to {query.assigned_to.short_name}'
         )
     else:
         _form_error(request, form)

@@ -13,6 +13,12 @@ class QuotationStatus(models.TextChoices):
     DRAFT = 'DRAFT', 'Draft'
     PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
     REJECTED = 'REJECTED', 'Rejected — needs revision'
+    #: Turned down outright, not sent back to be fixed. The manager has two
+    #: buttons and they meant the same thing before this: a quotation the
+    #: customer had already walked away from still invited the salesperson to
+    #: "Revise & Resubmit", and the message they got was word for word the one
+    #: asking them to correct a rate.
+    DECLINED = 'DECLINED', 'Declined'
     APPROVED = 'APPROVED', 'Approved'
     SENT_TO_CUSTOMER = 'SENT_TO_CUSTOMER', 'Sent to Customer'
     AWAITING_PO = 'AWAITING_PO', 'Awaiting PO'

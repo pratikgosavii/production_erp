@@ -192,7 +192,9 @@
     <a href="?status=pending{% if search %}&q={{ search|urlencode }}{% endif %}"
        class="chip {% if active_filter == 'pending' %}active{% endif %}">Pending ({{ counts.pending }})</a>
     <a href="?status=rejected{% if search %}&q={{ search|urlencode }}{% endif %}"
-       class="chip {% if active_filter == 'rejected' %}active{% endif %}">Rejected ({{ counts.rejected }})</a>
+       class="chip {% if active_filter == 'rejected' %}active{% endif %}">Needs Revision ({{ counts.rejected }})</a>
+    <a href="?status=declined{% if search %}&q={{ search|urlencode }}{% endif %}"
+       class="chip {% if active_filter == 'declined' %}active{% endif %}">Declined ({{ counts.declined }})</a>
     <a href="?status=awaiting_po{% if search %}&q={{ search|urlencode }}{% endif %}"
        class="chip {% if active_filter == 'awaiting_po' %}active{% endif %}">Awaiting PO ({{ counts.awaiting_po }})</a>
     <a href="?status=po_rejected{% if search %}&q={{ search|urlencode }}{% endif %}"
@@ -249,6 +251,8 @@
 
         {% if q.action_kind == 'rejected' and q.manager_comment %}
           <div class="comment-flag">"{{ q.manager_comment }}" — Manager</div>
+        {% elif q.action_kind == 'declined' and q.manager_comment %}
+          <div class="comment-flag">Declined: "{{ q.manager_comment }}" — Manager</div>
         {% endif %}
 
         {% if q.action_kind == 'awaiting_po' %}
@@ -287,6 +291,10 @@
             {% csrf_token %}
             <button type="submit" class="action-btn">Revise &amp; Resubmit</button>
           </form>
+
+        {% elif q.action_kind == 'declined' %}
+          {# Turned down for good. Offering a resubmit here was the bug. #}
+          <span class="action-note">Closed — not resubmittable</span>
 
         {% elif q.action_kind == 'awaiting_po' %}
           {# The quote is out with the customer — recording the PO is the whole job. #}
