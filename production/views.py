@@ -65,7 +65,11 @@ RECENT_JOB_CARDS = 10
 # Screen A / C list the same population: everything except the terminal state.
 # ON_HOLD stays visible (greyed, with its reason) because the planner has to
 # know an order exists before he can chase the hold.
-BOARD_EXCLUDED_STATUSES = [OrderStatus.CANCELLED]
+#: Both terminal states, not just cancelled. A dispatched order has nothing
+#: left to card or to prioritise, but it used to stay on the Sales Orders list
+#: and the Priority Board for ever -- which went unnoticed only because no
+#: order could reach DISPATCHED until the dispatch close-out existed.
+BOARD_EXCLUDED_STATUSES = list(OrderStatus.terminal())
 
 
 def _due_bucket(days):
