@@ -55,6 +55,15 @@ def available_sheets_for(item):
         Sheet.objects
         .filter(material=item.material, thickness=item.thickness,
                 status__in=RESERVABLE_STATUSES)
+        # A LEFTOVER plate whose remnant was already minted as its own OFF-
+        # sheet has nothing left of its own -- the offcut carries it. Listing
+        # both put one physical plate in front of two jobs: reserving the
+        # parent left the child sitting in Available stock for someone else.
+        .exclude(
+            status=SheetStatus.LEFTOVER,
+            offcuts__status__in=[SheetStatus.AVAILABLE, SheetStatus.RESERVED,
+                                 SheetStatus.ISSUED],
+        )
         .select_related('material', 'thickness', 'size', 'rack', 'parent', 'supplier')
         # Offcuts and leftovers first: use up the remnants before cutting new.
         .order_by('-is_offcut', 'uid')

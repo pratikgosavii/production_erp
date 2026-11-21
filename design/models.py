@@ -289,10 +289,17 @@ class MaterialReservation(TimeStampedModel):
 
     @transaction.atomic
     def release(self):
-        """Cancelling an order puts the sheet back into available stock."""
+        """Cancelling an order puts the sheet back into stock as it was.
+
+        Not always AVAILABLE: a plate that was already LEFTOVER when it was
+        reserved is still a spent parent afterwards, and promoting it would
+        put it back in front of designers as if it were whole.
+        """
         self.released_at = timezone.now()
         self.save(update_fields=['released_at', 'updated_at'])
-        self.sheet.status = SheetStatus.AVAILABLE
+        live = (SheetStatus.AVAILABLE, SheetStatus.RESERVED, SheetStatus.ISSUED)
+        was_cut = self.sheet.offcuts.filter(status__in=live).exists()
+        self.sheet.status = SheetStatus.LEFTOVER if was_cut else SheetStatus.AVAILABLE
         self.sheet.save(update_fields=['status', 'updated_at'])
 
 
