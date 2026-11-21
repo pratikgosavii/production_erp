@@ -722,6 +722,27 @@ def _approve_block_reason(item, current_revision):
     if total and done < total:
         return (f'{done} of the {total} pre-release checks are ticked. '
                 f'Finish them first.')
+    # "A query halts the item it was raised on until Design is satisfied" is
+    # what the Sales screen tells the salesperson. The status drove only
+    # badges, sorting and the waiting-on line -- nothing held the item, so an
+    # item could be released to the floor with the designer's own question
+    # unanswered, and Sales was left looking at it open for good. Satisfied
+    # means closed, so an answer sitting unread holds it too; the designer is
+    # the only one who can close a query and the button is on this screen.
+    live_query = (item.order.queries
+                  .exclude(status=QueryStatus.CLOSED)
+                  .select_related('assigned_to')
+                  .filter(so_item=item).first())
+    if live_query is not None:
+        who = (live_query.assigned_to.short_name
+               if live_query.assigned_to else 'Sales')
+        subject = live_query.subject or 'your design query'
+        if live_query.status == QueryStatus.ANSWERED:
+            return (f'{who} has answered “{subject}”. Read the answer '
+                    f'and close the query, then approve.')
+        return (f'Your query “{subject}” is still open with {who}. '
+                f'Close it once you are satisfied, then approve.')
+
     state = item.proof_state
     if state == 'changes':
         proof = item.current_proof
