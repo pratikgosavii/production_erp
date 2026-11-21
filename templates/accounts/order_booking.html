@@ -271,7 +271,7 @@
   <div class="cell"><div class="n">{{ summary.open_orders }}</div><div class="l">Open orders</div></div>
   <div class="cell value"><div class="n">{{ summary.booked_value }}</div><div class="l">Booked (this month)</div></div>
   <div class="cell ontrack"><div class="n">{{ summary.on_track }}</div><div class="l">On track</div></div>
-  <div class="cell held"><div class="n">{{ summary.held }}</div><div class="l">Held</div></div>
+  <div class="cell held"><div class="n">{{ summary.held }}</div><div class="l">At Risk</div></div>
   <div class="cell delayed"><div class="n">{{ summary.delayed }}</div><div class="l">Delayed</div></div>
   <div class="cell"><div class="n">{{ summary.new_today }}</div><div class="l">New today</div></div>
 </div>
@@ -287,7 +287,7 @@
     <a class="chip {% if active_filter == 'all' %}active{% endif %}" href="?{% if search %}q={{ search|urlencode }}{% endif %}">All ({{ counts.all }})</a>
     <a class="chip {% if active_filter == 'approval' %}active{% endif %}" href="?filter=approval{% if search %}&q={{ search|urlencode }}{% endif %}">Needs Approval ({{ counts.approval }})</a>
     <a class="chip {% if active_filter == 'delayed' %}active{% endif %}" href="?filter=delayed{% if search %}&q={{ search|urlencode }}{% endif %}">Delayed ({{ counts.delayed }})</a>
-    <a class="chip {% if active_filter == 'held' %}active{% endif %}" href="?filter=held{% if search %}&q={{ search|urlencode }}{% endif %}">Held ({{ counts.held }})</a>
+    <a class="chip {% if active_filter == 'held' %}active{% endif %}" href="?filter=held{% if search %}&q={{ search|urlencode }}{% endif %}">At Risk ({{ counts.held }})</a>
     <a class="chip {% if active_filter == 'onhold' %}active{% endif %}" href="?filter=onhold{% if search %}&q={{ search|urlencode }}{% endif %}">On Hold ({{ counts.onhold }})</a>
     <a class="chip {% if active_filter == 'cancelled' %}active{% endif %}" href="?filter=cancelled{% if search %}&q={{ search|urlencode }}{% endif %}">Cancelled ({{ counts.cancelled }})</a>
     <a class="chip {% if active_filter == 'mine' %}active{% endif %}" href="?filter=mine{% if search %}&q={{ search|urlencode }}{% endif %}">My Orders ({{ counts.mine }})</a>

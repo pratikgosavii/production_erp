@@ -565,7 +565,10 @@ def _item_code_master():
             'rate': float(code.approved_rate) if (code.is_approved and code.approved_rate is not None) else None,
             'qtn': code.approved_via or '—',
             'approvedOn': code.approved_on.strftime('%d %b %Y') if code.approved_on else '—',
-            'pendingQtn': quotes[-1].number if quotes else '—',
+            #: Blank, not a dash: a code added straight to the master was
+            #: never submitted on a quotation, and the sentence that reads
+            #: this has to drop that clause rather than print "on —".
+            'pendingQtn': quotes[-1].number if quotes else '',
         })
     return data
 
@@ -1199,7 +1202,8 @@ def _send_back(request, pk, comment, action_label):
     notify(quotation.salesperson,
            f'{quotation.number} sent back by {request.user.short_name}: {comment[:120]}',
            link=reverse('sales:dashboard'), object_ref=quotation.number)
-    messages.success(request, f'{quotation.number} sent back to {quotation.salesperson.short_name}.')
+    # short_name is already "Arjun P.", so no full stop of our own.
+    messages.success(request, f'{quotation.number} sent back to {quotation.salesperson.short_name}')
     return redirect('sales:manager_approvals')
 
 

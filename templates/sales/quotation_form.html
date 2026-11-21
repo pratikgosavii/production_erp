@@ -1794,13 +1794,17 @@
       } else {
         // ---- Rule 1/2: known code, still waiting on its first approval ----
         icSetStatus(field, 'new',
-          '⏳ Awaiting approval — this code was submitted on ' + rec.pendingQtn +
-          ' and has no approved rate yet. Enter a rate; it will be approved with this quotation.' +
+          '⏳ Awaiting approval — ' +
+          (rec.pendingQtn
+            ? 'this code was submitted on ' + rec.pendingQtn + ' and has'
+            : 'this code has') +
+          ' no approved rate yet. Enter a rate; it will be approved with this quotation.' +
           ' <span class="s-meta">· spec below is already on file</span>');
 
         if (changed) { icApplySpec(card, rec, allowFlash !== false); }
         qaClearApproved(card);
-        qaSetState(card, 'pending', rec.code + ' — awaiting approval on ' + rec.pendingQtn);
+        qaSetState(card, 'pending', rec.code + ' — awaiting approval'
+          + (rec.pendingQtn ? ' on ' + rec.pendingQtn : ''));
       }
       // The rate card is shown for BOTH: a code can be pending a revision at
       // the header level and still have approved bands pricing live quotes.
@@ -1888,7 +1892,8 @@
       s.textContent = icSpecText(r) + '  ·  ' +
         (r.approved
           ? (r.orders + ' orders · last ' + r.last)
-          : ('submitted on ' + r.pendingQtn + ' · no approved rate yet'));
+          : (r.pendingQtn ? 'submitted on ' + r.pendingQtn + ' · no approved rate yet'
+                          : 'no approved rate yet'));
 
       opt.appendChild(head);
       opt.appendChild(s);
