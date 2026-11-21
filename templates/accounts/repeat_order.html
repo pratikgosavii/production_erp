@@ -45,6 +45,16 @@
   .field input[type=number] { font-family: 'IBM Plex Mono', monospace; }
   .field .hint { font-size: 10px; color: var(--ink-soft); margin-top: 5px; line-height: 1.4; }
 
+  /* Search box sitting above a long dropdown (static/js/select-search.js). */
+  .select-search {
+    width: 100%; padding: 6px 10px; margin-bottom: 5px;
+    border: 1px solid var(--line); border-radius: 3px;
+    font-size: 11.5px; font-family: 'IBM Plex Sans', sans-serif;
+    background: #fff; color: var(--ink);
+  }
+  .select-search::placeholder { color: var(--ink-soft); }
+  .select-search:disabled { background: var(--paper); color: var(--ink-soft); cursor: not-allowed; }
+
   /* Everything the item code already decides. Read-only on purpose: this
      screen orders a known item code again, it does not redefine one. */
   .spec-readonly {
@@ -324,6 +334,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/select-search.js' %}"></script>
 <script>
   // The orderable catalogue, rendered server-side. Picking a customer narrows
   // the codes and picking a quantity fills the rate, with no round trip.
@@ -446,5 +457,13 @@
 
   fillCodes();
   syncRate();
+
+  // Bharat Switchgear alone has a dozen codes on the repeat-rate master, so
+  // let the operator type the code they already know instead of scrolling.
+  attachSelectSearch(custSel, {placeholder: 'Search customer…'});
+  attachSelectSearch(codeSel, {
+    placeholder: 'Search item code or description…',
+    hint: 'roCodeHint',
+  });
 </script>
 {% endblock %}

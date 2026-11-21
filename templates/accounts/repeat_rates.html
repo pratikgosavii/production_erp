@@ -56,6 +56,16 @@
   }
   .field input[type=number] { font-family: 'IBM Plex Mono', monospace; }
 
+  /* Search box sitting above a long dropdown (static/js/select-search.js). */
+  .select-search {
+    width: 100%; padding: 6px 10px; margin-bottom: 5px;
+    border: 1px solid var(--line); border-radius: 3px;
+    font-size: 11.5px; font-family: 'IBM Plex Sans', sans-serif;
+    background: #fff; color: var(--ink);
+  }
+  .select-search::placeholder { color: var(--ink-soft); }
+  .select-search:disabled { background: var(--paper); color: var(--ink-soft); cursor: not-allowed; }
+
   table.rates { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   table.rates th {
     background: var(--navy); color: #fff; text-align: left; padding: 8px 11px;
@@ -291,6 +301,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/select-search.js' %}"></script>
 <script>
   // Every active code per customer, so the field can offer the customer's own
   // codes while still accepting a string nobody has used yet.
@@ -410,5 +421,14 @@
 
   fillList();
   syncSpec();
+
+  // Same two long lists as the repeat-order screen. "+ Add a new item code"
+  // is kept listed whatever is typed: that is exactly when it is wanted.
+  attachSelectSearch(custSel, {placeholder: 'Search customer…'});
+  attachSelectSearch(pick, {
+    placeholder: 'Search item code or description…',
+    hint: 'rrCodeHint',
+    keep: [NEW],
+  });
 </script>
 {% endblock %}
