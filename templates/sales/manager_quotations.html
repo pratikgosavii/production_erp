@@ -144,8 +144,16 @@
       <td>
         <span class="badge {{ q.badge_class }}">{{ q.get_status_display }}</span>
         {% if q.approved_by %}
-          <div class="decision {% if q.status == 'REJECTED' %}rejected{% endif %}">
-            {% if q.status == 'REJECTED' %}Rejected{% else %}Approved{% endif %}
+          {# approved_by carries whoever made the LAST decision, including a
+             rejection or a decline -- there is one field, not three. The test
+             was binary (REJECTED or else approved), so DECLINED fell through
+             and a quotation the customer had walked away from read "Approved
+             by", with "customer placed the order elsewhere" sitting next to
+             it. #}
+          <div class="decision {% if q.status == 'REJECTED' or q.status == 'DECLINED' %}rejected{% endif %}">
+            {% if q.status == 'REJECTED' %}Rejected
+            {% elif q.status == 'DECLINED' %}Declined
+            {% else %}Approved{% endif %}
             by <b>{{ q.approved_by.short_name }}</b>
             {% if q.approved_at %}on {{ q.approved_at|date:"d M Y" }}{% endif %}
             {% if q.manager_comment %}<br><span class="comment">"{{ q.manager_comment }}"</span>{% endif %}
