@@ -85,9 +85,15 @@ class CustomerForm(forms.ModelForm):
 
     class Meta:
         model = Customer
+        #: No is_active. The screen renders no control for it, and an absent
+        #: checkbox cleans to False, so every customer added here was saved
+        #: inactive and then hidden from the item code master, the quotation
+        #: type-ahead and both repeat screens -- on a fresh database there was
+        #: no way past the first step. Nothing deactivates a customer today;
+        #: when something does, it wants its own action, as item codes have.
         fields = [
             'name', 'address', 'city', 'state', 'pincode', 'gstin',
-            'contact_person', 'phone', 'email', 'credit_limit', 'is_active',
+            'contact_person', 'phone', 'email', 'credit_limit',
         ]
 
     def __init__(self, *args, **kwargs):
