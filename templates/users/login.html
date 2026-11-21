@@ -168,6 +168,8 @@
         <div class="role-chip {% if sel == 'qa' %}active{% endif %}" data-role="qa">QA</div>
       </div>
       <input type="hidden" name="role" id="roleInput" value="{{ sel }}">
+      {# Survives a wrong password, so the deep link is not lost on the retry. #}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       {% endwith %}
 
       <div class="field">

@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from core.decorators import landing_url_name, role_label
 
@@ -17,6 +18,26 @@ LOGIN_ROLE_FLAGS = {
     'stores': ('is_stores', 'Stores'),
     'qa': ('is_qa', 'QA'),
 }
+
+
+def _safe_next(request):
+    """The page the user was trying to reach, if it is safe to send them there.
+
+    Every notification links straight into a job, and the session dies when the
+    browser closes unless "keep me signed in" was ticked -- so the first click
+    of the day lands on the login screen. Without this the destination was
+    thrown away and everyone was dropped on their department landing page,
+    left to find the job again by hand.
+
+    Only same-host, same-scheme paths are honoured, so a crafted ?next= cannot
+    bounce a freshly authenticated user off to another site.
+    """
+    target = request.POST.get('next') or request.GET.get('next') or ''
+    if target and url_has_allowed_host_and_scheme(
+            target, allowed_hosts={request.get_host()},
+            require_https=request.is_secure()):
+        return target
+    return None
 
 
 def _chip_for(user):
@@ -40,7 +61,8 @@ def login_view(request):
     otherwise be silently misleading.
     """
     if request.user.is_authenticated:
-        return redirect(reverse(landing_url_name(request.user)))
+        return redirect(_safe_next(request)
+                        or reverse(landing_url_name(request.user)))
 
     selected = (request.POST.get('role') or 'sales').strip()
 
@@ -80,11 +102,14 @@ def login_view(request):
                 login(request, user)
                 if not request.POST.get('keep_signed_in'):
                     request.session.set_expiry(0)
-                return redirect(reverse(landing_url_name(user)))
+                return redirect(_safe_next(request)
+                                or reverse(landing_url_name(user)))
 
     return render(request, 'users/login.html', {
         # Keeps the chosen chip lit after a failed attempt.
         'selected_role': selected,
+        # ...and the destination, so a typo does not cost it either.
+        'next': _safe_next(request) or '',
     })
 
 
