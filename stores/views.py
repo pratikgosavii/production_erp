@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from core.constants import SheetStatus
+from core.constants import OrderStatus, SheetStatus
 from core.decorators import role_required
 from core.models import Sequence
 from core.pagination import paginate
@@ -308,8 +308,15 @@ def mark_dispatched(request, pk):
         record.dispatched_at = timezone.now()
         record.dispatched_by = request.user
         record.save(update_fields=['dispatched_at', 'dispatched_by', 'updated_at'])
-        log(request.user, 'SalesOrder', record.order.number, 'Marked dispatched')
-        messages.success(request, f'{record.order.number} marked dispatched.')
+        # The record alone left the order on "Ready for Dispatch" for ever;
+        # confirming the outward is what finishes it.
+        order = record.order
+        was = order.status
+        order.status = OrderStatus.DISPATCHED
+        order.save(update_fields=['status', 'updated_at'])
+        log(request.user, 'SalesOrder', order.number, 'Marked dispatched',
+            from_value=was, to_value=OrderStatus.DISPATCHED)
+        messages.success(request, f'{order.number} marked dispatched.')
     return redirect('stores:dashboard')
 
 

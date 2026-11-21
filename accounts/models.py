@@ -233,7 +233,9 @@ class SalesOrder(TimeStampedModel):
 
     def refresh_status(self):
         """Recompute the pipeline position after a design/material/production event."""
-        if self.status in {OrderStatus.ON_HOLD, OrderStatus.CANCELLED}:
+        # Dispatched is terminal like cancelled: recomputing a shipped order
+        # would walk it back to "Ready for Dispatch" on the next floor event.
+        if self.status in {OrderStatus.ON_HOLD} | set(OrderStatus.terminal()):
             return
 
         items = list(self.items.all())
@@ -252,6 +254,7 @@ class SalesOrder(TimeStampedModel):
             all_complete = all(c.is_complete for c in cards.values())
             if every_item_carded and all_complete:
                 self.status = OrderStatus.DISPATCH_READY
+                self._open_dispatch_record()
             else:
                 self.status = OrderStatus.IN_PRODUCTION
         elif self.is_ready_to_produce:
@@ -263,6 +266,26 @@ class SalesOrder(TimeStampedModel):
         else:
             self.status = OrderStatus.IN_DESIGN
         self.save(update_fields=['status', 'updated_at'])
+
+    def _open_dispatch_record(self):
+        """Put a finished order in front of Stores.
+
+        Nothing created one of these outside the demo seed, so the "Ready for
+        Dispatch" queue could only ever be filled by seeded data: a real order
+        finished every station and then sat in production for good, with the
+        Mark Dispatched button unreachable.
+
+        One open record per order -- re-running this after another floor event
+        must not queue the same order twice.
+        """
+        from django.utils import timezone
+        from stores.models import DispatchRecord
+
+        if self.dispatches.filter(dispatched_at__isnull=True).exists():
+            return
+        if self.dispatches.filter(dispatched_at__isnull=False).exists():
+            return
+        DispatchRecord.objects.create(order=self, ready_at=timezone.now())
 
 
 class SOItem(TimeStampedModel):
