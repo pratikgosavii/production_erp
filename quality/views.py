@@ -101,9 +101,37 @@ def save_capa(request, pk):
         messages.info(request, f'{ncr.number} is closed.')
         return redirect('quality:register')
 
-    ncr.root_cause = (request.POST.get('root_cause') or '').strip()
-    ncr.corrective_action = (request.POST.get('corrective_action') or '').strip()
-    ncr.preventive_action = (request.POST.get('preventive_action') or '').strip()
+    posted = {
+        'root_cause': (request.POST.get('root_cause') or '').strip(),
+        'corrective_action': (request.POST.get('corrective_action') or '').strip(),
+        'preventive_action': (request.POST.get('preventive_action') or '').strip(),
+    }
+    labels = {'root_cause': 'the root cause',
+              'corrective_action': 'the corrective action',
+              'preventive_action': 'the preventive action'}
+
+    # Submitting the form with a box emptied used to erase what was recorded
+    # and report success, which is how an investigation disappears. Closing an
+    # NCR needs the root cause and the corrective action, so this quietly undid
+    # the work that makes closing possible. Replacing the text is an edit;
+    # blanking it is not something to do by pressing Save.
+    erasing = [labels[f] for f, value in posted.items()
+               if getattr(ncr, f) and not value]
+    if erasing:
+        named = (' and '.join(erasing) if len(erasing) < 3
+                 else ', '.join(erasing[:-1]) + ' and ' + erasing[-1])
+        messages.error(
+            request,
+            f'{ncr.number} not changed — that would erase {named}. '
+            'Edit the wording instead of clearing the box.')
+        return redirect('quality:register')
+
+    if not any(posted.values()):
+        messages.error(request, f'{ncr.number} not changed — write a root cause first.')
+        return redirect('quality:register')
+
+    for field, value in posted.items():
+        setattr(ncr, field, value)
 
     status = (request.POST.get('status') or '').strip()
     if status in dict(NCRStatus.choices) and status != NCRStatus.CLOSED:
