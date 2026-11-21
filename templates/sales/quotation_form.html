@@ -1666,9 +1666,24 @@
     if (!card || !card.dataset.approvedRate) return;
     if (qaFirstRateInput(card) !== rateIn) return;      // only the locked tier matters
 
-    var approved = parseFloat(card.dataset.approvedRate) || 0;
-    var code     = card.dataset.approvedCode || 'This code';
-    var now      = parseFloat(rateIn.value);
+    var code = card.dataset.approvedCode || 'This code';
+    var now  = parseFloat(rateIn.value);
+
+    // Compare against the band this slab actually falls in, not the code's
+    // headline rate. On a code with more than one band that single figure is
+    // only the first band's price, so quoting band two at its own approved
+    // rate was flagged as a revision, and quoting it at band one's rate
+    // passed as approved. Both are wrong, and the bands are already here --
+    // the overlap check below reads the same list.
+    var row  = rateIn.closest('tr');
+    var from = row ? parseInt((row.querySelector('[name$="qty_from"]') || {}).value, 10) : NaN;
+    var to   = row ? parseInt((row.querySelector('[name$="qty_to"]') || {}).value, 10) : NaN;
+    var band = null;
+    qaCardBands(card).forEach(function (b) {
+      // The band this slab sits in: an exact match, or one that contains it.
+      if (!isNaN(from) && !isNaN(to) && b.from <= from && b.to >= to) { band = b; }
+    });
+    var approved = band ? band.rate : (parseFloat(card.dataset.approvedRate) || 0);
 
     if (!isNaN(now) && Math.abs(now - approved) < 0.005) {
       qaSetRateChip(card, 'ok', 'Approved rate');
