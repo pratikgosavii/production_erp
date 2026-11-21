@@ -79,6 +79,17 @@ class SheetFormBase(forms.ModelForm):
             if name in self.fields:
                 self.fields[name].required = True
 
+        # Being outside Meta.fields keeps the ``__other`` sentinel away from
+        # the FK, but it also means nothing ever puts the stored finish back
+        # into the select. The box rendered empty on a sheet that had one, and
+        # the next save of that sheet -- correcting a rack, adding a remark --
+        # posted the empty box straight over it. Seed it here so what is on
+        # screen is what is on the record.
+        instance = getattr(self, 'instance', None)
+        if instance is not None and instance.pk and not self.is_bound:
+            if instance.finish_id and not self.initial.get('finish'):
+                self.initial['finish'] = str(instance.finish_id)
+
     def clean_finish(self):
         raw = (self.cleaned_data.get('finish') or '').strip()
         if not raw or raw == OTHER:
