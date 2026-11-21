@@ -318,15 +318,23 @@ class DesignCheck(TimeStampedModel):
     so_item = models.ForeignKey(
         'accounts.SOItem', on_delete=models.CASCADE, related_name='design_checks')
     key = models.CharField(max_length=30)
+    #: The drawing revision this tick was made against. Ticks used to hang off
+    #: the item alone, so they survived every redraw -- and a redraw is almost
+    #: always the customer telling us Rev 01 was wrong. All six would still
+    #: read ticked against the drawing that had just been replaced, including
+    #: "Text proofread against the customer drawing", which exists to catch
+    #: exactly the change the new revision carries.
+    revision = models.PositiveSmallIntegerField(default=0)
     checked_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='design_checks')
     checked_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        # One tick per check per item - a double POST must not double count.
+        # One tick per check per item PER REVISION - a double POST must not
+        # double count, and Rev 01's ticks stay on file as their own history.
         constraints = [
-            models.UniqueConstraint(fields=['so_item', 'key'],
-                                    name='uniq_design_check_per_item'),
+            models.UniqueConstraint(fields=['so_item', 'key', 'revision'],
+                                    name='uniq_design_check_per_item_rev'),
         ]
         ordering = ['key']
 
@@ -338,10 +346,18 @@ class DesignCheck(TimeStampedModel):
         """[(key, label, why)] for this item's process."""
         return PROCESS_CHECKS[Process(item.process)]
 
+    @staticmethod
+    def current_revision_number(item):
+        """Which revision the checks are being counted against right now."""
+        current = item.current_drawing
+        return current.revision if current is not None else 0
+
     @classmethod
     def state_for(cls, item):
         """The six checks with their tick state, in the order they are worked."""
-        done = {c.key: c for c in item.design_checks.select_related('checked_by')}
+        rev = cls.current_revision_number(item)
+        done = {c.key: c for c in
+                item.design_checks.filter(revision=rev).select_related('checked_by')}
         rows = []
         for key, label, why in cls.definitions_for(item):
             hit = done.get(key)
@@ -362,11 +378,15 @@ class DesignCheck(TimeStampedModel):
         complete on the strength of another process's checks.
         """
         wanted = {k for k, _l, _w in cls.definitions_for(item)}
-        ticked = set(item.design_checks.values_list('key', flat=True))
+        ticked = set(item.design_checks
+                     .filter(revision=cls.current_revision_number(item))
+                     .values_list('key', flat=True))
         return wanted.issubset(ticked)
 
     @classmethod
     def progress(cls, item):
         wanted = [k for k, _l, _w in cls.definitions_for(item)]
-        ticked = set(item.design_checks.values_list('key', flat=True))
+        ticked = set(item.design_checks
+                     .filter(revision=cls.current_revision_number(item))
+                     .values_list('key', flat=True))
         return sum(1 for k in wanted if k in ticked), len(wanted)

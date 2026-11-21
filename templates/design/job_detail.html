@@ -202,6 +202,11 @@
     border: none; padding: 0; font-family: 'IBM Plex Sans'; font-weight: 600;
   }
   .rev-history .rview:hover { text-decoration: underline; }
+  .rev-note-in { width: 100%; margin-bottom: 8px; padding: 7px 10px;
+                 border: 1px solid var(--line); border-radius: 3px;
+                 font-family: inherit; font-size: 12px; color: var(--ink);
+                 background: #fff; box-sizing: border-box; }
+  .rev-note-in:focus { outline: none; border-color: var(--blue); }
   .rev-tag {
     font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
     padding: 2px 7px; border-radius: 3px; margin-left: 6px;
@@ -531,6 +536,16 @@
       <div class="chk-lock">🔒 Upload the drawing first — there is nothing to check yet.</div>
       {% endif %}
 
+      {# Without this the ticks look lost rather than reset: the designer
+         uploads a revision and comes back to six empty boxes. #}
+      {% if checks_reset_from %}
+      <div class="chk-lock">
+        ↻ Cleared by {{ current_revision.label }}. All six were ticked against
+        {{ checks_reset_from }}, which this drawing replaces — check them
+        again against what you have just uploaded.
+      </div>
+      {% endif %}
+
       <div class="chk-list">
         {% for c in checks %}
         <form method="post" action="{% url 'design:toggle_check' order.number %}?item={{ item.pk }}"
@@ -659,6 +674,15 @@
             enctype="multipart/form-data" id="revForm">
         {% csrf_token %}
         <input type="hidden" name="item" value="{{ item.pk }}">
+        {# The revision list above prints rev.note, and nothing ever set it:
+           the form class has always accepted a note, the screen never asked
+           for one. A redraw driven by proof feedback or a query answer landed
+           on the ladder with no reason attached, so a month later nobody could
+           say why Rev 02 existed. Typed before the file is picked, because
+           choosing a file submits the form straight away. #}
+        <input type="text" name="note" id="revNote" maxlength="200"
+               class="rev-note-in" autocomplete="off"
+               placeholder="Why this revision? (optional — e.g. logo moved 5mm left per proof feedback)">
         <div class="btn-row">
           {% if current_revision.file %}
           <a class="btn btn-outline btn-sm" href="{{ current_revision.file.url }}" target="_blank">Open Drawing</a>

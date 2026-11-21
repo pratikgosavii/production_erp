@@ -629,6 +629,9 @@ def job_detail(request, so_no):
         'checks_done': checks_done,
         'checks_total': checks_total,
         'checks_complete': checks_total > 0 and checks_done >= checks_total,
+        # Names the revision whose ticks this drawing superseded, so six empty
+        # boxes read as "reset by your own upload" and not as data lost.
+        'checks_reset_from': _checks_reset_from(item, checks_done),
         'gates': gates,
         'job_folder': folder,
         'card': card,
@@ -671,6 +674,26 @@ def job_detail(request, so_no):
             .exclude(pk=order.pk).count()
         ),
     })
+
+
+def _checks_reset_from(item, checks_done):
+    """'Rev 02' when a complete set of ticks was superseded by a new drawing.
+
+    Only when the current revision has nothing ticked and an earlier one had
+    the full set -- a half-finished earlier attempt is not worth a banner.
+    """
+    if item is None or checks_done or item.current_drawing is None:
+        return ''
+    wanted = len(DesignCheck.definitions_for(item))
+    if not wanted:
+        return ''
+    counts = {}
+    for rev in (item.design_checks
+                .exclude(revision=item.current_drawing.revision)
+                .values_list('revision', flat=True)):
+        counts[rev] = counts.get(rev, 0) + 1
+    full = [rev for rev, n in counts.items() if n >= wanted]
+    return f'Rev {max(full):02d}' if full else ''
 
 
 def _approve_block_reason(item, current_revision):
@@ -1019,13 +1042,19 @@ def toggle_check(request, so_no):
         messages.error(request, 'That check does not belong to this job.')
         return _back_to_item(order, item)
 
-    existing = item.design_checks.filter(key=key).first()
+    # Scoped to the drawing in front of the designer. Ticking Rev 02 does not
+    # touch Rev 01's ticks, and unticking cannot reach back into them either.
+    rev = DesignCheck.current_revision_number(item)
+    existing = item.design_checks.filter(key=key, revision=rev).first()
     if existing is not None:
         existing.delete()
-        log(request.user, 'SOItem', item_label(item), 'Design check cleared', detail=key)
+        log(request.user, 'SOItem', item_label(item), 'Design check cleared',
+            detail=f'{key} · Rev {rev:02d}')
     else:
-        DesignCheck.objects.create(so_item=item, key=key, checked_by=request.user)
-        log(request.user, 'SOItem', item_label(item), 'Design check ticked', detail=key)
+        DesignCheck.objects.create(so_item=item, key=key, revision=rev,
+                                   checked_by=request.user)
+        log(request.user, 'SOItem', item_label(item), 'Design check ticked',
+            detail=f'{key} · Rev {rev:02d}')
 
     return _back_to_item(order, item)
 
