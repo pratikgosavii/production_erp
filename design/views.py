@@ -649,9 +649,12 @@ def job_detail(request, so_no):
         'sheets': available_sheets_for(item),
         'reservation': reservation,
         'has_drawing': current is not None,
+        # One source of truth: enabled exactly when nothing blocks it. Listing
+        # the conditions again here is what let the button offer a click the
+        # POST view would refuse.
         'can_approve': bool(
-            item and current is not None and item.material_reserved
-            and not item.design_approved
+            item and not item.design_approved
+            and not _approve_block_reason(item, current)
         ),
         'approve_block_reason': _approve_block_reason(item, current),
         'ready_rows': ready_rows,
@@ -671,7 +674,17 @@ def job_detail(request, so_no):
 
 
 def _approve_block_reason(item, current_revision):
-    """Why the approve button is refused — the same test the POST view runs."""
+    """Why approval is refused — the ONE test both the screen and the POST use.
+
+    The button is disabled on this string and `approve_design` refuses on the
+    same string, so the two cannot drift apart. They had: the six pre-release
+    checks were enforced only in the POST (the button sat there enabled and
+    the click bounced), and the customer's answer on the visual proof was
+    enforced in neither. An item the customer had explicitly rejected --
+    Gate 3 reading "Changes requested" in the designer's own face -- could be
+    released to the floor, and 200 plates would be etched with the artwork
+    they asked to have changed.
+    """
     if item is None:
         return 'This sales order has no items.'
     if item.design_approved:
@@ -682,6 +695,26 @@ def _approve_block_reason(item, current_revision):
         return 'Upload a drawing for this item first.'
     if not item.material_reserved:
         return 'Reserve a sheet for this item first.'
+    done, total = DesignCheck.progress(item)
+    if total and done < total:
+        return (f'{done} of the {total} pre-release checks are ticked. '
+                f'Finish them first.')
+    state = item.proof_state
+    if state == 'changes':
+        proof = item.current_proof
+        said = (proof.customer_comment or '').strip() if proof else ''
+        return ('The customer asked for changes to the visual proof'
+                + (f': “{said}”' if said else '')
+                + ' Redraw it, then send a fresh proof.')
+    # Sign-off is only demanded where the process demands it. The queue tells
+    # the designer "Etching needs customer sign-off on every job"; nothing was
+    # holding the job to it.
+    if Process(item.process) is Process.ETCHING and state != 'approved':
+        if state == 'waiting':
+            return ('The visual proof is still with the customer. Etching '
+                    'needs their sign-off before the job reaches the floor.')
+        return ('Etching needs the customer to sign off a visual proof. '
+                'Record the proof as sent, then Sales records their answer.')
     return ''
 
 
@@ -886,34 +919,12 @@ def approve_design(request, so_no):
         messages.info(request, f'{item_label(item)} is already approved.')
         return _redirect_to_job(order, item)
 
-    if item.current_drawing is None:
+    reason = _approve_block_reason(item, item.current_drawing)
+    if reason:
         messages.error(
             request,
-            f'Cannot approve {item_label(item)}: no drawing has been uploaded '
-            f'for this item yet. Nothing was changed.',
-        )
-        return _redirect_to_job(order, item)
-
-    if not item.material_reserved:
-        messages.error(
-            request,
-            f'Cannot approve {item_label(item)}: no sheet is reserved for this '
-            f'item. Reserve material first. Nothing was changed.',
-        )
-        return _redirect_to_job(order, item)
-
-    # The screen says "stays locked until all six are ticked", and the gate
-    # above this one makes the same promise about the drawing and the sheet --
-    # but only those two were ever enforced here. An item could be approved
-    # with none of the six done, including "Text proofread against the
-    # customer drawing", which is the one that catches wrong text before it is
-    # etched into 200 plates.
-    done, total = DesignCheck.progress(item)
-    if total and done < total:
-        messages.error(
-            request,
-            f'Cannot approve {item_label(item)}: {done} of {total} pre-release '
-            f'checks are ticked. Finish them first. Nothing was changed.',
+            f'Cannot approve {item_label(item)} — {reason} '
+            f'Nothing was changed.',
         )
         return _redirect_to_job(order, item)
 
