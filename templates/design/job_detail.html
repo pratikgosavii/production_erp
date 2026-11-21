@@ -227,6 +227,16 @@
   .mat-filter .mat-all:hover { border-color: var(--blue); text-decoration: none; }
   /* Customer-supplied drawing — an input, visually distinct from Design's
      own revision ladder so the two are never read as the same thing. */
+  .design-note {
+    margin: 12px 0 0; padding: 10px 13px; border-radius: var(--radius);
+    background: var(--blue-bg); border-left: 3px solid var(--blue);
+    font-size: 12px; line-height: 1.55; color: var(--ink);
+  }
+  .design-note .dn-label {
+    display: block; font-size: 9px; text-transform: uppercase;
+    letter-spacing: .05em; font-weight: 700; color: var(--blue); margin-bottom: 3px;
+  }
+
   .cust-ref {
     border: 1px dashed var(--steel); border-radius: var(--radius);
     background: var(--blue-bg); padding: 12px 14px; margin-bottom: 14px;
@@ -434,6 +444,18 @@
           {% else %}No Items{% endif %}
         </span>
       </div>
+
+      {% comment %}
+      Accounts write this on the booking screen under a box labelled "Note to
+      Design". It was stored on the order and rendered nowhere, so the one
+      person it is addressed to never saw it.
+      {% endcomment %}
+      {% if order.design_note %}
+      <div class="design-note">
+        <span class="dn-label">Note from Accounts</span>
+        {{ order.design_note }}
+      </div>
+      {% endif %}
 
       <div class="item-picker">
         <div class="pk-head">
