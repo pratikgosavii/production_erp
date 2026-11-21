@@ -902,6 +902,21 @@ def approve_design(request, so_no):
         )
         return _redirect_to_job(order, item)
 
+    # The screen says "stays locked until all six are ticked", and the gate
+    # above this one makes the same promise about the drawing and the sheet --
+    # but only those two were ever enforced here. An item could be approved
+    # with none of the six done, including "Text proofread against the
+    # customer drawing", which is the one that catches wrong text before it is
+    # etched into 200 plates.
+    done, total = DesignCheck.progress(item)
+    if total and done < total:
+        messages.error(
+            request,
+            f'Cannot approve {item_label(item)}: {done} of {total} pre-release '
+            f'checks are ticked. Finish them first. Nothing was changed.',
+        )
+        return _redirect_to_job(order, item)
+
     item.design_approved = True
     item.design_approved_at = timezone.now()
     item.design_approved_by = request.user
