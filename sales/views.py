@@ -706,6 +706,21 @@ def _persist(request, form, item_formset, tier_sets, customer, submit):
         if conflicts:
             return quotation, conflicts
 
+        # A quantity no slab covers prices at nothing. The detail screen has
+        # always said so -- "no slab covers this qty" -- and the model calls it
+        # a hole the salesperson has to fix, but nothing stopped the send, so
+        # the Sales Manager could be asked to approve a quotation worth zero.
+        gaps = [
+            f'item {item.position} ({item.item_code.code if item.item_code else "no code"}) '
+            f'at {item.quantity} Nos'
+            for item in quotation.items.prefetch_related('tiers')
+            if item.has_slab_gap
+        ]
+        if gaps:
+            return quotation, (
+                'no price slab covers the quantity on ' + '; '.join(gaps)
+                + '. Widen a slab to include it, or change the quantity')
+
         # A quantity outside the approved rate card — or one quoted at a
         # different rate — puts THAT BAND back in front of the Sales Manager.
         # Bands the quotation does not touch are left alone.
@@ -782,8 +797,10 @@ def _quotation_form(request, quotation):
                 if submit and conflicts:
                     # Kept as a draft on purpose: nothing typed is lost, and
                     # nothing at all has been written to the rate card.
+                    # The reason text already says which it is -- an overlap or
+                    # a quantity no slab covers -- so do not label it here.
                     log(request.user, 'Quotation', saved.number, 'Submit blocked',
-                        detail=f'Overlapping rate band — {conflicts}')
+                        detail=conflicts[:160])
                     messages.error(
                         request,
                         f'{saved.number} was NOT submitted — {conflicts} '
